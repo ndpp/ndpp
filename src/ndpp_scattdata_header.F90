@@ -17,13 +17,17 @@ module scattdata_header
   integer, parameter :: DISTRO_PTS = 2001
 
 !===============================================================================
-! JAGGED is a type which allows for jagged 2-D array. This is needed for
-! ScattData % distro.
+! JAGGED1D and JAGGED2D is a type which allows for jagged 1-D or 2-D array. 
+! This is needed for ScattData % distro (2D) and ScattData % Eouts (1D)
 !===============================================================================
 
-  type :: jagged
+  type :: jagged2d
     real(8), allocatable :: data(:,:)
-  end type jagged
+  end type jagged2d
+  
+  type :: jagged1d
+    real(8), allocatable :: data(:)
+  end type jagged1d
 
 
 !===============================================================================
@@ -35,8 +39,10 @@ module scattdata_header
     integer              :: NE = 0            ! Number of Ein values
     real(8), allocatable :: E_grid(:)         ! Ein values
     
-    type(jagged), allocatable :: distro(:)    ! Output distribution
+    type(jagged2d), allocatable :: distro(:)  ! Output distribution
                                               ! # distro pts x # E_out x # E_in
+    type(jagged1d), allocatable :: Eouts(:)   ! Output Energy values
+                                              ! # E_out x # E_in
     real(8), allocatable :: mu(:)    ! mu pts to find f(mu) values at
     real(8), pointer     :: E_bins(:)         ! Energy grp boundaries from input
     integer              :: scatt_type = -1   ! Type of format to store the data
@@ -165,6 +171,9 @@ module scattdata_header
       ! Set the end point is exactly ONE
       this % mu(size(this % mu)) = ONE
       
+      ! Allocate the Eouts jagged container
+      allocate(this % Eouts(this % NE))
+      
       ! Allocate the group-dependent attributes
       this % E_bins => E_bins
       this % groups = size(E_bins) - 1
@@ -199,8 +208,10 @@ module scattdata_header
         deallocate(this % E_grid)
         do i = 1, size(this % distro)
           deallocate(this % distro(i) % data)
+          deallocate(this % Eouts(i) % data)
         end do
         deallocate(this % distro)
+        deallocate(this % Eouts)
         deallocate(this % mu)
       end if
       ! Finalize the clear
@@ -223,11 +234,11 @@ module scattdata_header
           ! combined energy/angle distribution - have to integrate over
           ! the energy part of the data, AND the angle part.
           call convert_file6(iE, this % mu, this % edist, &
-            this % distro(iE) % data)
+            this % Eouts(iE) % data, this % distro(iE) % data)
         else if (associated(this % adist)) then
           ! angle distribution only. Only have to integrate the angle.
           call convert_file4(iE, this % mu, this % adist, &
-            this % distro(iE) % data(:, 1))
+            this % Eouts(iE) % data, this % distro(iE) % data(:, 1))
         end if 
       end do
       
@@ -369,10 +380,11 @@ module scattdata_header
 ! the required tabular format.
 !===============================================================================
 
-    subroutine convert_file4(iE, mu, adist, distro)
+    subroutine convert_file4(iE, mu, adist, Eouts, distro)
       integer, intent(in)  :: iE            ! Energy index to act on
       real(8), intent(in)  :: mu(:)         ! tabular mu points
       type(DistAngle), pointer, intent(in) :: adist ! My angle dist
+      real(8), allocatable, intent(inout) :: Eouts(:)! Energy out grid for this Ein data
       real(8), intent(inout) :: distro(:) ! resultant distro (# pts)
       
       real(8), pointer :: data(:) => null() ! Shorthand for adist % data
@@ -417,12 +429,12 @@ module scattdata_header
             do imu = 1, size(mu)
               do idata = idata_prev, lc + NP - 1
                 if ((data(idata) - mu(imu)) > FP_PRECISION) then
-                  ! Found a match - set to previous value of PDF (since histogram)
+                  ! Found a match - set to previous value of PDF (since hist.)
                   distro(imu) = data(idata - 1 + NP)
                   idata_prev = idata
                   exit
                 else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
-                  ! Found a match - set to current value of PDF (since histogram)
+                  ! Found a match - set to current value of PDF (since hist.)
                   distro(imu) = data(idata + NP)
                   idata_prev = idata
                   exit
@@ -451,6 +463,11 @@ module scattdata_header
           end if
       end select
       
+      ! Finally, set Eouts
+      allocate(Eouts(2))
+      Eouts(1) = ZERO
+      Eouts(2) = INFINITY
+      
     end subroutine convert_file4
 
 !===============================================================================
@@ -458,10 +475,11 @@ module scattdata_header
 ! the required tabular format.
 !===============================================================================
 
-    subroutine convert_file6(iE, mu, edist, distro)
+    subroutine convert_file6(iE, mu, edist, Eouts, distro)
       integer, intent(in)  :: iE            ! Energy index to act on
       real(8), intent(in)  :: mu(:)         ! tabular mu points
       type(DistEnergy), pointer, intent(in) :: edist ! My energy dist
+      real(8), allocatable, intent(inout) :: Eouts(:)! Energy out grid for this Ein data
       real(8), intent(inout) :: distro(:,:) ! resultant distro (pts x NEout)
       
       real(8), pointer :: data(:) => null() ! Shorthand for adist % data
@@ -484,6 +502,8 @@ module scattdata_header
         ! this for every Eout point
         lc = int(data(2 + 2 * NR + NE + iE)) ! start of LDAT for iE
         NEout = int(data(lc + 2))
+        allocate(Eouts(NEout))
+        Eouts = data(lc + 2 + 1 : lc + 2 + NP)
         lc = lc + 2
         do iEout = 1, NEout
           KMR = data(lc + 3 * NEout + iEout)
@@ -496,6 +516,8 @@ module scattdata_header
         ! this for every Eout point
         lcin = int(data(2 + 2 * NR + NE + iE)) ! start of LDAT for iE
         NEout = int(data(lcin + 2))
+        allocate(Eouts(NEout))
+        Eouts = data(lc + 2 + 1 : lc + 2 + NP)
         lcin = lcin + 2
         do iEout = 1, NEout
           lc = int(data(lcin + 3*NP + iEout))
