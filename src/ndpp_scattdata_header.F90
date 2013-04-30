@@ -363,11 +363,11 @@ module scattdata_header
       if (this % scatt_type == SCATT_TYPE_LEGENDRE) then
         call integrate_energyangle_leg(my_distro, this % mu, &
           this % Eouts(global_iE) % data, this % INTT(global_iE), mu_interp, &
-          mu_bins, this % order, distro)
+          mu_bins, this % E_bins, this % order, distro)
       else if (this % scatt_type == SCATT_TYPE_TABULAR) then
         call integrate_energyangle_tab(my_distro, this % mu, &
           this % Eouts(global_iE) % data, this % INTT(global_iE), mu_interp, &
-          mu_bins, mu_out, distro)
+          mu_bins, this % E_bins, mu_out, distro)
       end if
       
       ! Combine the results
@@ -703,45 +703,43 @@ module scattdata_header
 !===============================================================================
 
     subroutine integrate_energyangle_leg(fEmu, mu, Eout, INTT, mu_interp, &
-      mu_bins, order, distro)
+      mu_bins, E_bins, order, distro)
       
       real(8), intent(in)  :: fEmu(:,:)      ! Energy-angle distro to act on
       real(8), intent(in)  :: mu(:)          ! fEmu angular grid
-      real(8), intent(in)  :: Eout(:)        ! Outgoing energy grid
+      real(8), intent(in)  :: Eout(:)        ! Outgoing energy grid of this rxn
       integer, intent(in)  :: INTT           ! Energy interpolation type
       real(8), intent(in)  :: mu_interp(:,:) ! Interpolants on the group bounds
       integer, intent(in)  :: mu_bins(:,:)   ! indices of fEmu corresponding to
                                              ! the group boundaries
+      real(8), intent(in)  :: E_bins(:)      ! Energy group boundaries
       integer, intent(in)  :: order          ! Number of moments to find
       real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
       
       integer :: g                           ! outgoing energy group index
+      integer :: iEout_min, iEout_max, NP
+      real(8) :: flo, fhi
       
+      NP = size(fEmu, dim = 2)
+      
+      iEout_min = 1
       ! Loop through energy groups
       do g = 1, size(distro, dim = 2)
-        ! Use trapezoidal integration 
-      end do
-      
-!~       ! Loop through energy groups
-!~       iEout_min = lc
-!~       do g = 1, groups
-!~         ! Find the location in edist%data corresponding to the upper
-!~         ! bound of this energy group.
-!~         ! The lower bound is already known: iEout_min
-!~         do iEout_max = iEout_min, NP - 1
-!~           if (Eout(iEout_max + 1) > E_bins(g + 1)) exit
-!~         end do
-!~         if (iE == NP - 1) iEout_max = iEout_max - 1
-!~         ! Find the interpolation factor for the low and high Eout points
-!~         if (INTT == LINEAR_LINEAR) then
-!~           flo = (E_bins(g) - Eout(iEout_min)) / &
-!~             (Eout(iEout_min + 1) - Eout(iEout_min))
-!~           fhi = (E_bins(g + 1) - Eout(iEout_max)) / &
-!~             (Eout(iEout_max + 1) - Eout(iEout_max))
-!~         else if (INTT == HISTOGRAM) then
-!~           flo = ZERO
-!~           fhi = ZERO
-!~         end if
+        do iEout_max = iEout_min, NP
+          if (Eout(iEout_max + 1) > E_bins(g + 1)) exit
+        end do
+!~         if (iE == NP - 1) iEout_max = iEout_max - 1 !!! What is this for?
+        ! Find the interpolation factor for the low and high Eout points
+        if (INTT == LINEAR_LINEAR) then
+          flo = (E_bins(g) - Eout(iEout_min)) / &
+            (Eout(iEout_min + 1) - Eout(iEout_min))
+          fhi = (E_bins(g + 1) - Eout(iEout_max)) / &
+            (Eout(iEout_max + 1) - Eout(iEout_max))
+        else if (INTT == HISTOGRAM) then
+          flo = ZERO
+          fhi = ZERO
+        end if
+        
 !~         ! Perform the integration over each Eout.
 !~         ! Find the end point mu_bins and their PDF
 !~         ! There is no interpolation, per se, in energy.  For consistency with
@@ -798,10 +796,11 @@ module scattdata_header
 !~             integrate_law61_legendre(order, angtype(iEout + 1), &
 !~             edist % data(lc2 : lc2 + 3 + 2 * NP2)) * PDF(iEout + 1))
 !~         end do
-!~         distro(:, g) = 0.5_8 * distro(:, g)
-!~         
+
+        distro(:, g) = 0.5_8 * distro(:, g)
+        
 !~         iEout_min = iEout
-!~       end do
+      end do
       
     end subroutine integrate_energyangle_leg
 
@@ -812,7 +811,7 @@ module scattdata_header
 !===============================================================================
 
     subroutine integrate_energyangle_tab(fEmu, mu, Eout, INTT, mu_interp, &
-      mu_bins, mu_out, distro)
+      mu_bins, E_bins, mu_out, distro)
       
       real(8), intent(in)  :: fEmu(:,:)      ! Energy-angle distro to act on      
       real(8), intent(in)  :: mu(:)          ! fEmu angular grid
@@ -821,6 +820,7 @@ module scattdata_header
       real(8), intent(in)  :: mu_interp(:,:) ! Interpolants on the group bounds
       integer, intent(in)  :: mu_bins(:,:)   ! indices of fEmu corresponding to
                                              ! the group boundaries
+      real(8), intent(in)  :: E_bins(:)      ! Energy group boundaries
       real(8), intent(in)  :: mu_out(:)      ! Outgoing angular grid
       real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
       
