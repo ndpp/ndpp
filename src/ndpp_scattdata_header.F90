@@ -43,6 +43,7 @@ module scattdata_header
                                               ! # distro pts x # E_out x # E_in
     type(jagged1d), allocatable :: Eouts(:)   ! Output Energy values
                                               ! # E_out x # E_in
+    integer, allocatable :: INTT(:)           ! Interpolation type for each Ein
     real(8), allocatable :: mu(:)    ! mu pts to find f(mu) values at
     real(8), pointer     :: E_bins(:)         ! Energy grp boundaries from input
     integer              :: scatt_type = -1   ! Type of format to store the data
@@ -171,8 +172,9 @@ module scattdata_header
       ! Set the end point is exactly ONE
       this % mu(size(this % mu)) = ONE
       
-      ! Allocate the Eouts jagged container
+      ! Allocate the Eouts jagged container and the interpolation type array
       allocate(this % Eouts(this % NE))
+      allocate(this % INTT(this % NE))
       
       ! Allocate the group-dependent attributes
       this % E_bins => E_bins
@@ -212,6 +214,7 @@ module scattdata_header
         end do
         deallocate(this % distro)
         deallocate(this % Eouts)
+        deallocate(this % INTT)
         deallocate(this % mu)
       end if
       ! Finalize the clear
@@ -234,11 +237,12 @@ module scattdata_header
           ! combined energy/angle distribution - have to integrate over
           ! the energy part of the data, AND the angle part.
           call convert_file6(iE, this % mu, this % edist, &
-            this % Eouts(iE) % data, this % distro(iE) % data)
+            this % Eouts(iE) % data, this % INTT(iE), this % distro(iE) % data)
         else if (associated(this % adist)) then
           ! angle distribution only. Only have to integrate the angle.
           call convert_file4(iE, this % mu, this % adist, &
-            this % Eouts(iE) % data, this % distro(iE) % data(:, 1))
+            this % Eouts(iE) % data, this % INTT(iE), &
+            this % distro(iE) % data(:, 1))
         end if 
       end do
       
@@ -380,11 +384,12 @@ module scattdata_header
 ! the required tabular format.
 !===============================================================================
 
-    subroutine convert_file4(iE, mu, adist, Eouts, distro)
+    subroutine convert_file4(iE, mu, adist, Eouts, INTT, distro)
       integer, intent(in)  :: iE            ! Energy index to act on
       real(8), intent(in)  :: mu(:)         ! tabular mu points
-      type(DistAngle), pointer, intent(in) :: adist ! My angle dist
-      real(8), allocatable, intent(inout) :: Eouts(:)! Energy out grid for this Ein data
+      type(DistAngle), pointer, intent(in) :: adist    ! My angle dist
+      real(8), allocatable, intent(inout)  :: Eouts(:) ! Energy out grid @ Ein
+      integer,  intent(inout)              :: INTT     ! Energy out INTT grid
       real(8), intent(inout) :: distro(:) ! resultant distro (# pts)
       
       real(8), pointer :: data(:) => null() ! Shorthand for adist % data
@@ -463,10 +468,11 @@ module scattdata_header
           end if
       end select
       
-      ! Finally, set Eouts
+      ! Finally, set Eouts and INTT
       allocate(Eouts(2))
       Eouts(1) = ZERO
       Eouts(2) = INFINITY
+      INTT = HISTOGRAM
       
     end subroutine convert_file4
 
@@ -475,11 +481,12 @@ module scattdata_header
 ! the required tabular format.
 !===============================================================================
 
-    subroutine convert_file6(iE, mu, edist, Eouts, distro)
+    subroutine convert_file6(iE, mu, edist, Eouts, INTT, distro)
       integer, intent(in)  :: iE            ! Energy index to act on
       real(8), intent(in)  :: mu(:)         ! tabular mu points
-      type(DistEnergy), pointer, intent(in) :: edist ! My energy dist
-      real(8), allocatable, intent(inout) :: Eouts(:)! Energy out grid for this Ein data
+      type(DistEnergy), pointer, intent(in) :: edist    ! My energy dist
+      real(8), allocatable, intent(inout)   :: Eouts(:) ! Energy out grid @ Ein
+      integer,  intent(inout)               :: INTT     ! Energy out INTT grid
       real(8), intent(inout) :: distro(:,:) ! resultant distro (pts x NEout)
       
       real(8), pointer :: data(:) => null() ! Shorthand for adist % data
@@ -496,14 +503,17 @@ module scattdata_header
       
       NR = int(data(1))
       NE = int(data(2 + 2*NR))
-
+      
+      lc = int(data(2 + 2 * NR + NE + iE)) ! start of LDAT for iE
+      NEout = int(data(lc + 2))
+      allocate(Eouts(NEout))
+      Eouts = data(lc + 2 + 1 : lc + 2 + NP)
+      
+      ! determine type of interpolation
+      INTT = int(edist % data(lc + 1))
+      if (INTT > 10) INTT = mod(INTT,10)
+      
       if (edist % law  == 44) then
-        ! No interpolation on Eout parameters is necessary since we are doing
-        ! this for every Eout point
-        lc = int(data(2 + 2 * NR + NE + iE)) ! start of LDAT for iE
-        NEout = int(data(lc + 2))
-        allocate(Eouts(NEout))
-        Eouts = data(lc + 2 + 1 : lc + 2 + NP)
         lc = lc + 2
         do iEout = 1, NEout
           KMR = data(lc + 3 * NEout + iEout)
@@ -512,13 +522,7 @@ module scattdata_header
           distro(:, iEout) = KMconst * (cosh(KMA * mu(:)) + KMR * sinh(KMA * mu(:)))
         end do
       else if (edist % law  == 61) then
-        ! No interpolation on Eout parameters is necessary since we are doing
-        ! this for every Eout point
-        lcin = int(data(2 + 2 * NR + NE + iE)) ! start of LDAT for iE
-        NEout = int(data(lcin + 2))
-        allocate(Eouts(NEout))
-        Eouts = data(lc + 2 + 1 : lc + 2 + NP)
-        lcin = lcin + 2
+        lcin = lc + 2
         do iEout = 1, NEout
           lc = int(data(lcin + 3*NP + iEout))
           ! Check if isotropic
@@ -706,7 +710,12 @@ module scattdata_header
       integer, intent(in)  :: order          ! Number of moments to find
       real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
       
+      integer :: g                           ! outgoing energy group index
       
+      ! Loop through energy groups
+      do g = 1, size(distro, dim = 2)
+        
+      end do
       
     end subroutine integrate_energyangle_leg
 
@@ -726,6 +735,8 @@ module scattdata_header
                                              ! the group boundaries
       real(8), intent(in)  :: mu_out(:)      ! Number of moments to find
       real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
+      
+      
       
     end subroutine integrate_energyangle_tab
 
