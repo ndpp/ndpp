@@ -1,0 +1,27 @@
+objects = \
+ndpp_global.o \
+ace_header.o \
+dict_header.o \
+endf.o \
+endf_header.o \
+fission.o \
+interpolation.o \
+list_header.o \
+material_header.o \
+ndpp.o \
+ndpp_ace.o \
+ndpp_chi.o \
+ndpp_class.o \
+ndpp_constants.o \
+ndpp_error.o \
+ndpp_hdf5.o \
+ndpp_init.o \
+ndpp_jacobian.o \
+ndpp_legendre.o \
+ndpp_output.o \
+ndpp_scatt.o \
+ndpp_scattdata_header.o \
+search.o \
+set_header.o \
+string.o \
+timer_header.o

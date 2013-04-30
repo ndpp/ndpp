@@ -1,0 +1,29 @@
+# Compiled objects and modules
+*.o
+*.mod
+*.log
+*.out
+
+# Compiler python objects
+*.pyc
+
+# ndpp executable
+ndpp/src/ndpp
+
+# emacs/geany/gedit backups
+*~
+
+# kate swap files
+*.kate-swp
+
+# Documentation builds
+docs/build
+
+# xml-fortran reader
+src/xml-fortran/xmlreader
+
+# Modules built from XML templates
+src/templates/*.f90
+
+# Sage pre-processed .py files
+jacobian*.py

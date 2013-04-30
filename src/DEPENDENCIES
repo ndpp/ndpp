@@ -1,0 +1,126 @@
+ace_header.o: ndpp_constants.o
+ace_header.o: endf_header.o
+
+endf.o: ndpp_constants.o
+endf.o: string.o
+
+fission.o: ace_header.o
+fission.o: ndpp_constants.o
+fission.o: ndpp_error.o
+fission.o: ndpp_global.o
+fission.o: interpolation.o
+fission.o: search.o
+
+interpolation.o: ndpp_constants.o
+interpolation.o: endf_header.o
+interpolation.o: ndpp_error.o
+interpolation.o: ndpp_global.o
+interpolation.o: search.o
+interpolation.o: string.o
+
+list_header.o: ndpp_constants.o
+
+ndpp_ace.o: ace_header.o
+ndpp_ace.o: ndpp_constants.o
+ndpp_ace.o: endf.o
+ndpp_ace.o: ndpp_error.o
+ndpp_ace.o: fission.o
+ndpp_ace.o: ndpp_global.o
+ndpp_ace.o: material_header.o
+ndpp_ace.o: ndpp_output.o
+ndpp_ace.o: set_header.o
+ndpp_ace.o: string.o
+
+ndpp_chi.o: ace_header.o
+ndpp_chi.o: ndpp_constants.o
+ndpp_chi.o: dict_header.o
+ndpp_chi.o: ndpp_error.o
+ndpp_chi.o: fission.o
+ndpp_chi.o: ndpp_global.o
+ndpp_chi.o: interpolation.o
+ndpp_chi.o: ndpp_output.o
+ndpp_chi.o: search.o
+ndpp_chi.o: string.o
+
+ndpp_class.o: ndpp_ace.o
+ndpp_class.o: ace_header.o
+ndpp_class.o: ndpp_constants.o
+ndpp_class.o: ndpp_chi.o
+ndpp_class.o: dict_header.o
+ndpp_class.o: ndpp_error.o
+ndpp_class.o: ndpp_global.o
+ndpp_class.o: ndpp_output.o
+ndpp_class.o: ndpp_scatt.o
+ndpp_class.o: string.o
+ndpp_class.o: timer_header.o
+
+ndpp_error.o: ndpp_global.o
+
+ndpp_global.o: ace_header.o
+ndpp_global.o: ndpp_constants.o
+ndpp_global.o: dict_header.o
+ndpp_global.o: material_header.o
+
+ndpp_hdf5.o: ndpp_constants.o
+ndpp_hdf5.o: ndpp_error.o
+ndpp_hdf5.o: ndpp_global.o
+ndpp_hdf5.o: ndpp_output.o
+ndpp_hdf5.o: string.o
+
+ndpp_init.o: ndpp_constants.o
+ndpp_init.o: ndpp_error.o
+ndpp_init.o: ndpp_global.o
+ndpp_init.o: ndpp_output.o
+ndpp_init.o: string.o
+
+ndpp_jacobian.o: ndpp_constants.o
+
+ndpp_legendre.o: ace_header.o
+ndpp_legendre.o: ndpp_constants.o
+ndpp_legendre.o: ndpp_jacobian.o
+ndpp_legendre.o: ndpp_error.o
+ndpp_legendre.o: ndpp_global.o
+
+ndpp.o: ndpp_global.o
+ndpp.o: ndpp_class.o
+ndpp.o: ndpp_init.o
+ndpp.o: ndpp_output.o
+
+ndpp_output.o: ace_header.o
+ndpp_output.o: ndpp_constants.o
+ndpp_output.o: endf.o
+ndpp_output.o: ndpp_global.o
+ndpp_output.o: string.o
+
+ndpp_scatt.o: ace_header.o
+ndpp_scatt.o: ndpp_constants.o
+ndpp_scatt.o: dict_header.o
+ndpp_scatt.o: ndpp_error.o
+ndpp_scatt.o: ndpp_global.o
+ndpp_scatt.o: interpolation.o
+ndpp_scatt.o: ndpp_output.o
+ndpp_scatt.o: ndpp_scattdata_header.o
+ndpp_scatt.o: search.o
+ndpp_scatt.o: string.o
+
+ndpp_scattdata_header.o: ace_header.o
+ndpp_scattdata_header.o: ndpp_constants.o
+ndpp_scattdata_header.o: dict_header.o
+ndpp_scattdata_header.o: ndpp_error.o
+ndpp_scattdata_header.o: ndpp_global.o
+ndpp_scattdata_header.o: interpolation.o
+ndpp_scattdata_header.o: ndpp_legendre.o
+ndpp_scattdata_header.o: ndpp_output.o
+ndpp_scattdata_header.o: search.o
+
+search.o: ndpp_error.o
+search.o: ndpp_global.o
+
+set_header.o: ndpp_constants.o
+set_header.o: list_header.o
+
+string.o: ndpp_constants.o
+string.o: ndpp_error.o
+string.o: ndpp_global.o
+
+timer_header.o: ndpp_constants.o

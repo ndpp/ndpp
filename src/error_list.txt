@@ -1,0 +1,20 @@
+92236:
+  NR /=0 ! Not an issue since interpolate_tab1 takes care of it.
+  ERROR, INTT /= LINEAR_LINEAR ! Added routine to set what INTT was. Used the same code that interpolate_tab1 had.
+  WARNING: Invalid Interpolation Grid Type ! Since we already did the integration of T (this came from law 7), then I think its safe to use lin-lin.
+  
+92240: ! Same resolution as above.
+  NR /=0
+  ERROR, INTT /= LINEAR_LINEAR
+  WARNING: Invalid Interpolation Grid Type
+94240:
+   WARNING: Energy Distribution Type 7 Has Nested EDISTs ! I think I have this fixed.
+   - rxn % threshold for MT=20 does not match the first energy of its edist.
+90232:
+  Warning: Energy Distribution Type 61 Not Yet Supported. ! Fixed bc Law 4 is the same as 61, except for angular data, which we dont need
+91231: 
+ WARNING: Energy Distribution Type 61 Not Yet Supported.  ! Fixed bc Law 4 is the same as 61, except for angular data, which we d
+91233: 
+ WARNING: Energy Distribution Type 61 Not Yet Supported.  ! Fixed bc Law 4 is the same as 61, except for angular data, which we d
+98252:
+ WARNING: Negative value(s) found on probability table for nuclide  98252.70c
