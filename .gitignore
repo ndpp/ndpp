@@ -8,7 +8,7 @@
 *.pyc
 
 # ndpp executable
-ndpp/src/ndpp
+src/ndpp
 
 # emacs/geany/gedit backups
 *~

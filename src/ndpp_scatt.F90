@@ -88,10 +88,8 @@ module ndpp_scatt
       
       do i_rxn = 1, num_tot_rxn
         mySD => rxn_data(i_rxn)
-        
-        ! Calculate the angular distributions from the ACE data
-        call mySD % calc_distro()
-
+        ! Convert the angular distributions from the ACE data to Tabular format
+        call mySD % convert_distro()
       end do
       
       ! Combine the reactions to a union grid

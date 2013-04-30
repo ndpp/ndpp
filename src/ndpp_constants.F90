@@ -75,6 +75,11 @@ module constants
                         CM2LAB_NUMERIC_PTS   = 10000  ! Number of \mu points
                                                      ! To use when numerically
                                                      ! converting from CM to Lab
+                                                     
+  ! Number of equiprobable bins
+  integer, parameter :: NUM_EP = 32
+  ! Reciprocal of NUM_EP
+  real(8), parameter :: R_NUM_EP = ONE / 32.0_8
   
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS

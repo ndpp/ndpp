@@ -9,26 +9,39 @@ module scattdata_header
   use legendre
   use output,           only: write_message, header, print_ascii_array
   use search,           only: binary_search
+  use string,           only: to_str
+  
   implicit none
 
 ! Module constants
-  integer, parameter :: CM_ORDER = 20
+  integer, parameter :: DISTRO_PTS = 2001
 
 !===============================================================================
-! SCATT_DATA Stores the data for each reaction of the nuclide in question.
+! JAGGED is a type which allows for jagged 2-D array. This is needed for
+! ScattData % distro.
+!===============================================================================
+
+  type :: jagged
+    real(8), allocatable :: data(:,:)
+  end type jagged
+
+
+!===============================================================================
+! SCATTDATA Stores the data for each reaction of the nuclide in question.
 !===============================================================================
   
   type :: ScattData
-    logical :: is_init = .false.            ! Initialization status
-    integer              :: NE = 0          ! Number of Ein values
-    real(8), allocatable :: E_grid(:)       ! Ein values
-    real(8), allocatable :: distro(:,:,:)   ! Output distribution
-                                            ! # orders x g_out x # E points
-    real(8), allocatable :: mu_bins(:,:)    ! mu_min and mu_max for each group
-    real(8), pointer     :: E_bins(:)       ! Energy group boundaries from input
-    integer              :: scatt_type = -1 ! Type of format to store the data
-    integer              :: order      =  0 ! Order of the data storage format
-    integer              :: groups     =  0 ! Number of outgoing energy groups      
+    logical              :: is_init = .false. ! Initialization status
+    integer              :: NE = 0            ! Number of Ein values
+    real(8), allocatable :: E_grid(:)         ! Ein values
+    
+    type(jagged), allocatable :: distro(:)    ! Output distribution
+                                              ! # distro pts x # E_out x # E_in
+    real(8), allocatable :: mu(:)    ! mu pts to find f(mu) values at
+    real(8), pointer     :: E_bins(:)         ! Energy grp boundaries from input
+    integer              :: scatt_type = -1   ! Type of format to store the data
+    integer              :: order      =  0   ! Order of the data storage format
+    integer              :: groups     =  0   ! Number of outgoing energy groups      
     real(8)              :: awr        =  ZERO   ! atomic weight ratio
     type(Reaction),   pointer :: rxn   => NULL() ! My reaction
     type(DistEnergy), pointer :: edist => NULL() ! My reaction's combined dist
@@ -38,8 +51,8 @@ module scattdata_header
     contains
       procedure :: init  => scatt_init  ! Sets NE, allocates spaces, etc
       procedure :: clear => scatt_clear ! Deallocates this object
-      procedure :: calc_distro => scatt_calc_distro ! Calculate the distribution
-      procedure :: interp_distro => scatt_interp_distro ! Interpolates the distro
+      procedure :: convert_distro => scatt_convert_distro  ! Converts from ACE to Tabular
+      procedure :: interp_distro => scatt_interp_distro ! Interpolate the distro
                                                         ! to the given energy pt
   end type ScattData
   
@@ -61,12 +74,10 @@ module scattdata_header
       integer, intent(in) :: scatt_type ! Type of format to store the data
       integer, intent(in) :: order      ! Order of the data storage format
       
-      integer :: NR ! Number of interpolation regions (from ACE)
-      integer :: lc ! ACE data locator variable
-      integer :: iE ! energy grid point index of the scattering data
-      integer :: global_iE ! energy grid index on the nnuclide's global data
-      real(8) :: interp_val ! Interpolated cross-section value
-      real(8) :: f          ! Interpolation factor
+      integer :: i          ! loop counter
+      real(8) :: dmu        ! mu spacing
+      integer :: NP, NR     ! Number of outgoing energy values and number of interp regions
+      integer :: lc         ! Location of outgoing energy data in edist % data
       
       ! Test reactions to ensure we have a scattering reaction.
       ! These tests will leave this as uninitialized (and is_init == .false.),
@@ -100,12 +111,28 @@ module scattdata_header
         this % NE = this % adist % n_energy
         allocate(this % E_grid(this % NE))
         this % E_grid = this % adist % energy
+        allocate(this % distro(this % NE))
+        NP = 1
+        do i = 1, this % NE
+          ! There is no Energy-out dependence to the distribution, so we only
+          ! need a 1 in the Eout dimension.
+          allocate(this % distro(i) % data(DISTRO_PTS, NP))
+          this % distro(i) % data = ZERO
+        end do
       else if (associated(this % edist)) then
         NR = int(edist % data(1))
         this % NE = int(edist % data(2 + 2*NR))
         allocate(this % E_grid(this % NE))
         lc = 2 + 2*NR
         this % E_grid(1 : this % NE) = edist % data(lc + 1 : lc + this % NE)
+        allocate(this % distro(this % NE))
+        do i = 1, this % NE
+          ! Find the number of outgoing energy points
+          lc = int(edist % data(2 + 2*NR + int(edist % data(2 + 2*NR)) + i))
+          NP   = int(edist % data(lc + 2))
+          allocate(this % distro(i) % data(DISTRO_PTS, NP))
+          this % distro(i) % data = ZERO
+        end do
       else
         ! Must be isotropic. Just use the top and bottom of the energy bins
         this % NE = 2
@@ -119,13 +146,28 @@ module scattdata_header
         else
           this % E_grid(1) = E_bins(1)
         end if
+        allocate(this % distro(this % NE))
+        NP = 1
+        do i = 1, this % NE
+          ! There is no Energy-out dependence to the distribution, so we only
+          ! need a 1 in the Eout dimension.
+          allocate(this % distro(i) % data(DISTRO_PTS, NP))
+          this % distro(i) % data = ZERO
+        end do
       end if
+      
+      ! Assign the mu points
+      allocate(this % mu(DISTRO_PTS))
+      dmu = TWO / real(DISTRO_PTS - 1, 8)
+      do i = 1, DISTRO_PTS - 1
+        this % mu(i) = -ONE + real(i - 1, 8) * dmu
+      end do
+      ! Set the end point is exactly ONE
+      this % mu(size(this % mu)) = ONE
       
       ! Allocate the group-dependent attributes
       this % E_bins => E_bins
       this % groups = size(E_bins) - 1
-      allocate(this % distro(CM_ORDER, this % groups, this % NE))
-      allocate(this % mu_bins(2,this % groups))
       
       ! The final initialization. If we made it here then this bad boy was 
       ! successful.
@@ -138,6 +180,9 @@ module scattdata_header
 
     subroutine scatt_clear(this)
       class(ScattData), intent(inout) :: this ! The object to clear
+      
+      integer :: i ! loop counter
+      
       ! Set attributes to initial values
       this % NE         =  0
       this % scatt_type = -1
@@ -152,71 +197,41 @@ module scattdata_header
       ! Deallocate the attribute arrays
       if (allocated(this % E_grid)) then
         deallocate(this % E_grid)
+        do i = 1, size(this % distro)
+          deallocate(this % distro(i) % data)
+        end do
         deallocate(this % distro)
-        deallocate(this % mu_bins)
+        deallocate(this % mu)
       end if
-      
+      ! Finalize the clear
       this % is_init = .false.
     end subroutine scatt_clear
     
 !===============================================================================
-! SCATT_CALC_DISTRO Controls the flow of execution necessary to calculate the 
-! angular distribution as requested, and store it in this % distro.
+! SCATT_CONVERT_DISTRO Converts the ACE data energy/angle distribution to a 
+! tabular representation stored in this % distro(:) % data
 !===============================================================================
 
-    subroutine scatt_calc_distro(this)
+    subroutine scatt_convert_distro(this)
       class(ScattData), intent(inout) :: this ! The object to act on
       
-      integer :: iE ! Ein grid index
+      integer :: iE ! incoming energy grid index
       
       ! Step through each incoming energy value to do these calculations
       do iE = 1, this % NE
-        ! Calculate the minimum mu and maximum mu for each energy group
-        ! BUT only do this if we do not have a combined energy/angle
-        ! distribution!  IF we do have that case, then mu_bins are -1 and 1, 
-        ! per the Methods for Processing ENDF guide.
         if (associated(this % edist)) then
-          if (this % edist % law /= 44 .and. this % edist % law /= 61) then
-            call calc_mu_bins(this % E_grid(iE), this % awr, &
-              this % rxn % Q_value, this % E_bins, this % mu_bins)
-          else
-            this % mu_bins = ONE
-          end if
-        else
-          call calc_mu_bins(this % E_grid(iE), this % awr, &
-            this % rxn % Q_value, this % E_bins, this % mu_bins)
-        end if
-        
-        ! Calculate the energy-angle integrals (where necessary)
-        ! of the outgoing distro
-        if (this % rxn % scatter_in_cm) then
-          ! If we are in center-of-mass, store and then convert
-          ! Set order to 20 so that the conversion from CM to LAB has a minimal
-          ! loss in accuracy. (The lower orders of Lab depend on the higher
-          ! orders of CM)
-          this % distro(:, :, iE) = integrate_distro(this % scatt_type, &
-            20, this % mu_bins, iE, this % adist, this % edist)
-        else
-          ! If we are in lab, just store the result
-          ! Since we arent converting the moments later to Lab, we only need to
-          ! get this % order number of orders.
-          this % distro(:, :, iE) = integrate_distro(this % scatt_type, &
-            this % order, this % mu_bins, iE, this % adist, this % edist)
-        end if
-        
+          ! combined energy/angle distribution - have to integrate over
+          ! the energy part of the data, AND the angle part.
+          call convert_file6(iE, this % mu, this % edist, &
+            this % distro(iE) % data)
+        else if (associated(this % adist)) then
+          ! angle distribution only. Only have to integrate the angle.
+          call convert_file4(iE, this % mu, this % adist, &
+            this % distro(iE) % data(:, 1))
+        end if 
       end do
       
-      if (this % rxn % scatter_in_cm) then
-        ! If we are in center-of-mass then convert to lab
-        if (this % scatt_type == SCATT_TYPE_LEGENDRE) then
-          call cm2lab_legendre_numeric(this % awr, this % rxn % Q_value, &
-            this % E_grid, this % order, CM_ORDER, this % distro)
-        else
-          write(*,*) 'Not yet implemented.'
-        end if
-      end if
-      
-    end subroutine scatt_calc_distro
+    end subroutine scatt_convert_distro
 
 !===============================================================================
 ! SCATT_INTERP_DISTRO calculates the value of the distribution (times its 
@@ -234,92 +249,282 @@ module scattdata_header
       
       type(Reaction), pointer   :: rxn   ! The reaction of interest
       real(8), allocatable :: distro(:,:)
-      real(8) :: f, p_valid, sigS, Ein2
-      integer :: global_iE
-      real(8), pointer :: sigma(:) => NULL()
-      
-      rxn => this % rxn
-      allocate(distro(this % order, this % groups))
-      if (rxn % MT == ELASTIC) then
-        sigma => nuc % elastic
-      else
-        sigma => rxn % sigma
-      end if
-      
-      ! Get sigS - this code is pulled out of the big if(present) loop since both
-      ! branches need it.
-      if (present(Ein)) then
-        Ein2 = Ein
-      else
-        Ein2 = this % E_grid(iE)
-      end if
-      if (Ein2 < nuc % energy(rxn % threshold)) then
-        ! This is a catch-all, our energy was below the threshold, so set the 
-        ! probability to 0
-        sigS = ZERO
-      else if (Ein2 <= nuc % energy(1)) then
-        ! We are below the lowest global energy value so take the first entry
-        sigS = sigma(rxn % threshold)
-      else if (Ein2 >= nuc % energy(nuc % n_grid)) then
-        ! We are above the global energy grid, so take the highest value
-        sigS = sigma(nuc % n_grid)
-      else
-        global_iE = binary_search(nuc % energy, nuc % n_grid, &
-          Ein2)
-        ! check for rare case where two energy points are the same
-        if (nuc % energy(global_iE) == nuc % energy(global_iE + 1)) &
-          global_iE = global_iE + 1
-        ! calculate interpolation factor
-        f = (Ein2 - nuc % energy(global_iE))/ &
-          (nuc % energy(global_iE + 1) - nuc % energy(global_iE))
-        ! Adjust global_iE to point to the sigma array
-        global_iE = global_iE - rxn % threshold + 1
-        sigS = (ONE - f) * sigma(global_iE) + f * sigma(global_iE + 1)
-      end if
-      
-      if (present(Ein)) then
-        ! Get the probability value
-        if (associated(this % edist)) then
-          p_valid = interpolate_tab1(this % edist % p_valid, Ein)
-        else
-          p_valid = ONE
-        end if
-        
-        ! Interpolate the distribution
-        !!! For now we will just `interpolate' based on whichever
-        !!! distribution is the closest to the requested energy
-        global_iE = binary_search(this % E_grid(iE : this % NE), &
-          this % NE - iE + 1, Ein)
-        f = (Ein - this % E_grid(global_iE))/ &
-          (this % E_grid(global_iE + 1) - this % E_grid(global_iE))
-        if (f < 0.5_8) then
-          distro = this % distro(:,:, global_iE)
-        else
-          distro = this % distro(:,:, global_iE + 1)
-        end if
-        
-      else
-        ! No interpolation is needed just multiply and return
-        if (associated(this % edist)) then
-          p_valid = interpolate_tab1(this % edist % p_valid, this % E_grid(iE))
-        else
-          p_valid = ONE
-        end if
-        
-        distro = this % distro(:, :, iE)
-      end if
-      
-      ! Combine the results
-      distro = sigS * p_valid * distro
+!~       real(8) :: f, p_valid, sigS, Ein2
+!~       integer :: global_iE
+!~       real(8), pointer :: sigma(:) => NULL()
+!~       
+!~       rxn => this % rxn
+!~       allocate(distro(this % order, this % groups))
+!~       if (rxn % MT == ELASTIC) then
+!~         sigma => nuc % elastic
+!~       else
+!~         sigma => rxn % sigma
+!~       end if
+!~       
+!~       ! Get sigS - this code is pulled out of the big if(present) loop since both
+!~       ! branches need it.
+!~       if (present(Ein)) then
+!~         Ein2 = Ein
+!~       else
+!~         Ein2 = this % E_grid(iE)
+!~       end if
+!~       if (Ein2 < nuc % energy(rxn % threshold)) then
+!~         ! This is a catch-all, our energy was below the threshold, so set the 
+!~         ! probability to 0
+!~         sigS = ZERO
+!~       else if (Ein2 <= nuc % energy(1)) then
+!~         ! We are below the lowest global energy value so take the first entry
+!~         sigS = sigma(rxn % threshold)
+!~       else if (Ein2 >= nuc % energy(nuc % n_grid)) then
+!~         ! We are above the global energy grid, so take the highest value
+!~         sigS = sigma(nuc % n_grid)
+!~       else
+!~         global_iE = binary_search(nuc % energy, nuc % n_grid, &
+!~           Ein2)
+!~         ! check for rare case where two energy points are the same
+!~         if (nuc % energy(global_iE) == nuc % energy(global_iE + 1)) &
+!~           global_iE = global_iE + 1
+!~         ! calculate interpolation factor
+!~         f = (Ein2 - nuc % energy(global_iE))/ &
+!~           (nuc % energy(global_iE + 1) - nuc % energy(global_iE))
+!~         ! Adjust global_iE to point to the sigma array
+!~         global_iE = global_iE - rxn % threshold + 1
+!~         sigS = (ONE - f) * sigma(global_iE) + f * sigma(global_iE + 1)
+!~       end if
+!~       
+!~       if (present(Ein)) then
+!~         ! Get the probability value
+!~         if (associated(this % edist)) then
+!~           p_valid = interpolate_tab1(this % edist % p_valid, Ein)
+!~         else
+!~           p_valid = ONE
+!~         end if
+!~         
+!~         ! Interpolate the distribution
+!~         !!! For now we will just `interpolate' based on whichever
+!~         !!! distribution is the closest to the requested energy
+!~         global_iE = binary_search(this % E_grid(iE : this % NE), &
+!~           this % NE - iE + 1, Ein)
+!~         f = (Ein - this % E_grid(global_iE))/ &
+!~           (this % E_grid(global_iE + 1) - this % E_grid(global_iE))
+!~         if (f < 0.5_8) then
+!~           distro = this % distro(:,:, global_iE)
+!~         else
+!~           distro = this % distro(:,:, global_iE + 1)
+!~         end if
+!~         
+!~       else
+!~         ! No interpolation is needed just multiply and return
+!~         if (associated(this % edist)) then
+!~           p_valid = interpolate_tab1(this % edist % p_valid, this % E_grid(iE))
+!~         else
+!~           p_valid = ONE
+!~         end if
+!~         
+!~         distro = this % distro(:, :, iE)
+!~       end if
+!~       
+!~       ! Combine the results
+!~       distro = sigS * p_valid * distro
       
     end function scatt_interp_distro
-
 
 !===============================================================================
 !===============================================================================
 ! FUNCTIONS TO SUPPORT SCATTDATA
 !===============================================================================
 !===============================================================================
+
+!===============================================================================
+! CONVERT_FILE4 performs the overall control for converting file 4 ACE data to
+! the required tabular format.
+!===============================================================================
+
+    subroutine convert_file4(iE, mu, adist, distro)
+      integer, intent(in)  :: iE            ! Energy index to act on
+      real(8), intent(in)  :: mu(:)         ! tabular mu points
+      type(DistAngle), pointer, intent(in) :: adist ! My angle dist
+      real(8), intent(inout) :: distro(:) ! resultant distro (# pts)
+      
+      real(8), pointer :: data(:) => null() ! Shorthand for adist % data
+      integer :: lc           ! Location inside adist % data
+      integer :: idata, idata_prev ! Loop counters
+      integer :: imu          ! mu loop indices
+      integer :: interp, NP   ! Tabular format data (interp type and # pts)
+      real(8) :: r            ! Interpolation parameter
+      
+      data => adist % data
+      
+      ! Check what type of distribution we have
+      lc   = adist % location(iE)
+      
+      select case(adist % type(iE))
+        case (ANGLE_ISOTROPIC)
+          distro = 0.5_8
+        case (ANGLE_32_EQUI)
+          idata_prev = lc + 1
+          do imu = 1, size(mu)
+            do idata = idata_prev, lc + 1 + NUM_EP
+              if (data(idata) >= mu(imu)) then
+                ! Find the area of the bin, and use that.
+                if (imu == 1) then
+                  !!! If we are at the start, then use the next data point.
+                  distro(imu) = R_NUM_EP /  (data(idata + 1) - data(idata)) 
+                else
+                  ! Look backwards to figure it out
+                  distro(imu) = R_NUM_EP / (data(idata) - data(idata - 1))
+                end if
+                idata_prev = idata
+                exit
+              end if
+            end do
+          end do
+        case (ANGLE_TABULAR)
+          interp = int(data(lc + 1))
+          NP = int(data(lc + 2))
+          lc = lc + 3
+          idata_prev = lc
+          if (interp == HISTOGRAM) then
+            do imu = 1, size(mu)
+              do idata = idata_prev, lc + NP - 1
+                if ((data(idata) - mu(imu)) > FP_PRECISION) then
+                  ! Found a match - set to previous value of PDF (since histogram)
+                  distro(imu) = data(idata - 1 + NP)
+                  idata_prev = idata
+                  exit
+                else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
+                  ! Found a match - set to current value of PDF (since histogram)
+                  distro(imu) = data(idata + NP)
+                  idata_prev = idata
+                  exit
+                end if
+              end do
+            end do
+          else if (interp == LINEAR_LINEAR) then
+            do imu = 1, size(mu)
+              do idata = idata_prev, lc + NP - 1
+                if ((data(idata) - mu(imu)) > FP_PRECISION) then
+                  ! Found a match - interpolate
+                  r = (mu(imu) - data(idata - 1)) / &
+                    (data(idata) - data(idata - 1))
+                  distro(imu) = data(idata + NP -1) + r * &
+                    (data(idata + NP) - data(idata + NP - 1))
+                  idata_prev = idata
+                  exit
+                else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
+                  ! Found a match - just set to current value of PDF
+                  distro(imu) = data(idata + NP)
+                  idata_prev = idata
+                  exit
+                end if
+              end do
+            end do
+          end if
+      end select
+      
+    end subroutine convert_file4
+
+!===============================================================================
+! CONVERT_FILE6 performs the overall control for converting file 6 ACE data to
+! the required tabular format.
+!===============================================================================
+
+    subroutine convert_file6(iE, mu, edist, distro)
+      integer, intent(in)  :: iE            ! Energy index to act on
+      real(8), intent(in)  :: mu(:)         ! tabular mu points
+      type(DistEnergy), pointer, intent(in) :: edist ! My energy dist
+      real(8), intent(inout) :: distro(:,:) ! resultant distro (pts x NEout)
+      
+      real(8), pointer :: data(:) => null() ! Shorthand for adist % data
+      integer :: lcin, lc     ! Locations inside edist % data
+      integer :: idata, idata_prev ! Loop counters
+      integer :: imu          ! mu loop indices
+      integer :: iEout, NEout ! outgoing loop indices and number of points
+      integer :: interp, NP   ! Tabular format data (interp type and # pts)
+      real(8) :: r            ! Interpolation parameter
+      integer :: NR, NE       ! edist % data navigation information
+      real(8) :: KMR, KMA, KMconst ! Various data for Kalbach-Mann
+      
+      data => edist % data  
+      
+      NR = int(data(1))
+      NE = int(data(2 + 2*NR))
+
+      if (edist % law  == 44) then
+        ! No interpolation on Eout parameters is necessary since we are doing
+        ! this for every Eout point
+        lc = int(data(2 + 2 * NR + NE + iE)) ! start of LDAT for iE
+        NEout = int(data(lc + 2))
+        lc = lc + 2
+        do iEout = 1, NEout
+          KMR = data(lc + 3 * NEout + iEout)
+          KMA = data(lc + 4 * NEout + iEout)
+          KMconst = 0.5_8 * KMA / sinh(KMA)
+          distro(:, iEout) = KMconst * (cosh(KMA * mu(:)) + KMR * sinh(KMA * mu(:)))
+        end do
+      else if (edist % law  == 61) then
+        ! No interpolation on Eout parameters is necessary since we are doing
+        ! this for every Eout point
+        lcin = int(data(2 + 2 * NR + NE + iE)) ! start of LDAT for iE
+        NEout = int(data(lcin + 2))
+        lcin = lcin + 2
+        do iEout = 1, NEout
+          lc = int(data(lcin + 3*NP + iEout))
+          ! Check if isotropic
+          if (lc == 0) then
+            distro(:, iEout) = 0.5_8
+            cycle
+          end if
+          
+          interp = int(data(lc + 1))
+          NP = int(data(lc + 2))
+          lc = lc + 3
+          
+          ! Calculate a PDF value for each mu pt.
+          if (interp == HISTOGRAM) then
+            idata_prev = lc
+            do imu = 1, size(mu)
+              do idata = idata_prev , lc + NP -1
+                if ((data(idata) - mu(imu)) > FP_PRECISION) then
+                  ! Found a match, take value at mu(imu - 1)
+                  distro(imu, iEout) = data(idata + NP - 1)
+                  idata_prev = idata
+                  exit
+                else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
+                  ! Found a match, take value at mu(imu)
+                  distro(imu, iEout) = data(idata + NP)
+                  idata_prev = idata
+                  exit
+                end if
+              end do
+            end do
+          else if (interp == LINEAR_LINEAR) then
+            idata_prev = lc
+            do imu = 1, size(mu)
+              do idata = idata_prev, lc + NP -1
+                if ((data(idata) - mu(imu)) > FP_PRECISION) then
+                  ! Found a match, interpolate value
+                  r = (mu(imu) - data(idata -1)) / (data(idata) - data(idata-1))
+                  distro(imu, iEout) = data(idata + NP - 1) + r * &
+                    (data(idata + NP) - data(idata - 1 + NP))
+                  idata_prev = idata
+                  exit
+                else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
+                  ! Found a match, take value at mu(imu)
+                  distro(imu, iEout) = data(idata + NP)
+                  idata_prev = idata
+                  exit
+                end if
+              end do
+            end do
+          else
+            message = "Unknown interpolation type: " // trim(to_str(interp))
+            call fatal_error()
+          end if 
+        end do
+      end if
+      
+    end subroutine convert_file6
 
 !===============================================================================
 ! CALC_mu_bins Calculates the mu-values corresponding to the energy-out
@@ -353,62 +558,5 @@ module scattdata_header
 mu_bins(MU_LO,:) = -ONE      
 mu_bins(MU_HI,:) =  ONE
     end subroutine calc_mu_bins
-
-!===============================================================================
-! INTEGRATE_DISTRO Performs the integration of the scattering distribution for
-! the current energy point for all outgoing energy groups.
-!===============================================================================
-
-    function integrate_distro(scatt_type, order, mu_bins, iE, &
-      adist, edist) result(distro)
-      integer, intent(in)  :: scatt_type   ! Type of format to store the data
-      integer, intent(in)  :: order        ! Order of the data storage format
-      real(8), intent(in)  :: mu_bins(:,:) ! mu_min and mu_max for each group
-      integer, intent(in)  :: iE           ! Energy index to act on
-      type(DistAngle), pointer, intent(in)   :: adist ! My angle dist
-      type(DistEnergy), pointer , intent(in) :: edist ! My combined dist
-      
-      real(8), allocatable :: distro(:,:) ! resultant distro (order x groups)
-      
-      allocate(distro(order, size(mu_bins, dim = 2)))
-      distro = ZERO
-
-      ! This routine needs to:
-      ! 1) Determine which type of distro we have to deal with
-      ! 2) Depending on the type of law and output type, 
-      ! integrate over just angle or energy and angle
-      
-      select case(scatt_type)
-        case (SCATT_TYPE_LEGENDRE)
-          if (associated(edist)) then
-            if (edist % law == 44 .or. edist % law == 61) then
-              ! combined energy/angle distribution - have to integrate over
-              ! the energy part of the data, AND the angle part.
-!~               call integrate_file6_legendre()
-            else
-              ! angle distribution only. Only have to integrate the angle.
-              call integrate_file4_legendre(order, mu_bins, iE, adist, distro)
-            end if
-          else if (associated(adist)) then
-            ! angle distribution only. Only have to integrate the angle.
-            call integrate_file4_legendre(order, mu_bins, iE, adist, distro)
-          end if 
-        case (SCATT_TYPE_TABULAR)
-          if (associated( edist)) then
-            if (edist % law == 44 .or. edist % law == 61) then
-              ! combined energy/angle distribution - have to integrate over
-              ! the energy part of the data, AND the angle part.
-            else
-              ! angle distribution only. Only have to integrate the angle.
-              
-            end if
-          else if (associated(adist)) then
-            ! angle distribution only. Only have to integrate the angle.
-          end if 
-      end select
-      
-      
-      
-    end function integrate_distro
 
 end module scattdata_header
