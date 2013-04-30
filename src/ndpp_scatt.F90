@@ -33,11 +33,12 @@ module ndpp_scatt
       type(DistEnergy), pointer :: edist
       type(Reaction),   pointer :: rxn
       integer :: num_tot_rxn
-      integer :: i_rxn, i_nested_rxn
+      integer :: i_rxn, i_nested_rxn, imu
       integer :: iE
-      real(8) :: max_err
+      real(8) :: max_err, dmu
       type(ScattData), allocatable, target  :: rxn_data(:)
       type(ScattData), pointer :: mySD
+      real(8), pointer  :: mu_out(:) ! The tabular output mu grid
       
       ! This routine will parse through each nuc % reaction entry.
       ! For each, it will determine if the rxn is a scattering reaction, and if
@@ -93,7 +94,14 @@ module ndpp_scatt
       end do
       
       ! Combine the reactions to a union grid
-      call union_grid(nuc, rxn_data, E_union, scatt_union)
+      if (scatt_type == SCATT_TYPE_TABULAR) then
+        allocate(mu_out(order))
+        dmu = TWO / real(order - 1, 8)
+        do imu = 1, order
+          mu_out(imu) = -ONE + real(imu - 1, 8) * dmu
+        end do
+      end if
+      call union_grid(nuc, mu_out, rxn_data, E_union, scatt_union)
 
     end subroutine calc_scatt
  
@@ -102,8 +110,9 @@ module ndpp_scatt
 ! grid, (the union grid).
 !===============================================================================
     
-    subroutine union_grid(nuc, rxn_data, E_union, scatt_union)
+    subroutine union_grid(nuc, mu_out, rxn_data, E_union, scatt_union)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
+      real(8), intent(inout), pointer      :: mu_out(:) ! The tabular output mu grid
       type(ScattData), intent(in), target  :: rxn_data(:)
       real(8), allocatable, intent(out)    :: E_union(:)
       real(8), allocatable, intent(out)    :: scatt_union(:,:,:)
@@ -153,7 +162,7 @@ module ndpp_scatt
               E_temp(iE) = mySD % E_grid(rxnE)
               ! Add the scattering distribution to the union scattering grid
               scatt_temp(:,:,iE) = scatt_temp(:,:,iE) + &
-                mySD % interp_distro(nuc, rxnE)
+                mySD % interp_distro(mu_out, nuc, rxnE)
               ! Increment the location counter and set to done if the counter is
               ! out of bounds
               scatt_loc(irxn) = scatt_loc(irxn) + 1
@@ -173,7 +182,7 @@ module ndpp_scatt
               if (E_temp(iE) < mySD % E_grid(1)) cycle
               ! Add the scattering distribution to the union scattering grid
               scatt_temp(:,:,iE) = scatt_temp(:,:,iE) + &
-                mySD % interp_distro(nuc, rxnE, E_temp(iE))
+                mySD % interp_distro(mu_out, nuc, rxnE, E_temp(iE))
             end if
           end if
         end do
