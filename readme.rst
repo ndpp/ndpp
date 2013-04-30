@@ -1,52 +1,50 @@
 ==========================================
-OpenMC Monte Carlo Particle Transport Code
+Nuclear Data PreProcessor (NDPP) Code
 ==========================================
 
-The OpenMC project aims to provide a fully-featured Monte Carlo particle
-transport code based on modern methods. It is a constructive solid geometry,
-continuous-energy transport code that uses ACE format cross sections. The
-project started under the Computational Reactor Physics Group at MIT.
-
-Complete documentation on the usage of OpenMC is hosted on GitHub at
-http://mit-crpg.github.io/openmc/. If you are interested in the project or would
-like to help and contribute, please send a message to the OpenMC User's Group
-`mailing list`_.
+The NDPP program is a code which extracts nuclear data from ACE format 
+data files (used by the Monte Carlo neutron transport codesMCNP_, Serpent_, and 
+OpenMC_, among others), and pre-processes the data to a new data library
+which has outgoing particle angle and energy probability distributions from both scattering and 
+fission reactions in a form that is more readily tallied by the Monte Carlo 
+codes with a significantly increased convergence rate.  The project started 
+under the Fission Systems and Radiation Transport group at the University of
+Michigan.
 
 ------------
 Installation
 ------------
 
-Detailed `installation instructions`_ can be found in the User's Guide.
+Detailed installation instructions can be found in the User's Guide.
 
 ---------------
 Troubleshooting
 ---------------
 
-If you run into problems compiling, installing, or running OpenMC, first check
-the `Troubleshooting section`_ in the User's Guide. If you are not able to find
-a solution to your problem there, please send a message to the User's Group
-`mailing list`_.
+If you run into problems compiling, installing, or running NDPP, first check
+the Troubleshooting section in the User's Guide. If you are not able to find
+a solution to your problem there, please contact the `developer`_.
 
 --------------
 Reporting Bugs
 --------------
 
-OpenMC is hosted on GitHub and all bugs are reported and tracked through the
-Issues_ feature on GitHub. However, GitHub Issues should not be used for common
-troubleshooting purposes. If you are having trouble installing the code or
-getting your model to run properly, you should first send a message to the
-User's Group `mailing list`_. If it turns out your issue really is a bug in the
-code, an issue will then be created on GitHub. If you want to request that a
-feature be added to the code, you may create an Issue on github.
+NDPP is hosted on BitBucket and all bugs are reported and tracked through the
+Issues_ feature on BitBucket. However, BitBucket Issues should not be used for 
+common troubleshooting purposes. If you are having trouble installing the code 
+or getting your model to run properly, you should first send a message to the
+`developer`_. If it turns out your issue really is a bug in the
+code, an issue will then be created on BitBucket. If you want to request that a
+feature be added to the code, you may create an Issue on BitBucket.
 
 -------
 License
 -------
 
-NDPP is distributed under the MIT/X license_.
+NDPP is distributed under the MIT/X license.
 
-.. _mailing list: https://groups.google.com/forum/?fromgroups=#!forum/openmc-users
-.. _installation instructions: http://mit-crpg.github.io/openmc/usersguide/install.html
-.. _Troubleshooting section: http://mit-crpg.github.io/openmc/usersguide/troubleshoot.html
-.. _Issues: https://github.com/mit-crpg/openmc/issues
-.. _license: http://mit-crpg.github.io/openmc/license.html
+
+.. _MCNP: http://mcnp.lanl.gov
+.. _Serpent: http://montecarlo.vtt.fi
+.. _OpenMC: http://mit-crpg.github.io/openmc/index.html
+.. _developer: mailto:nelsonag@umich.edu
