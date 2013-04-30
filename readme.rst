@@ -43,7 +43,7 @@ feature be added to the code, you may create an Issue on github.
 License
 -------
 
-OpenMC is distributed under the MIT/X license_.
+NDPP is distributed under the MIT/X license_.
 
 .. _mailing list: https://groups.google.com/forum/?fromgroups=#!forum/openmc-users
 .. _installation instructions: http://mit-crpg.github.io/openmc/usersguide/install.html
