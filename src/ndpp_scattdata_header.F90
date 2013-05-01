@@ -272,11 +272,9 @@ module scattdata_header
       real(8), pointer :: sigS_array(:) => null()   ! sigS pointer
       real(8), pointer :: my_distro(:, :) => null() ! the distribution chosen
                                                     ! by the binary search on Ein
-      integer, allocatable :: mu_bins(:, :)   ! Start/end angular bin indices
-      real(8), allocatable :: mu_vals(:, :)   ! values on start/end angles
-      real(8), allocatable :: mu_interp(:, :) ! interpolation on start/end angles
-      integer, allocatable :: E_bins(:, :)    ! Start/end energy bin indices
-      real(8), allocatable :: E_interp(:, :)  ! interpolation on start/end energy
+      integer, allocatable :: bins(:, :)   ! Start/end energy/angle bin indices
+      real(8), allocatable :: vals(:, :)   ! values on start/end energy/angle
+      real(8), allocatable :: interp(:, :) ! interpolation on start/end energy/angle
       
       ! Set up the result memory 
       allocate(distro(this % order, this % groups))
@@ -347,40 +345,45 @@ module scattdata_header
       ! 1) convert from CM to Lab, if necessary
       call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, my_distro)
       
-      ! 2) calculate the angular boundaries for integration
-      allocate(mu_vals(2, this % groups))
-      allocate(mu_bins(2, this % groups))
-      allocate(mu_interp(2, this % groups))
-      call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, this % E_bins, &
-        this % mu, mu_interp, mu_vals, mu_bins)
-        
-      ! 3) calculate the energy boundaries for integration
-!~       allocate(E_bins(2, this % groups))
-!~       allocate(E_interp(2, this % groups))
-!~       call calc_E_bins(this % awr, this % rxn % Q_value, Ein, this % E_bins, &
-!~         this % mu, mu_interp, mu_bins)
-        
-      ! 4) integrate according to scatt_type
+      allocate(vals(2, this % groups))
+      allocate(bins(2, this % groups))
+      allocate(interp(2, this % groups))
+      
       select case (this % scatt_type)
         case (SCATT_TYPE_LEGENDRE)
           if (associated(this % adist)) then
+            ! 2) calculate the angular boundaries for integration
+            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, this % E_bins, &
+              this % mu, interp, vals, bins)
+            ! 4) integrate according to scatt_type
             call integrate_energyangle_file4_leg(my_distro(:, 1), this % mu, &
-              mu_interp, mu_vals, mu_bins, this % order, distro)
+              interp, vals, bins, this % order, distro)
           else if (associated(this % edist)) then
+            ! 3) calculate the energy boundaries for integration
+            call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, interp, &
+              vals, bins)
+            ! 4) integrate according to scatt_type
             
           end if
         case (SCATT_TYPE_TABULAR)
           if (associated(this % adist)) then
+            ! 2) calculate the angular boundaries for integration
+            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, this % E_bins, &
+              this % mu, interp, vals, bins)
+            ! 4) integrate according to scatt_type
 !~             call integrate_energyangle_file4_tab(my_distro(:, 1), this % mu, &
-!~               mu_interp, mu_vals, mu_bins, this % order, distro)
+!~               interp, vals, bins, this % order, distro)
           else if (associated(this % edist)) then
+            ! 3) calculate the energy boundaries for integration
+            call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, interp, &
+              vals, bins)
+            ! 4) integrate according to scatt_type
             
           end if
       end select
       
       ! Combine the results
-      !!! Where does multiplicity come in to play??
-      distro = sigS * p_valid * distro
+      distro = sigS * p_valid * distro * rxn % multiplicity
       
     end function scatt_interp_distro
 
@@ -650,19 +653,18 @@ module scattdata_header
 ! bins for a given input energy.
 !===============================================================================
 
-    subroutine calc_mu_bounds(awr, Q, Ein, E_bins, mu, mu_interp, mu_vals, &
-      mu_bins)
+    subroutine calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
       
       real(8), intent(in)  :: awr            ! Atomic-weight ratio
       real(8), intent(in)  :: Q              ! Reaction Q-Value
       real(8), intent(in)  :: Ein            ! Incoming energy
       real(8), intent(in)  :: E_bins(:)      ! Energy group boundaries
       real(8), intent(in)  :: mu(:)          ! tabular mu values
-      real(8), intent(out) :: mu_interp(:,:) ! Outgoing mu interpolants
+      real(8), intent(out) :: interp(:,:) ! Outgoing mu interpolants
                                              ! corresponding to the energy groups
-      real(8), intent(out) :: mu_vals(:,:)   ! Outgoing mu values corresponding
+      real(8), intent(out) :: vals(:,:)   ! Outgoing mu values corresponding
                                              ! to the energy groups
-      integer, intent(out) :: mu_bins(:,:)   ! Outgoing mu indices corresponding
+      integer, intent(out) :: bins(:,:)   ! Outgoing mu indices corresponding
                                              ! to the energy groups
       
       real(8) :: mu_low, mu_high  ! Low and high angular points
@@ -682,37 +684,88 @@ module scattdata_header
         
         ! Find the index in mu corresponding to mu_low
         if (mu_low < -ONE) then
-          mu_bins(MU_LO, g) = 1
-          mu_vals(MU_LO, g) = -ONE
-          mu_interp(MU_LO, g) = ZERO
+          bins(MU_LO, g) = 1
+          vals(MU_LO, g) = -ONE
+          interp(MU_LO, g) = ZERO
         else if (mu_low > ONE) then
-          mu_bins(MU_LO, g) = size(mu) - 1
-          mu_vals(MU_LO, g) = ONE
-          mu_interp(MU_LO, g) = ONE
+          bins(MU_LO, g) = size(mu) - 1
+          vals(MU_LO, g) = ONE
+          interp(MU_LO, g) = ONE
         else
           imu = binary_search(mu, size(mu), mu_low)
-          mu_bins(MU_LO, g) = imu
-          mu_vals(MU_LO, g) = mu_low
-          mu_interp(MU_LO, g) = (mu_low - mu(imu)) / (mu(imu + 1) - mu(imu))
+          bins(MU_LO, g) = imu
+          vals(MU_LO, g) = mu_low
+          interp(MU_LO, g) = (mu_low - mu(imu)) / (mu(imu + 1) - mu(imu))
         end if
         
         ! Find the index in mu corresponding to mu_high
         if (mu_high < -ONE) then
-          mu_bins(MU_HI, g) = 1
-          mu_vals(MU_HI, g) = -ONE
-          mu_interp(MU_LO, g) = ZERO
+          bins(MU_HI, g) = 1
+          vals(MU_HI, g) = -ONE
+          interp(MU_LO, g) = ZERO
         else if (mu_high > ONE) then
-          mu_bins(MU_HI, g) = size(mu) - 1
-          mu_vals(MU_HI, g) = ONE
-          mu_interp(MU_LO, g) = ONE
+          bins(MU_HI, g) = size(mu) - 1
+          vals(MU_HI, g) = ONE
+          interp(MU_LO, g) = ONE
         else
           imu = binary_search(mu, size(mu), mu_high)
-          mu_bins(MU_HI, g) = imu
-          mu_vals(MU_HI, g) = mu_high
-          mu_interp(MU_LO, g) = (mu_high - mu(imu)) / (mu(imu + 1) - mu(imu))
+          bins(MU_HI, g) = imu
+          vals(MU_HI, g) = mu_high
+          interp(MU_LO, g) = (mu_high - mu(imu)) / (mu(imu + 1) - mu(imu))
         end if
       end do
     end subroutine calc_mu_bounds
+
+!===============================================================================
+! CALC_E_BOUNDS Calculates the energy points corresponding to the energy-out
+! bins for a given input energy.
+!===============================================================================
+
+    subroutine calc_E_bounds(E_bins, Eout, interp, vals, bins)
+      real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+      real(8), intent(in)  :: Eout(:)     ! Output energies
+      real(8), intent(out) :: interp(:,:) ! Outgoing E interpolants
+                                          ! corresponding to the energy groups
+      real(8), intent(out) :: vals(:,:)   ! Outgoing E values corresponding
+                                          ! to the energy groups
+      integer, intent(out) :: bins(:,:)   ! Outgoing E indices corresponding
+                                          ! to the energy groups
+      
+      integer :: g               ! Group index variable
+      integer :: iE
+      
+      do g = 1, size(E_bins) - 1
+        if (E_bins(g) < Eout(1)) then
+          bins(MU_LO, g)   = 1
+          vals(MU_LO, g)   = ZERO
+          interp(MU_LO, g) = ZERO
+        else if (E_bins(g) > Eout(size(Eout))) then
+          bins(MU_LO, g)   = 1
+          vals(MU_LO, g)   = ZERO
+          interp(MU_LO, g) = ZERO
+        else
+          bins(MU_LO, g)   = binary_search(Eout, size(Eout), E_bins(g))
+          vals(MU_LO, g)   = E_bins(g)
+          interp(MU_LO, g) = (E_bins(g) - Eout(bins(MU_LO, g))) / & 
+            (Eout(bins(MU_LO, g)) - Eout(bins(MU_LO, g)))
+        end if
+        if (E_bins(g + 1) < Eout(1)) then
+          bins(MU_HI, g)   = 1
+          vals(MU_HI, g)   = ZERO
+          interp(MU_HI, g) = ZERO
+        else if (E_bins(g + 1) > Eout(size(Eout))) then
+          bins(MU_HI, g)   = 1
+          vals(MU_HI, g)   = ZERO
+          interp(MU_HI, g) = ZERO
+        else
+          bins(MU_HI, g)   = binary_search(Eout, size(Eout), E_bins(g + 1))
+          vals(MU_LO, g)   = E_bins(g + 1)
+          interp(MU_HI, g) = (E_bins(g + 1) - Eout(bins(MU_HI, g))) / & 
+            (Eout(bins(MU_HI, g)) - Eout(bins(MU_HI, g)))
+        end if
+      end do
+      
+    end subroutine calc_E_bounds
 
 !===============================================================================
 ! INTEGRATE_ENERGYANGLE_*_LEG Finds Legendre moments of the energy-angle 
@@ -721,14 +774,14 @@ module scattdata_header
 ! while the FILE6 version does the same for a combined energy-angle distribution
 !===============================================================================
 
-    subroutine integrate_energyangle_file4_leg(fEmu, mu, mu_interp, mu_vals, &
-      mu_bins, order, distro)
+    subroutine integrate_energyangle_file4_leg(fEmu, mu, interp, vals, &
+      bins, order, distro)
       
       real(8), intent(in)  :: fEmu(:)        ! Energy-angle distro to act on
       real(8), intent(in)  :: mu(:)          ! fEmu angular grid
-      real(8), intent(in)  :: mu_interp(:,:) ! interpolants of mu values
-      real(8), intent(in)  :: mu_vals(:,:)   ! mu values
-      integer, intent(in)  :: mu_bins(:,:)   ! indices of fEmu corresponding to
+      real(8), intent(in)  :: interp(:,:)    ! interpolants of mu values
+      real(8), intent(in)  :: vals(:,:)      ! mu values
+      integer, intent(in)  :: bins(:,:)      ! indices of fEmu corresponding to
                                              ! the group boundaries
       integer, intent(in)  :: order          ! Number of moments to find
       real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
@@ -737,29 +790,29 @@ module scattdata_header
       integer :: imu                         ! angle bin index
       real(8) :: flo, fhi                    ! pdf low and high values
       
-      ! Integrating over each of the mu_bins.
+      ! Integrating over each of the bins.
       do g = 1, size(distro, dim = 2)
-        if (mu_bins(MU_LO, g) /= mu_bins(MU_HI, g)) then
+        if (bins(MU_LO, g) /= bins(MU_HI, g)) then
           ! Integrate part of the moment from the low point to the index above 
           ! the low point
-          flo = fEmu(mu_bins(MU_LO, g)) + mu_interp(MU_LO, g) * & 
-            (fEmu(mu_bins(MU_LO, g) + 1) - fEmu(mu_bins(MU_LO, g)))
+          flo = fEmu(bins(MU_LO, g)) + interp(MU_LO, g) * & 
+            (fEmu(bins(MU_LO, g) + 1) - fEmu(bins(MU_LO, g)))
           distro(:, g) = distro(:, g) + &
-            calc_int_pn_tablelin(order, mu_vals(MU_LO, g), &
-            mu(mu_bins(MU_LO, g) + 1), flo, fEmu(mu_bins(MU_LO, g) + 1))
+            calc_int_pn_tablelin(order, vals(MU_LO, g), &
+            mu(bins(MU_LO, g) + 1), flo, fEmu(bins(MU_LO, g) + 1))
           ! Integrate the inbetween pts
-          do imu = mu_bins(MU_LO, g) + 1, mu_bins(MU_HI, g) -1
+          do imu = bins(MU_LO, g) + 1, bins(MU_HI, g) -1
             distro(:, g) = distro(:, g) + &
               calc_int_pn_tablelin(order, mu(imu), &
               mu(imu + 1), fEmu(imu), fEmu(imu + 1))
           end do
           ! Integrate part of the moment from the index below the high point to
           ! the high point
-          fhi = fEmu(mu_bins(MU_HI, g)) + mu_interp(MU_HI, g) * & 
-            (fEmu(mu_bins(MU_HI, g) + 1) - fEmu(mu_bins(MU_HI, g)))
+          fhi = fEmu(bins(MU_HI, g)) + interp(MU_HI, g) * & 
+            (fEmu(bins(MU_HI, g) + 1) - fEmu(bins(MU_HI, g)))
           distro(:, g) = distro(:, g) + &
-            calc_int_pn_tablelin(order, mu_vals(MU_HI, g), &
-            mu(mu_bins(MU_HI, g) + 1), fEmu(mu_bins(MU_HI, g)), fhi)
+            calc_int_pn_tablelin(order, vals(MU_HI, g), &
+            mu(bins(MU_HI, g) + 1), fEmu(bins(MU_HI, g)), fhi)
         else
           distro(:, g) = ZERO
         end if
@@ -767,6 +820,34 @@ module scattdata_header
       
     end subroutine integrate_energyangle_file4_leg
 
+    subroutine integrate_energyangle_file6_leg(fEmu, mu, Eouts, INTT, E_bins, &
+      order, distro)
+      
+      real(8), intent(in)  :: fEmu(:,:)      ! Energy-angle distro to act on
+      real(8), intent(in)  :: mu(:)          ! fEmu angular grid
+      real(8), intent(in)  :: Eouts(:)       ! Outgoing energies
+      integer, intent(in)  :: INTT(:,:)      ! Outgoing E interpolation type
+      real(8), intent(in)  :: E_bins(:)      ! Energy group boundaries
+      integer, intent(in)  :: order          ! Number of moments to find
+      real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
+      
+      integer :: g ! Energy group index
+      
+      ! This routine will perform integration of the outgoing energy of fEmu
+      ! over each energy group in E_bins. This will be done with trapezoidal
+      ! integration !!!But can later be improved to something else, like what
+      ! NJOY does that I dont quite understand yet!!!.  
+      
+      ! To do this we will look through Eouts to find the location of the
+      ! energy group boundaries. At these end points we will have to interpolate
+      ! to find the value of fEmu(:,E_bins(iE)). Then...
+      
+      do g = 1, size(E_bins ) - 1
+        
+      end do
+      
+    end subroutine integrate_energyangle_file6_leg
+    
 !===============================================================================
 ! INTEGRATE_ENERGYANGLE_*_TAB Finds the tabular distribution representation of
 ! the energy-angle distrib in fEmu over each of the outgoing energy groups and 
