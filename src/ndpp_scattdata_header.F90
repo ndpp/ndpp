@@ -363,7 +363,9 @@ module scattdata_header
             call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
               this % INTT(iE), interp, vals, bins)
             ! 4) integrate according to scatt_type
-            
+            call integrate_energyangle_file6_leg(my_distro, this % mu, &
+              this % Eouts(iE) % data, this % E_bins, interp, vals, bins, &
+              this % order, distro)
           end if
         case (SCATT_TYPE_TABULAR)
           if (associated(this % adist)) then
