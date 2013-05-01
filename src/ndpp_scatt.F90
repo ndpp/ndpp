@@ -161,8 +161,8 @@ module ndpp_scatt
               ! Add the energy point to the union grid
               E_temp(iE) = mySD % E_grid(rxnE)
               ! Add the scattering distribution to the union scattering grid
-              scatt_temp(:,:,iE) = scatt_temp(:,:,iE) + &
-                mySD % interp_distro(mu_out, nuc, rxnE)
+!~               scatt_temp(:,:,iE) = scatt_temp(:,:,iE) + &
+!~                 mySD % interp_distro(mu_out, nuc, rxnE)
               ! Increment the location counter and set to done if the counter is
               ! out of bounds
               scatt_loc(irxn) = scatt_loc(irxn) + 1
@@ -181,8 +181,8 @@ module ndpp_scatt
               ! don't score it
               if (E_temp(iE) < mySD % E_grid(1)) cycle
               ! Add the scattering distribution to the union scattering grid
-              scatt_temp(:,:,iE) = scatt_temp(:,:,iE) + &
-                mySD % interp_distro(mu_out, nuc, rxnE, E_temp(iE))
+!~               scatt_temp(:,:,iE) = scatt_temp(:,:,iE) + &
+!~                 mySD % interp_distro(mu_out, nuc, rxnE, E_temp(iE))
             end if
           end if
         end do
