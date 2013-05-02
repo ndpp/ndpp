@@ -27,3 +27,6 @@ src/templates/*.f90
 
 # Sage pre-processed .py files
 jacobian*.py
+
+# Example output files
+examples/basic/1002.82c.g1

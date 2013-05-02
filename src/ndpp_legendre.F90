@@ -790,7 +790,7 @@ module legendre
       real(8), intent(in)  :: flow  ! Line y-value at low boundary
       real(8), intent(in)  :: fhigh ! Line y-value at high boundary
       
-      real(8) :: integrals(n + 1) ! The Legendres evaluated at x (0:nth order)
+      real(8) :: integrals(n + 1)       ! The Legendres evaluated at x (0:n)
       
       integer :: l     ! Index of the Legendre order
       real(8) :: values

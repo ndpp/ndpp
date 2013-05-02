@@ -278,7 +278,7 @@ module scattdata_header
       real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       
       ! Set up the result memory 
-      allocate(distro(this % order, this % groups))
+      allocate(distro(this % order + 1, this % groups))
       
       ! Set rxn, so we can save some characters throughout this function.
       rxn => this % rxn
@@ -797,7 +797,7 @@ module scattdata_header
       integer :: g                           ! outgoing energy group index
       integer :: imu                         ! angle bin index
       real(8) :: flo, fhi                    ! pdf low and high values
-      
+      write(*,*) order
       ! Integrating over each of the bins.
       do g = 1, size(distro, dim = 2)
         if (bins(MU_LO, g) /= bins(MU_HI, g)) then
@@ -805,7 +805,7 @@ module scattdata_header
           ! the low point
           flo = fEmu(bins(MU_LO, g)) + interp(MU_LO, g) * & 
             (fEmu(bins(MU_LO, g) + 1) - fEmu(bins(MU_LO, g)))
-          distro(:, g) = distro(:, g) + &
+          distro(:, g) = &
             calc_int_pn_tablelin(order, vals(MU_LO, g), &
             mu(bins(MU_LO, g) + 1), flo, fEmu(bins(MU_LO, g) + 1))
           ! Integrate the inbetween pts
