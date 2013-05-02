@@ -97,7 +97,7 @@ resultant data, but the larger the inaccuracy introduced is.
 
   *Default*: 0.2%
   
-  ``<output_format>`` Element
+``<output_format>`` Element
 --------------------
 
 The ``<output_format>`` element determines what type of output library/libraries

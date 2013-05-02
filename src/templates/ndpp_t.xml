@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <template>
 
-  <options rootname="ndpp_settings"/>
+  <options rootname="ndpp"/>
   
   <variable name="scatt_type_" tag="scatt_type" type="word" length="20" />
   <variable name="scatt_order_" tag="scatt_order" type="integer" default="5" />

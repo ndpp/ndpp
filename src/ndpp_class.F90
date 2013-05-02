@@ -109,6 +109,7 @@ contains
     
     ! Check if ndpp.xml exists
     filename = trim(path_input) // "ndpp.xml"
+    
     inquire(FILE=filename, EXIST=file_exists)
     if (.not. file_exists) then
       message = "Data Pre-Processing XML file '" // trim(filename) // &
@@ -125,7 +126,7 @@ contains
     scatt_order_    = 5
     thinning_tol_   = 0.2
     
-    ! Parse data_preproc.xml file
+    ! Parse ndpp.xml file
     call read_xml_file_ndpp_t(filename)
     
     ! Find cross_sections.xml file -- the first place to look is the
@@ -138,7 +139,7 @@ contains
       call get_environment_variable("CROSS_SECTIONS", env_variable)
       if (len_trim(env_variable) == 0) then
         message = "No cross_sections.xml file was specified in " // &
-                  "data_preproc.xml or in the CROSS_SECTIONS " // &
+                  "ndpp.xml or in the CROSS_SECTIONS " // &
                   "environment variable."
         call fatal_error()
       else
@@ -167,7 +168,7 @@ contains
       allocate(self % energy_bins(size(energy_bins_)))
       self % energy_bins = energy_bins_
     else
-      message = "No energy group structure was specified in data_preproc.xml."
+      message = "No energy group structure was specified in ndpp.xml."
       call fatal_error()
     end if
     
@@ -206,14 +207,14 @@ contains
       if ((self % scatt_type == SCATT_TYPE_LEGENDRE) .and. &
         (scatt_order_ > MAX_LEGENDRE_ORDER)) then
         message = "Invalid negative or zero scatt_order value specified in " // &
-                  "data_preproc.xml."
+                  "ndpp.xml."
         call fatal_error()
       else
         self % scatt_order = scatt_order_
       end if
     else
       message = "Invalid negative or zero scatt_order value specified in " // &
-                "data_preproc.xml."
+                "ndpp.xml."
       call fatal_error()
     end if
     

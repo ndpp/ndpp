@@ -38,7 +38,7 @@ module ndpp_scatt
       real(8) :: max_err, dmu
       type(ScattData), allocatable, target  :: rxn_data(:)
       type(ScattData), pointer :: mySD
-      real(8), pointer  :: mu_out(:) ! The tabular output mu grid
+      real(8), allocatable     :: mu_out(:) ! The tabular output mu grid
       
       ! This routine will parse through each nuc % reaction entry.
       ! For each, it will determine if the rxn is a scattering reaction, and if
@@ -112,7 +112,7 @@ module ndpp_scatt
     
     subroutine union_grid(nuc, mu_out, rxn_data, E_union, scatt_union)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
-      real(8), intent(inout), pointer      :: mu_out(:) ! The tabular output mu grid
+      real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
       type(ScattData), intent(in), target  :: rxn_data(:)
       real(8), allocatable, intent(out)    :: E_union(:)
       real(8), allocatable, intent(out)    :: scatt_union(:,:,:)

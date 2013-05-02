@@ -256,25 +256,26 @@ module scattdata_header
 !===============================================================================
 
     function scatt_interp_distro(this, mu_out, nuc, Ein) result(distro)
-      class(ScattData), target, intent(in)  :: this ! Working ScattData object
-      real(8), intent(in), pointer          :: mu_out(:) ! The tabular output mu grid
-      type(Nuclide), intent(in), pointer    :: nuc  ! Working nuclide
+      class(ScattData), target, intent(in) :: this ! Working ScattData object
+      real(8), intent(in)                  :: mu_out(:) ! The tabular output mu grid
+      type(Nuclide), intent(in), pointer   :: nuc  ! Working nuclide
       
-      real(8), intent(in)       :: Ein      ! Incoming energy to interpolate on
+      real(8), intent(in)       :: Ein     ! Incoming energy to interpolate on
       
-      type(Reaction), pointer   :: rxn      ! The reaction of interest
-      real(8), allocatable :: distro(:,:)   ! the output distribution
-      real(8) :: f, p_valid, sigS           ! interpolation, probability of this
-                                            ! (nested) reaction, and \sigma_s(E)
-      integer :: iE                         ! incoming energy index (searched)
-                                            ! (lower bound if Ein is provided)
-      integer :: nuc_iE                     ! Energy index on the nuclide's x/s
+      type(Reaction), pointer   :: rxn     ! The reaction of interest
+      real(8), allocatable :: distro(:,:)  ! the output distribution
+      real(8) :: f, p_valid, sigS          ! interpolation, probability of this
+                                           ! (nested) reaction, and \sigma_s(E)
+      integer :: iE                        ! incoming energy index (searched)
+                                           ! (lower bound if Ein is provided)
+      integer :: nuc_iE                    ! Energy index on the nuclide's x/s
       real(8), pointer :: sigS_array(:) => null()   ! sigS pointer
       real(8), pointer :: my_distro(:, :) => null() ! the distribution chosen
                                                     ! by the binary search on Ein
-      integer, allocatable :: bins(:, :)   ! Start/end energy/angle bin indices
-      real(8), allocatable :: vals(:, :)   ! values on start/end energy/angle
-      real(8), allocatable :: interp(:, :) ! interpolation on start/end energy/angle
+                                                    
+      integer :: bins(2, this % groups)   ! Start/end energy/angle bin indices
+      real(8) :: vals(2, this % groups)   ! values on start/end energy/angle
+      real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       
       ! Set up the result memory 
       allocate(distro(this % order, this % groups))
@@ -325,8 +326,7 @@ module scattdata_header
       
       ! Search on the angular distribution's energy grid to find what energy
       ! index Ein is at.
-      iE = binary_search(this % E_grid(iE : this % NE), &
-        this % NE - iE + 1, Ein)
+      iE = binary_search(this % E_grid, this % NE, Ein)
       
       ! Interpolate the distribution
       !!! For now we will just `interpolate' based on whichever
@@ -343,11 +343,8 @@ module scattdata_header
       ! 4) integrate according to scatt_type
       
       ! 1) convert from CM to Lab, if necessary
-      call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, my_distro)
-      
-      allocate(vals(2, this % groups))
-      allocate(bins(2, this % groups))
-      allocate(interp(2, this % groups))
+      if (rxn % scatter_in_cm) &
+        call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, my_distro)
       
       select case (this % scatt_type)
         case (SCATT_TYPE_LEGENDRE)
@@ -386,6 +383,7 @@ module scattdata_header
       
       ! Combine the results
       distro = sigS * p_valid * distro * rxn % multiplicity
+      write(*,*) distro
       
     end function scatt_interp_distro
 
@@ -644,6 +642,8 @@ module scattdata_header
             tempsqrt = sqrt(mu(imu) * mu(imu) + R * R - ONE)
             data(imu, iEout) = data(imu, iEout) * (TWO * mu(imu) + tempsqrt + &
               mu(imu) * mu(imu) / tempsqrt) / R
+          else
+            data(imu, iEout) = ZERO
           end if
         end do
       end do
@@ -689,7 +689,7 @@ module scattdata_header
           bins(MU_LO, g) = 1
           vals(MU_LO, g) = -ONE
           interp(MU_LO, g) = ZERO
-        else if (mu_low > ONE) then
+        else if (mu_low >= ONE) then
           bins(MU_LO, g) = size(mu) - 1
           vals(MU_LO, g) = ONE
           interp(MU_LO, g) = ONE
@@ -701,19 +701,19 @@ module scattdata_header
         end if
         
         ! Find the index in mu corresponding to mu_high
-        if (mu_high < -ONE) then
+        if (mu_high <= -ONE) then
           bins(MU_HI, g) = 1
           vals(MU_HI, g) = -ONE
-          interp(MU_LO, g) = ZERO
-        else if (mu_high > ONE) then
+          interp(MU_HI, g) = ZERO
+        else if (mu_high >= ONE) then
           bins(MU_HI, g) = size(mu) - 1
           vals(MU_HI, g) = ONE
-          interp(MU_LO, g) = ONE
+          interp(MU_HI, g) = ONE
         else
           imu = binary_search(mu, size(mu), mu_high)
           bins(MU_HI, g) = imu
           vals(MU_HI, g) = mu_high
-          interp(MU_LO, g) = (mu_high - mu(imu)) / (mu(imu + 1) - mu(imu))
+          interp(MU_HI, g) = (mu_high - mu(imu)) / (mu(imu + 1) - mu(imu))
         end if
       end do
     end subroutine calc_mu_bounds
@@ -738,11 +738,11 @@ module scattdata_header
       integer :: iE
       
       do g = 1, size(E_bins) - 1
-        if (E_bins(g) < Eout(1)) then
+        if (E_bins(g) <= Eout(1)) then
           bins(MU_LO, g)   = 1
           vals(MU_LO, g)   = ZERO
           interp(MU_LO, g) = ZERO
-        else if (E_bins(g) > Eout(size(Eout))) then
+        else if (E_bins(g) >= Eout(size(Eout))) then
           bins(MU_LO, g)   = 1
           vals(MU_LO, g)   = ZERO
           interp(MU_LO, g) = ZERO
@@ -752,17 +752,17 @@ module scattdata_header
           interp(MU_LO, g) = (E_bins(g) - Eout(bins(MU_LO, g))) / & 
             (Eout(bins(MU_LO, g)) - Eout(bins(MU_LO, g)))
         end if
-        if (E_bins(g + 1) < Eout(1)) then
+        if (E_bins(g + 1) <= Eout(1)) then
           bins(MU_HI, g)   = 0
           vals(MU_HI, g)   = ZERO
           interp(MU_HI, g) = ZERO
-        else if (E_bins(g + 1) > Eout(size(Eout))) then
+        else if (E_bins(g + 1) >= Eout(size(Eout))) then
           bins(MU_HI, g)   = 0
           vals(MU_HI, g)   = ZERO
           interp(MU_HI, g) = ZERO
         else
           bins(MU_HI, g)   = binary_search(Eout, size(Eout), E_bins(g + 1))
-          vals(MU_LO, g)   = E_bins(g + 1)
+          vals(MU_HI, g)   = E_bins(g + 1)
           interp(MU_HI, g) = (E_bins(g + 1) - Eout(bins(MU_HI, g))) / & 
             (Eout(bins(MU_HI, g)) - Eout(bins(MU_HI, g)))
         end if\
@@ -819,15 +819,17 @@ module scattdata_header
           fhi = fEmu(bins(MU_HI, g)) + interp(MU_HI, g) * & 
             (fEmu(bins(MU_HI, g) + 1) - fEmu(bins(MU_HI, g)))
           distro(:, g) = distro(:, g) + &
-            calc_int_pn_tablelin(order, vals(MU_HI, g), &
-            mu(bins(MU_HI, g) + 1), fEmu(bins(MU_HI, g)), fhi)
+            calc_int_pn_tablelin(order, mu(bins(MU_HI, g)), vals(MU_HI, g), &
+            fEmu(bins(MU_HI, g)), fhi)
         else
           distro(:, g) = ZERO
         end if
       end do
       
     end subroutine integrate_energyangle_file4_leg
-
+    
+    
+    
     subroutine integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
       vals, bins, order, distro)
       

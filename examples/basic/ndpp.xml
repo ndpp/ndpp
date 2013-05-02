@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+
+<ndpp>
+  <scatt_type>legendre</scatt_type>
+  <scatt_order>5</scatt_order>
+  <cross_sections>./cross_sections.xml</cross_sections>
+  <energy_bins>1.0E-11 102.0</energy_bins>+
+  <integrate_chi>false</integrate_chi>
+</ndpp>

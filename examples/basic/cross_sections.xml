@@ -1,0 +1,6 @@
+<?xml version="1.0" ?>
+<cross_sections>
+  <directory>./</directory>
+  <filetype>ascii</filetype>
+  <ace_table alias="H-2.82c" awr="1.9968" location="1" name="1002.82c" path="deut2" temperature="2.5301e-08" zaid="1002"/>
+</cross_sections>
