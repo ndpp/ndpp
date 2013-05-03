@@ -387,7 +387,8 @@ module scattdata_header
       
       ! Combine the results
       distro = sigS * p_valid * distro * rxn % multiplicity
-      write(*,*) distro
+write(*,*) distro/sigS
+write(*,*) 1.000, 0.617, 0.237, 0.0573, 0.00744, 0.0
       
     end function scatt_interp_distro
 
