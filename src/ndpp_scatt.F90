@@ -34,7 +34,6 @@ module ndpp_scatt
       type(Reaction),   pointer :: rxn
       integer :: num_tot_rxn
       integer :: i_rxn, i_nested_rxn, imu
-      integer :: iE
       real(8) :: max_err, dmu
       type(ScattData), allocatable, target  :: rxn_data(:)
       type(ScattData), pointer :: mySD
@@ -122,7 +121,7 @@ module ndpp_scatt
       integer, allocatable :: scatt_loc(:)      ! Location of last-used energy
       logical, allocatable :: scatt_done(:)     ! Flag to state whether a rxn's grid is complete
       logical, allocatable :: scatt_hits(:)     ! Flag for when value is @ the lowest E
-      integer :: iE, NE, maxNE, rxnE
+      integer :: iE, maxNE, rxnE
       integer :: irxn
       integer :: groups, order
       type(ScattData), pointer :: mySD => NULL()

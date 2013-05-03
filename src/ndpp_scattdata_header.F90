@@ -278,7 +278,11 @@ module scattdata_header
       real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       
       ! Set up the result memory 
-      allocate(distro(this % order + 1, this % groups))
+      if (this % scatt_type == SCATT_TYPE_LEGENDRE) then
+        allocate(distro(this % order + 1, this % groups))
+      else
+        allocate(distro(this % order, this % groups))
+      end if
       
       ! Set rxn, so we can save some characters throughout this function.
       rxn => this % rxn
@@ -735,7 +739,6 @@ module scattdata_header
                                           ! to the energy groups
       
       integer :: g               ! Group index variable
-      integer :: iE
       
       do g = 1, size(E_bins) - 1
         if (E_bins(g) <= Eout(1)) then
@@ -765,7 +768,7 @@ module scattdata_header
           vals(MU_HI, g)   = E_bins(g + 1)
           interp(MU_HI, g) = (E_bins(g + 1) - Eout(bins(MU_HI, g))) / & 
             (Eout(bins(MU_HI, g)) - Eout(bins(MU_HI, g)))
-        end if\
+        end if
         ! adjust the interpolant so that if using histogram it is correctly 0
         if (INTT == HISTOGRAM) then
           interp(MU_LO, g) = ZERO
@@ -911,7 +914,6 @@ module scattdata_header
 ! distribution while the FILE6 version does the same for a combined energy-angle
 ! distribution
 !===============================================================================
-
-    
+ 
 
 end module scattdata_header
