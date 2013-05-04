@@ -15,6 +15,7 @@ module scattdata_header
 
 ! Module constants
   integer, parameter :: DISTRO_PTS = 2001
+!~   integer, parameter :: DISTRO_PTS = 201
 
 !===============================================================================
 ! JAGGED1D and JAGGED2D is a type which allows for jagged 1-D or 2-D array. 
@@ -387,8 +388,6 @@ module scattdata_header
       
       ! Combine the results
       distro = sigS * p_valid * distro * rxn % multiplicity
-write(*,*) distro/sigS
-write(*,*) 1.000, 0.617, 0.237, 0.0573, 0.00744, 0.0
       
     end function scatt_interp_distro
 
@@ -605,19 +604,23 @@ write(*,*) 1.000, 0.617, 0.237, 0.0573, 0.00744, 0.0
 ! of reference tabular distribution.
 !===============================================================================
 
-    pure subroutine cm2lab(awr, Q, Ein, mu, data)
+    subroutine cm2lab(awr, Q, Ein, mu, data)
       real(8), intent(in) :: awr   ! Atomic Weight Ratio for this nuclide
       real(8), intent(in) :: Q     ! Binding Energy of reaction, for finding R
       real(8), intent(in) :: Ein   ! Incoming energy
       real(8), intent(in) :: mu(:) ! Angular grid
       real(8), intent(inout) :: data(:,:) ! The distribution to convert
       
-      real(8) :: R, mu_min ! Reduced Mass and minimum mu value for integration
+      real(8) :: R, Rinv, R2       ! Reduced Effective Mass, 1/R, and R^2
+      integer :: imu_min           ! Location in mu of the minimum feasible
+                                   ! cm to lab mu point.
       
-      real(8) :: mu_cm(DISTRO_PTS) ! CM angular points corresponding to 
-                                           ! mu(:), if mu was in Lab.
+      real(8) :: mu_l(DISTRO_PTS) ! CM angular points corresponding to 
+                                   ! mu(:), if mu was in Lab.
       real(8) :: tempsqrt
-      integer :: imu, iEout  ! mu index, outgoing energy index
+      integer :: imu, imu_l, iEout      ! mu indices, outgoing energy index
+      real(8) :: tempdistro(DISTRO_PTS) ! Temporary storage of the converted distro
+      real(8) :: interp                 ! Interpolation parameter
       
       ! Calculate the effective mass ratio
       if (Q /= ZERO) then
@@ -625,32 +628,46 @@ write(*,*) 1.000, 0.617, 0.237, 0.0573, 0.00744, 0.0
       else 
         R = awr
       end if
+      Rinv = ONE / R
+      R2   = R * R
       
       ! Calculate the lower bounds of integration (-1 for everything besides
       ! H-1)
       if (R < ONE) then 
-        mu_min = sqrt(ONE - R * R)
+        !  Since mu(imu) = -1 + (i-1)*dmu, imu_min = ceiling((mu_min + 1)/dmu+1)
+        imu_min = int(ceiling((sqrt(ONE - R2) + ONE)/(mu(2) - mu(1)) + ONE))
       else
-        mu_min = -ONE
+        imu_min = 1
       end if
       
-      ! Calculate the lab (mu) and CM (mu_cm) mu grid points.
+      ! Calculate the lab (mu) and CM (mu_l) mu grid points.
       do imu = 1, DISTRO_PTS
-        mu_cm(imu) = (mu(imu) * mu(imu) - ONE + mu(imu) * sqrt(R * R + &
-          mu(imu) * mu(imu) - ONE)) / R
+        mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
       end do
       
       do iEout = 1, size(data, dim = 2)
         ! Convert the CM distro to the laboratory system
         do imu = 1, DISTRO_PTS
-          if (mu(imu) >= mu_min) then
-            tempsqrt = sqrt(mu(imu) * mu(imu) + R * R - ONE)
-            data(imu, iEout) = data(imu, iEout) * (TWO * mu(imu) + tempsqrt + &
-              mu(imu) * mu(imu) / tempsqrt) / R
-          else
-            data(imu, iEout) = ZERO
-          end if
+          tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
+          tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
+            mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
         end do
+        
+        ! Now put this back on to the original mu grid.
+        ! First begin with the points which are impossible
+        do imu = 1, imu_min - 1
+          data(imu, iEout) = ZERO
+        end do
+        ! Move on to the rest, which just need to have their mu values
+        ! found on the mu_l grid. We will then need to interpolate to set data.
+        do imu = imu_min , DISTRO_PTS - 1
+          imu_l = binary_search(mu_l, DISTRO_PTS, mu(imu))
+          ! Get the interpolation parameter
+          interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
+          data(imu, iEout) = tempdistro(imu_l) + interp * &
+            (tempdistro(imu_l + 1) - tempdistro(imu_l))
+        end do
+        data(DISTRO_PTS, iEout) = tempdistro(DISTRO_PTS)
       end do
       
     end subroutine cm2lab
