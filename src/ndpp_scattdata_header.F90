@@ -13,10 +13,6 @@ module scattdata_header
   
   implicit none
 
-! Module constants
-  integer, parameter :: DISTRO_PTS = 2001
-!~   integer, parameter :: DISTRO_PTS = 201
-
 !===============================================================================
 ! JAGGED1D and JAGGED2D is a type which allows for jagged 1-D or 2-D array. 
 ! This is needed for ScattData % distro (2D) and ScattData % Eouts (1D)
@@ -71,7 +67,8 @@ module scattdata_header
 ! grid, allocating accordingly and storing this information.
 !===============================================================================
     
-    subroutine scatt_init(this, nuc, rxn, edist, E_bins, scatt_type, order)
+    subroutine scatt_init(this, nuc, rxn, edist, E_bins, scatt_type, order, &
+      mu_bins)
       class(ScattData), intent(inout)       :: this  ! The object to initialize
       type(Nuclide), intent(in), pointer    :: nuc   ! Nuclide we are working on
       type(Reaction), intent(in), pointer   :: rxn   ! The reaction of interest
@@ -81,6 +78,7 @@ module scattdata_header
       real(8), target, intent(in) :: E_bins(:)  ! Energy group boundaries
       integer, intent(in) :: scatt_type ! Type of format to store the data
       integer, intent(in) :: order      ! Order of the data storage format
+      integer, intent(in) :: mu_bins    ! Number of angular pts in tabular rep.
       
       integer :: i          ! loop counter
       real(8) :: dmu        ! mu spacing
@@ -124,7 +122,7 @@ module scattdata_header
         do i = 1, this % NE
           ! There is no Energy-out dependence to the distribution, so we only
           ! need a 1 in the Eout dimension.
-          allocate(this % distro(i) % data(DISTRO_PTS, NP))
+          allocate(this % distro(i) % data(mu_bins, NP))
           this % distro(i) % data = ZERO
         end do
       else if (associated(this % edist)) then
@@ -138,7 +136,7 @@ module scattdata_header
           ! Find the number of outgoing energy points
           lc = int(edist % data(2 + 2*NR + int(edist % data(2 + 2*NR)) + i))
           NP   = int(edist % data(lc + 2))
-          allocate(this % distro(i) % data(DISTRO_PTS, NP))
+          allocate(this % distro(i) % data(mu_bins, NP))
           this % distro(i) % data = ZERO
         end do
       else
@@ -159,15 +157,15 @@ module scattdata_header
         do i = 1, this % NE
           ! There is no Energy-out dependence to the distribution, so we only
           ! need a 1 in the Eout dimension.
-          allocate(this % distro(i) % data(DISTRO_PTS, NP))
+          allocate(this % distro(i) % data(mu_bins, NP))
           this % distro(i) % data = ZERO
         end do
       end if
       
       ! Assign the mu points
-      allocate(this % mu(DISTRO_PTS))
-      dmu = TWO / real(DISTRO_PTS - 1, 8)
-      do i = 1, DISTRO_PTS - 1
+      allocate(this % mu(mu_bins))
+      dmu = TWO / real(mu_bins - 1, 8)
+      do i = 1, mu_bins - 1
         this % mu(i) = -ONE + real(i - 1, 8) * dmu
       end do
       ! Set the end point is exactly ONE
@@ -615,12 +613,16 @@ module scattdata_header
       integer :: imu_min           ! Location in mu of the minimum feasible
                                    ! cm to lab mu point.
       
-      real(8) :: mu_l(DISTRO_PTS) ! CM angular points corresponding to 
-                                   ! mu(:), if mu was in Lab.
+      real(8) :: mu_l(size(data, dim = 1))  ! CM angular points corresponding to 
+                                            ! mu(:), if mu was in Lab.
+      real(8) :: tempdistro(size(data, dim = 1)) ! Temporary storage of the 
+                                                 ! converted distro
       real(8) :: tempsqrt
       integer :: imu, imu_l, iEout      ! mu indices, outgoing energy index
-      real(8) :: tempdistro(DISTRO_PTS) ! Temporary storage of the converted distro
       real(8) :: interp                 ! Interpolation parameter
+      integer :: mu_bins                ! Number of mu bins in dim 1 of data
+      
+      mu_bins = size(data, dim = 1)
       
       ! Calculate the effective mass ratio
       if (Q /= ZERO) then
@@ -641,13 +643,13 @@ module scattdata_header
       end if
       
       ! Calculate the lab (mu) and CM (mu_l) mu grid points.
-      do imu = 1, DISTRO_PTS
+      do imu = 1, mu_bins
         mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
       end do
       
       do iEout = 1, size(data, dim = 2)
         ! Convert the CM distro to the laboratory system
-        do imu = 1, DISTRO_PTS
+        do imu = 1, mu_bins
           tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
           tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
             mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
@@ -660,14 +662,14 @@ module scattdata_header
         end do
         ! Move on to the rest, which just need to have their mu values
         ! found on the mu_l grid. We will then need to interpolate to set data.
-        do imu = imu_min , DISTRO_PTS - 1
-          imu_l = binary_search(mu_l, DISTRO_PTS, mu(imu))
+        do imu = imu_min , mu_bins - 1
+          imu_l = binary_search(mu_l, mu_bins, mu(imu))
           ! Get the interpolation parameter
           interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
           data(imu, iEout) = tempdistro(imu_l) + interp * &
             (tempdistro(imu_l + 1) - tempdistro(imu_l))
         end do
-        data(DISTRO_PTS, iEout) = tempdistro(DISTRO_PTS)
+        data(mu_bins, iEout) = tempdistro(mu_bins)
       end do
       
     end subroutine cm2lab
@@ -818,7 +820,7 @@ module scattdata_header
       integer :: g                           ! outgoing energy group index
       integer :: imu                         ! angle bin index
       real(8) :: flo, fhi                    ! pdf low and high values
-      write(*,*) order
+      
       ! Integrating over each of the bins.
       do g = 1, size(distro, dim = 2)
         if (bins(MU_LO, g) /= bins(MU_HI, g)) then

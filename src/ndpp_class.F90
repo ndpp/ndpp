@@ -44,6 +44,8 @@ module ndpp_class
     integer              :: scatt_type    = SCATT_TYPE_LEGENDRE
     ! Scattering data output size (Number of Legendre Orders or Number of Bins)
     integer              :: scatt_order   = 5
+    ! Number of angular bins to use during f_{n,MT} conversion
+    integer              :: mu_bins = 2001
     ! Flag to integrate chi or not
     logical              :: integrate_chi = .true.
     ! Tolerance on the union energy grid thinning
@@ -125,6 +127,7 @@ contains
     scatt_type_     = 'legendre'
     scatt_order_    = 5
     thinning_tol_   = 0.2
+    mu_bins_        = 2001
     
     ! Parse ndpp.xml file
     call read_xml_file_ndpp_t(filename)
@@ -218,6 +221,15 @@ contains
       call fatal_error()
     end if
     
+    ! Get mu_bins information
+    if (mu_bins_ > 1) then
+      self % mu_bins = mu_bins_
+    else
+      message = "Invalid mu_bins value specified in " // &
+                "ndpp.xml. Mu_bins must be two or greater."
+      call fatal_error()
+    end if
+    
     ! Get grid thinning information
     if (thinning_tol_ > ZERO) then
       ! Convert from percent to fraction and store
@@ -255,6 +267,7 @@ contains
     self % scatt_type    = SCATT_TYPE_LEGENDRE
     self % scatt_order   = 5
     self % integrate_chi = .true.
+    self % mu_bins       = 2001
     
     ! Reset the timers
     call timer_reset(self % time_total)
@@ -337,7 +350,7 @@ contains
         call timer_start(self % time_scatt_preproc)
         call calc_scatt(nuc, self % energy_bins, &
           self % scatt_type, self % scatt_order, scatt_mat, e_scatt_grid, &
-          self % thin_tol)
+          self % mu_bins, self % thin_tol)
         call timer_stop(self % time_scatt_preproc)
         
         ! Integrate Chi

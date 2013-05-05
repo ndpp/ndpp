@@ -21,13 +21,15 @@ module ndpp_scatt
 !===============================================================================
     
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, &
-                          scatt_union, E_union, thin_tol)
+                          scatt_union, E_union, mu_bins, thin_tol)
       type(Nuclide), pointer, intent(in) :: nuc            ! Nuclide
       real(8), intent(in)                :: energy_bins(:) ! Energy groups
       integer, intent(in)                :: scatt_type     ! Scattering output type
       integer, intent(in)                :: order          ! Scattering data order
       real(8), allocatable,intent(inout) :: scatt_union(:,:,:) ! Unionized Scattering Matrices
       real(8), allocatable,intent(inout) :: E_union(:)     ! Unionized Energy Grid
+      integer, intent(in)                :: mu_bins        ! Number of angular points
+                                                           ! to use during f_{n,MT} conversion
       real(8), intent(in)                :: thin_tol       ! Thinning tolerance
       
       type(DistEnergy), pointer :: edist
@@ -75,13 +77,15 @@ module ndpp_scatt
         rxn => nuc % reactions(i_rxn)
         mySD => rxn_data(i_nested_rxn)
         edist => rxn % edist
-        call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order)
+        call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, &
+          mu_bins)
         if (rxn % has_energy_dist) then
           do while (associated(edist % next))
             edist => edist % next
             i_nested_rxn = i_nested_rxn + 1
             mySD => rxn_data(i_nested_rxn)
-            call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order)
+            call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, &
+              mu_bins)
           end do
         end if
       end do  

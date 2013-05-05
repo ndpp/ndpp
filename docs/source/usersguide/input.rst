@@ -54,6 +54,19 @@ depending on the value of ``<scatt_type>``.
 
   *Default*: 5
   
+``<mu_bins>`` Element
+----------------------------------
+
+The ``<mu_bins>`` element has no attributes and contains a single integer.  This
+value represents the number of angular points used when converting the ACE-
+format angular distributions to an intermediate tabular representation.  
+Increasing the number of points increases the output accuracy, however, it
+comes at a cost of an increase in NDPP memory usage and computational cost.
+This parameter has no impact on the runtime memory or computational costs of
+the target Monte Carlo code.
+
+  *Default*: 2001
+  
 .. _cross_sections:
 
 ``<cross_sections>`` Element
