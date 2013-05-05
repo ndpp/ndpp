@@ -243,6 +243,42 @@ module ndpp_scatt
         end if
       end do
     
-    end subroutine min_value_locs  
+    end subroutine min_value_locs 
+    
+!===============================================================================
+! PRINT_SCATT_ASCII prints the scattering data to the specified output file
+! in an ASCII format.
+!===============================================================================
+     
+  subroutine print_scatt_ascii(data, E_grid, groups, order)
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
+                                                    ! (order x g x Ein)
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
+    integer,              intent(in) :: groups      ! Number of outgoing groups
+    integer,              intent(in) :: order       ! Order of scattering data
+    
+    character(MAX_LINE_LEN) :: line
+  
+    ! Assumes that the file and header information is already printed 
+    ! (including # of groups and bins, and thinning tolerance)
+    ! Will follow this format with at max 4 entries per line: 
+    ! <size of incoming energy array, size(E_grid)>
+    ! <incoming energy array>
+    ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, size(E_grid)>
+    
+    ! Begin writing:
+    
+    ! <size(E_grid)>
+    line = ''
+    write(line,'(I20)') size(E_grid)
+    write(UNIT_NUC,'(A)') trim(line)
+    
+    ! <incoming energy array>
+    call print_ascii_array(E_grid, UNIT_NUC)
+    
+    ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, Ein>
+    call print_ascii_array(pack(data, .true.), UNIT_NUC)
+    
+  end subroutine print_scatt_ascii
     
 end module ndpp_scatt

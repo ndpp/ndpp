@@ -840,13 +840,18 @@ contains
   
   end subroutine min_value_locs
   
+!===============================================================================
+! PRINT_CHI_ASCII prints the chi data to the specified output file
+! in an ASCII format.
+!===============================================================================
+  
   subroutine print_chi_ascii(chi_t, chi_p, chi_d, E_t, E_p, E_d)
-    real(8), allocatable, intent(inout) :: chi_t(:,:) ! Unionized Total Chi Values
-    real(8), allocatable, intent(inout) :: chi_p(:,:) ! Unionized Prompt Chi Values
-    real(8), allocatable, intent(inout) :: chi_d(:,:) ! Unionized Delayed Chi Values
-    real(8), allocatable, intent(inout) :: E_t(:)     ! Unionized Total Energy Values
-    real(8), allocatable, intent(inout) :: E_p(:)     ! Unionized Prompt Energy Values
-    real(8), allocatable, intent(inout) :: E_d(:)     ! Unionized Delayed Energy Values   
+    real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
+    real(8), allocatable, intent(in) :: chi_p(:,:) ! Unionized Prompt Chi
+    real(8), allocatable, intent(in) :: chi_d(:,:) ! Unionized Delayed Chi
+    real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
+    real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
+    real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
     
     character(MAX_LINE_LEN) :: line
   

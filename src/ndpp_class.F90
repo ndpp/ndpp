@@ -351,6 +351,17 @@ contains
         call calc_scatt(nuc, self % energy_bins, &
           self % scatt_type, self % scatt_order, scatt_mat, e_scatt_grid, &
           self % mu_bins, self % thin_tol)
+          
+        ! Print the results to file
+        call timer_start(self % time_print)
+        call print_scatt_ascii(scatt_mat, e_scatt_grid, self % energy_groups, &
+          self % scatt_order)
+        call timer_stop(self % time_print)
+        
+        if (allocated(scatt_mat)) then
+          deallocate(scatt_mat)
+          deallocate(e_scatt_grid)
+        end if
         call timer_stop(self % time_scatt_preproc)
         
         ! Integrate Chi
@@ -373,8 +384,6 @@ contains
         if (allocated(e_p_grid)) deallocate(e_p_grid)
         if (allocated(chi_d)) deallocate(chi_d)
         if (allocated(e_d_grid)) deallocate(e_d_grid)
-        deallocate(nuclides) ! this stands in for a clear. There very well could be some bugs
-        ! associated with this not actually clearing...
         
         call timer_stop(self % time_chi_preproc)
       else
@@ -384,6 +393,9 @@ contains
       end if
       ! Close the file/HDF5 object
       !!!call finalize_output()
+      ! Deallocate the nuclide and its member data.
+      call nuclides(1) % clear()
+      deallocate(nuclides)
       close(UNIT_NUC)
     end do
     
@@ -588,7 +600,10 @@ contains
       write(line,'(I20,I20,I20,1PE20.12)') this_ndpp % scatt_type, &
         this_ndpp % scatt_order, chi_present_int, this_ndpp % thin_tol
       write(UNIT_NUC,'(A)') trim(line)
-      
+      ! Do the same, and on a new line, for this_ndpp % mu_bins
+      line= ''
+      write(line,'(I20)') this_ndpp % mu_bins
+      write(UNIT_NUC,'(A)') trim(line)
     else
       !!! TO BE IMPLEMENTED: BINARY/HDF5
     end if

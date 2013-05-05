@@ -41,7 +41,7 @@ module scattdata_header
     type(jagged1d), allocatable :: Eouts(:)   ! Output Energy values
                                               ! # E_out x # E_in
     integer, allocatable :: INTT(:)           ! Interpolation type for each Ein
-    real(8), allocatable :: mu(:)    ! mu pts to find f(mu) values at
+    real(8), allocatable :: mu(:)             ! mu pts to find f(mu) values at
     real(8), pointer     :: E_bins(:)         ! Energy grp boundaries from input
     integer              :: scatt_type = -1   ! Type of format to store the data
     integer              :: order      =  0   ! Order of the data storage format
