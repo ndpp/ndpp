@@ -21,17 +21,17 @@ module ndpp_scatt
 !===============================================================================
     
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, &
-                          scatt_union, E_union, mu_bins, thin_tol)
-      type(Nuclide), pointer, intent(in) :: nuc            ! Nuclide
-      real(8), intent(in)                :: energy_bins(:) ! Energy groups
-      integer, intent(in)                :: scatt_type     ! Scattering output type
-      integer, intent(in)                :: order          ! Scattering data order
-      real(8), allocatable,intent(inout) :: scatt_union(:,:,:) ! Unionized Scattering Matrices
-      real(8), allocatable,intent(inout) :: E_union(:)     ! Unionized Energy Grid
-      integer, intent(in)                :: mu_bins        ! Number of angular points
-                                                           ! to use during f_{n,MT} conversion
-      real(8), intent(in)                :: thin_tol       ! Thinning tolerance
+                          scatt_mat, mu_bins, thin_tol)
+      type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
+      real(8), intent(in)                 :: energy_bins(:) ! Energy groups
+      integer, intent(in)                 :: scatt_type     ! Scattering output type
+      integer, intent(in)                 :: order          ! Scattering data order
+      real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
+      integer, intent(in)                 :: mu_bins        ! Number of angular points
+                                                            ! to use during f_{n,MT} conversion
+      real(8), intent(in)                 :: thin_tol       ! Thinning tolerance
       
+      real(8), pointer     :: E_grid(:)      ! Common Energy Grid
       type(DistEnergy), pointer :: edist
       type(Reaction),   pointer :: rxn
       integer :: num_tot_rxn
@@ -46,8 +46,6 @@ module ndpp_scatt
       ! so it will set up the required memory spaces (the scatt_data object)
       ! and then perform the distribution calculations, storing the results in
       ! scatt_data.
-      ! We will also keep a tally of which reactions were scatters to simplify 
-      ! the collection of results
       
       ! First we have to find the total number of reactions, including the
       ! nested edists, so we can allocate rxn_data correctly.
@@ -96,6 +94,9 @@ module ndpp_scatt
         call mySD % convert_distro()
       end do
       
+      ! Create the energy grid in which the distributions will be calculated on
+      E_grid => nuc % energy
+      
       ! Combine the reactions to a union grid
       if (scatt_type == SCATT_TYPE_TABULAR) then
         allocate(mu_out(order))
@@ -104,111 +105,52 @@ module ndpp_scatt
           mu_out(imu) = -ONE + real(imu - 1, 8) * dmu
         end do
       end if
-      call union_grid(nuc, mu_out, rxn_data, E_union, scatt_union)
+      
+      ! Now combine the results on to the nuc % energy grid.
+      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
 
     end subroutine calc_scatt
  
 !===============================================================================
-! UNION_GRID Combines all the scattering data points on to one single energy
-! grid, (the union grid).
+! CALC_SCATT_GRID Combines all the scattering data points on to one single 
+! energy grid.
 !===============================================================================
     
-    subroutine union_grid(nuc, mu_out, rxn_data, E_union, scatt_union)
+    subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
-      type(ScattData), intent(in), target  :: rxn_data(:)
-      real(8), allocatable, intent(out)    :: E_union(:)
-      real(8), allocatable, intent(out)    :: scatt_union(:,:,:)
+      type(ScattData), intent(in), target  :: rxn_data(:) ! The converted distros
+      real(8), pointer, intent(out)        :: E_grid(:) ! Ein grid
+      real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
       
-      real(8), allocatable :: E_temp(:)
-      real(8), allocatable :: scatt_temp(:,:,:)
-      integer, allocatable :: scatt_loc(:)      ! Location of last-used energy
-      logical, allocatable :: scatt_done(:)     ! Flag to state whether a rxn's grid is complete
-      logical, allocatable :: scatt_hits(:)     ! Flag for when value is @ the lowest E
-      integer :: iE, maxNE, rxnE
-      integer :: irxn
+      integer :: iE, NE
+      integer :: irxn, Nrxn
       integer :: groups, order
       type(ScattData), pointer :: mySD => NULL()
       
       groups = rxn_data(1) % groups
       order = rxn_data(1) % order
+      NE = size(E_grid)
+      Nrxn = size(rxn_data)
       
-      ! Find the maximum number of energy points to allocate scatt_temp and E_temp
-      maxNE = 0
-      do irxn = 1, size(rxn_data)
-        maxNE = maxNE + rxn_data(irxn) % NE
-      end do
-      allocate(E_temp(maxNE))
-      E_temp = ZERO
-      allocate(scatt_temp(order, groups, maxNE))
-      scatt_temp = ZERO
+      ! Allocate the scatt_mat according to the groups, order and number of E pts
+      allocate(scatt_mat(order, groups, NE))
       
-      ! Allocate the searching variables, scatt_loc, _done, _hits
-      allocate(scatt_loc(size(rxn_data)))
-      scatt_loc = 1
-      allocate(scatt_done(size(rxn_data)))
-      scatt_done = .false.
-      allocate(scatt_hits(size(rxn_data)))
-      scatt_hits = .false.
-      
-      ! Grab the next energy data points, put them in the grid, interpolate the rest
-      do iE = 1, maxNE
-        ! Find the reactions at the smallest Energy points, store in scatt_hits
-        call min_value_locs(rxn_data, scatt_loc, scatt_done, scatt_hits)
-        ! Get the hits first since they involve no interpolation
-        do irxn = 1, size(rxn_data)
-          if (.not. scatt_done(irxn)) then
-            if (scatt_hits(irxn)) then
-              rxnE = scatt_loc(irxn)
-              mySD => rxn_data(irxn)
-              ! Add the energy point to the union grid
-              E_temp(iE) = mySD % E_grid(rxnE)
-              ! Add the scattering distribution to the union scattering grid
-              scatt_temp(:,:,iE) = scatt_temp(:,:,iE) + &
-                mySD % interp_distro(mu_out, nuc, E_temp(iE))
-              ! Increment the location counter and set to done if the counter is
-              ! out of bounds
-              scatt_loc(irxn) = scatt_loc(irxn) + 1
-              if (scatt_loc(irxn) > mySD % NE) scatt_done(irxn) = .true. 
-            end if
-          end if
+      ! Step through each Ein and reactions and sum the scattering distros @ Ein
+      do iE = 1, NE
+        scatt_mat(:, :, iE) = ZERO
+        do irxn = 1, NRXN
+          mySD => rxn_data(irxn)
+          ! If the iE energy point is outside the range of this reaction,
+          ! don't score it
+          if (E_grid(iE) < mySD % E_grid(1)) cycle
+          ! Add the scattering distribution to the union scattering grid
+          scatt_mat(:,:,iE) = scatt_mat(:,:,iE) + &
+            mySD % interp_distro(mu_out, nuc, E_grid(iE))
         end do
-        
-        ! Now interpolate those which are not the next data point
-        do irxn = 1, size(rxn_data)
-          if (.not. scatt_done(irxn)) then
-            if(.not. scatt_hits(irxn)) then
-              rxnE = scatt_loc(irxn)
-              mySD => rxn_data(irxn)
-              ! If the iE energy point is outside the range of this reaction,
-              ! don't score it
-              if (E_temp(iE) < mySD % E_grid(1)) cycle
-              ! Add the scattering distribution to the union scattering grid
-                scatt_temp(:,:,iE) = scatt_temp(:,:,iE) + &
-                  mySD % interp_distro(mu_out, nuc, E_temp(iE))
-            end if
-          end if
-        end do
-        
-        ! Check to see if all reactions have reached their last data point
-        ! If so, then we can complete the unionizing
-        if (all(scatt_done)) exit
       end do
-      
-      ! Allocate and assign the final union grid spaces
-      allocate(scatt_union(order, groups, iE))
-      allocate(E_union(iE))
-      scatt_union(:,:,:) = scatt_temp(:,:, 1 : iE)
-      E_union(:) = E_temp(1 : iE)
-      
-      deallocate(scatt_temp)
-      deallocate(E_temp)
-      deallocate(scatt_loc)
-      deallocate(scatt_done)
-      deallocate(scatt_hits)
-      
-    end subroutine union_grid
-
+    end subroutine calc_scatt_grid
+    
 !===============================================================================
 ! MIN_VALUE_LOCS Finds the reaction in rxn_data with the next highest Ein, and
 ! stores the result in hits

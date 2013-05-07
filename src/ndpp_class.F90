@@ -294,8 +294,7 @@ contains
     integer                :: i_listing     ! index of xs_listing
     ! Scattering specific data
     real(8), allocatable   :: scatt_mat(:,:,:) !scattering matrix moments, 
-                                               ! order x g_out x E_in
-    real(8), allocatable   :: e_scatt_grid(:)  !scattering energy grid                                               
+                                               ! order x g_out x E_in                                              
     ! Chi specific data
     real(8), allocatable   :: chi_t(:,:)  ! grp x E_in chi tot values on a union grid
     real(8), allocatable   :: e_t_grid(:) ! List of energy points for chi tot
@@ -348,19 +347,17 @@ contains
         
         ! Integrate Scattering Distributions
         call timer_start(self % time_scatt_preproc)
-        call calc_scatt(nuc, self % energy_bins, &
-          self % scatt_type, self % scatt_order, scatt_mat, e_scatt_grid, &
-          self % mu_bins, self % thin_tol)
+        call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
+          self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol)
           
         ! Print the results to file
         call timer_start(self % time_print)
-        call print_scatt_ascii(scatt_mat, e_scatt_grid, self % energy_groups, &
+        call print_scatt_ascii(scatt_mat, nuc % energy, self % energy_groups, &
           self % scatt_order)
         call timer_stop(self % time_print)
         
         if (allocated(scatt_mat)) then
           deallocate(scatt_mat)
-          deallocate(e_scatt_grid)
         end if
         call timer_stop(self % time_scatt_preproc)
         
