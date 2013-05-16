@@ -188,9 +188,11 @@ contains
         self % lib_format = ASCII
       elseif (output_format_ == 'binary') then
         self % lib_format = BINARY
+      elseif (output_format_ == 'hdf5') then
+        self % lib_format = HDF5
       else ! incorrect value, print warning, but use default.
         message = "Value for <output_format> provided, but does not match " // &
-                  "ASCII or BINARY. Using default of ASCII."
+                  "ASCII, BINARY, or HDF5. Using default of ASCII."
         call warning()
         self % lib_format = ASCII
       end if
@@ -352,7 +354,7 @@ contains
           
         ! Print the results to file
         call timer_start(self % time_print)
-        call print_scatt_ascii(scatt_mat, nuc % energy, self % energy_groups, &
+        call print_scatt(self % lib_format, scatt_mat, nuc % energy, &
           self % scatt_order)
         call timer_stop(self % time_print)
         
@@ -370,7 +372,8 @@ contains
             
             ! Print the results to file
             call timer_start(self % time_print)
-            call print_chi_ascii(chi_t, chi_p, chi_d, e_t_grid, e_p_grid, e_d_grid)
+            call print_chi(self % lib_format, chi_t, chi_p, chi_d, e_t_grid, &
+              e_p_grid, e_d_grid)
             call timer_stop(self % time_print)
           end if
         end if
@@ -570,7 +573,7 @@ contains
     character(MAX_FILE_LEN) :: filename
     integer                 :: chi_present_int
     
-    if(this_ndpp % lib_format == ASCII) then
+    if (this_ndpp % lib_format == ASCII) then
       ! Create filename for output library
       filename = trim(adjustl(nuc % name)) // trim(adjustl(this_ndpp % lib_name))
       
@@ -601,8 +604,43 @@ contains
       line= ''
       write(line,'(I20)') this_ndpp % mu_bins
       write(UNIT_NUC,'(A)') trim(line)
-    else
-      !!! TO BE IMPLEMENTED: BINARY/HDF5
+    else if (this_ndpp % lib_format == BINARY) then
+      ! Create filename for output library
+      filename = trim(adjustl(nuc % name)) // trim(adjustl(this_ndpp % lib_name))
+      
+      ! Open file for writing
+      open(FILE=filename, UNIT=UNIT_NUC, STATUS='replace', ACTION='write', &
+        ACCESS = 'stream')
+      
+      ! Write header information:
+      ! Nuclide Name, Temperature, Run Date
+      write(UNIT_NUC) nuc % name
+      write(UNIT_NUC) nuc % kT
+      write(UNIT_NUC) time_stamp()
+      
+      ! Energy Bin Structure
+      write(UNIT_NUC) this_ndpp % energy_bins
+      
+      ! Scattering Type (Legendre/Hist), Order of this Type, Chi Present, 
+      ! Thinning Tolerance
+      ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
+      ! is not in the standard, so the next if-then  block will explicitly do the cast.
+      if(this_ndpp % integrate_chi .AND. nuc % fissionable) then 
+        chi_present_int = 1
+      else
+        chi_present_int = 0
+      end if
+      ! Now print the results
+      write(UNIT_NUC) this_ndpp % scatt_type
+      write(UNIT_NUC) this_ndpp % scatt_order
+      write(UNIT_NUC) chi_present_int
+      write(UNIT_NUC) this_ndpp % thin_tol
+      
+      ! Write mu_bins
+      write(UNIT_NUC) this_ndpp % mu_bins
+        
+    else if (this_ndpp % lib_format == HDF5) then
+      !!! TBI
     end if
     
   end subroutine init_library

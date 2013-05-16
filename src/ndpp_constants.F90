@@ -68,6 +68,10 @@ module constants
   integer, parameter :: &
        MU_LO =  1,      & 
        MU_HI =  2
+       
+  ! HDF5 output type (ascii and binary defined below)
+  integer, parameter :: &
+       HDF5  = 3
   
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS  

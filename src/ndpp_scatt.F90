@@ -186,17 +186,38 @@ module ndpp_scatt
       end do
     
     end subroutine min_value_locs 
+  
+!===============================================================================
+! PRINT_SCATT prints the scattering data to the specified output file
+! in the specified format.
+!===============================================================================  
+  
+  subroutine print_scatt(lib_format, data, E_grid, order)
+    integer,              intent(in) :: lib_format  ! Library output type
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
+                                                    ! (order x g x Ein)
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
+    integer,              intent(in) :: order       ! Order of scattering data
+    
+    if (lib_format == ASCII) then
+      call print_scatt_ascii(data, E_grid, order)
+    else if (lib_format == BINARY) then
+      call print_scatt_bin(data, E_grid, order)
+    else if (lib_format == HDF5) then
+      ! TBI
+    end if
+    
+  end subroutine print_scatt
     
 !===============================================================================
 ! PRINT_SCATT_ASCII prints the scattering data to the specified output file
 ! in an ASCII format.
 !===============================================================================
      
-  subroutine print_scatt_ascii(data, E_grid, groups, order)
+  subroutine print_scatt_ascii(data, E_grid, order)
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
-    integer,              intent(in) :: groups      ! Number of outgoing groups
     integer,              intent(in) :: order       ! Order of scattering data
     
     character(MAX_LINE_LEN) :: line
@@ -222,5 +243,36 @@ module ndpp_scatt
     call print_ascii_array(pack(data, .true.), UNIT_NUC)
     
   end subroutine print_scatt_ascii
+  
+  !===============================================================================
+! PRINT_SCATT_BIN prints the scattering data to the specified output file
+! in in native Fortran stream format.
+!===============================================================================
+     
+  subroutine print_scatt_bin(data, E_grid, order)
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
+                                                    ! (order x g x Ein)
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
+    integer,              intent(in) :: order       ! Order of scattering data
+    
+    ! Assumes that the file and header information is already printed 
+    ! (including # of groups and bins, and thinning tolerance)
+    ! Will follow this format: 
+    ! <size of incoming energy array, size(E_grid)>
+    ! <incoming energy array>
+    ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, size(E_grid)>
+    
+    ! Begin writing:
+    
+    ! <size(E_grid)>
+    write(UNIT_NUC)  size(E_grid)
+    
+    ! <incoming energy array>
+    write(UNIT_NUC) E_grid
+    
+    ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, Ein>
+    write(UNIT_NUC) data
+    
+  end subroutine print_scatt_bin
     
 end module ndpp_scatt

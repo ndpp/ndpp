@@ -841,6 +841,30 @@ contains
   end subroutine min_value_locs
   
 !===============================================================================
+! PRINT_CHI prints the chi data to the specified output file
+! in the specified format.
+!===============================================================================  
+  
+  subroutine print_chi(lib_format, chi_t, chi_p, chi_d, E_t, E_p, E_d)
+    integer,              intent(in) :: lib_format ! Library output type
+    real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
+    real(8), allocatable, intent(in) :: chi_p(:,:) ! Unionized Prompt Chi
+    real(8), allocatable, intent(in) :: chi_d(:,:) ! Unionized Delayed Chi
+    real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
+    real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
+    real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
+    
+    if (lib_format == ASCII) then
+      call print_chi_ascii(chi_t, chi_p, chi_d, E_t, E_p, E_d)
+    else if (lib_format == BINARY) then
+      call print_chi_bin(chi_t, chi_p, chi_d, E_t, E_p, E_d)
+    else if (lib_format == HDF5) then
+      ! TBI
+    end if
+    
+  end subroutine print_chi
+
+!===============================================================================
 ! PRINT_CHI_ASCII prints the chi data to the specified output file
 ! in an ASCII format.
 !===============================================================================
@@ -904,5 +928,62 @@ contains
     call print_ascii_array(pack(chi_d, .true.), UNIT_NUC)
     
   end subroutine print_chi_ascii
+  
+  !===============================================================================
+! PRINT_CHI_BIN prints the chi data to the specified output file
+! in Fortran binary (stream) format.
+!===============================================================================
+  
+  subroutine print_chi_bin(chi_t, chi_p, chi_d, E_t, E_p, E_d)
+    real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
+    real(8), allocatable, intent(in) :: chi_p(:,:) ! Unionized Prompt Chi
+    real(8), allocatable, intent(in) :: chi_d(:,:) ! Unionized Delayed Chi
+    real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
+    real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
+    real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
+  
+    ! Assumes that the file and header information is already printed 
+    ! (including # of groups and bins, and thinning tolerance)
+    ! Will follow this format:
+    ! <n_E_t>
+    ! <1:n_E_t energies>
+    ! <1:n_E_t chi_t(g,E)
+    ! <n_E_p>
+    ! <1:n_E_p energies>
+    ! <1:n_E_p chi_p(g,E)
+    ! <n_E_d>
+    ! <1:n_E_d energies>
+    ! <1:n_E_d chi_d(g,E)
+    
+    ! Begin writing:
+    
+    ! <n_E_t>
+    write(UNIT_NUC) size(E_t)
+    
+    ! <1:n_E_t energies>
+    write(UNIT_NUC) E_t
+    
+    ! <1:n_E_t chi_t>
+    write(UNIT_NUC) chi_t
+    
+    ! <n_E_p>
+    write(UNIT_NUC) size(E_p)
+    
+    ! <1:n_E_p energies>
+    write(UNIT_NUC) E_p
+    
+    ! <1:n_E_p chi_p>
+    write(UNIT_NUC) chi_p
+    
+    ! <n_E_d>
+    write(UNIT_NUC) size(E_d)
+    
+    ! <1:n_E_d energies>
+    write(UNIT_NUC) E_d
+    
+    ! <1:n_E_d chi_d>
+    write(UNIT_NUC) chi_d
+    
+  end subroutine print_chi_bin
   
 end module ndpp_chi
