@@ -83,7 +83,7 @@ contains
 !===============================================================================
 
 !===============================================================================
-! INIT_DPP initializes the data preprocessor object
+! INIT_NDPP initializes the data preprocessor object
 !===============================================================================
   
   subroutine init_ndpp(self)
