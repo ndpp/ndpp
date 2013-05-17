@@ -107,9 +107,17 @@ module scattdata_header
       this % awr = nuc % awr
       
       ! Set distributions
-      if (rxn % has_angle_dist) this % adist => rxn % adist
-      this % edist => edist ! We dont use rxn % edist because this allows 
-                            ! the ScattData type to be used for nested distros.
+      if (rxn % has_angle_dist) then
+        this % adist => rxn % adist
+        this % edist => null()
+      else if (associated(edist)) then
+        this % adist => null()
+        this % edist => edist ! We dont use rxn % edist because this allows 
+                              ! ScattData type to be used for nested distros.
+      else
+        this % adist => null()
+        this % edist => null()
+      end if
       
       ! Get the number of energy points; doing so depends on where the info
       ! exists.
@@ -134,8 +142,8 @@ module scattdata_header
         allocate(this % distro(this % NE))
         do i = 1, this % NE
           ! Find the number of outgoing energy points
-          lc = int(edist % data(2 + 2*NR + int(edist % data(2 + 2*NR)) + i))
-          NP   = int(edist % data(lc + 2))
+          lc = int(edist % data(2+2*NR+this%NE+i))
+          NP = int(edist % data(lc + 2))
           allocate(this % distro(i) % data(mu_bins, NP))
           this % distro(i) % data = ZERO
         end do
@@ -148,7 +156,7 @@ module scattdata_header
         ! Set the lower value; but, if the threshold of this reaction is above 
         ! the lower bound, use that instead
         if (rxn % threshold > E_bins(1)) then
-          this % E_grid(1) = rxn % threshold
+          this % E_grid(1) = nuc % energy(rxn % threshold)
         else
           this % E_grid(1) = E_bins(1)
         end if
@@ -209,7 +217,8 @@ module scattdata_header
         deallocate(this % E_grid)
         do i = 1, size(this % distro)
           deallocate(this % distro(i) % data)
-          deallocate(this % Eouts(i) % data)
+          if (allocated(this % Eouts(i) % data)) &
+            deallocate(this % Eouts(i) % data)
         end do
         deallocate(this % distro)
         deallocate(this % Eouts)
