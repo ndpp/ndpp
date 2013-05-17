@@ -26,13 +26,15 @@ test_scattdata.o
 # User Options
 #===============================================================================
 
+# First check to ensure that these haven't been defined by an upstream Makefile
+#ifndef COMPILER
 COMPILER = gnu
 DEBUG    = no
 PROFILE  = no
 OPTIMIZE = no
 MPI      = no
 HDF5     = no
-PETSC    = no
+#endif
 
 #===============================================================================
 # External Library Paths

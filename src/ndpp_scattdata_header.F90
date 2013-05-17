@@ -70,8 +70,8 @@ module scattdata_header
     subroutine scatt_init(this, nuc, rxn, edist, E_bins, scatt_type, order, &
       mu_bins)
       class(ScattData), intent(inout)       :: this  ! The object to initialize
-      type(Nuclide), intent(in), pointer    :: nuc   ! Nuclide we are working on
-      type(Reaction), intent(in), pointer   :: rxn   ! The reaction of interest
+      type(Nuclide), intent(in)    :: nuc   ! Nuclide we are working on
+      type(Reaction), target, intent(in)   :: rxn   ! The reaction of interest
       type(Distenergy), pointer, intent(in) :: edist ! The energy distribution to use
       ! Edist is intended to specify which of the nested distros we are 
       ! actually using. t can be null.

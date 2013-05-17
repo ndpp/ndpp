@@ -92,8 +92,8 @@ program test_scattdata
 ! written assuming scattdata % clear() has already been tested and passes.
 !===============================================================================    
     subroutine test_init()
-      type(ScattData)  :: mySD           ! Testing object
-      type(Nuclide), target     :: nuc   ! Nuclide we are working on
+      type(ScattData)           :: mySD  ! Testing object
+      type(Nuclide)             :: nuc   ! Nuclide we are working on
       type(Reaction), target    :: rxn   ! The reaction of interest
       type(DistEnergy), pointer :: edist ! The energy distribution to use
       type(DistEnergy), target  :: myedist 
