@@ -21,10 +21,6 @@ module ndpp_class
   private
   public  :: nuclearDataPreProc
   
-  !!! TODO: 1) Decide if I want to overwrite the libraries or append like _# to the end.
-  !!! Right now I am planning on over-writing.
-  !!! 2) HDF5 support for output library? (What does it buy me? cross-platform compatability?)
-  ! The data pre-processor type
   type :: nuclearDataPreProc
     ! Status of whether or not the preprocessor has been initialized
     logical              :: is_init = .false.

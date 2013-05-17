@@ -112,7 +112,7 @@ ndpp_scattdata_header.o: interpolation.o
 ndpp_scattdata_header.o: ndpp_legendre.o
 ndpp_scattdata_header.o: ndpp_output.o
 ndpp_scattdata_header.o: search.o
-ndpp_scatt.o: string.o
+ndpp_scattdata_header.o: string.o
 
 search.o: ndpp_error.o
 search.o: ndpp_global.o

@@ -851,8 +851,6 @@ module scattdata_header
       
     end subroutine integrate_energyangle_file4_leg
     
-    
-    
     subroutine integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
       vals, bins, order, distro)
       
