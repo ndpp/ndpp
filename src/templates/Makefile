@@ -22,6 +22,7 @@ endif
 all: $(objects)
 clean:
 	@rm -f *.o *.mod *.out *.f90
+	@rm -rf CodeCoverage *.dyn gmon.out pgopti* *.HTML
 
 #===============================================================================
 # Rules

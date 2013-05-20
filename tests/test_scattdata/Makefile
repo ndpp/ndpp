@@ -31,6 +31,7 @@ test_scattdata.o
 COMPILER = gnu
 DEBUG    = no
 PROFILE  = no
+CODECOV  = no
 OPTIMIZE = no
 MPI      = no
 HDF5     = no
@@ -64,10 +65,15 @@ ifeq ($(COMPILER),gnu)
                 -ffpe-trap=invalid,overflow,underflow
     LDFLAGS  += -g
   endif
-prefix = /usr/local
 
   # Profiling
   ifeq ($(PROFILE),yes)
+    F90FLAGS += -pg
+    LDFLAGS  += -pg
+  endif
+  
+  # Code-Coverage
+  ifeq ($(CODECOV),yes)
     F90FLAGS += -pg
     LDFLAGS  += -pg
   endif
@@ -95,8 +101,14 @@ ifeq ($(COMPILER),intel)
 
   # Profiling
   ifeq ($(PROFILE),yes)
-    F90FLAGS += -pg
+    F90FLAGS += -pg 
     LDFLAGS  += -pg
+  endif
+  
+  # Code-Coverage
+  ifeq ($(CODECOV),yes)
+    F90FLAGS += -pg -prof-gen=srcpos
+    LDFLAGS  += -pg -prof-gen=srcpos
   endif
 
   # Optimization
@@ -226,7 +238,10 @@ endif
 all: $(program)
 $(program): $(objects)
 	$(F90) $(objects) $(LDFLAGS) -o $@
-distclean: clean
+distclean: covclean
+covclean:
+	@rm -rf CodeCoverage *.dyn gmon.out pgopti* *.HTML
+	@rm -f *.o *.mod $(program)
 clean:
 	@rm -f *.o *.mod $(program)
 neat:
@@ -237,7 +252,7 @@ neat:
 #===============================================================================
 
 .SUFFIXES: .F90 .o
-.PHONY: all clean neat distclean 
+.PHONY: all covclean clean neat distclean 
 
 %.o: %.F90
 	$(F90) $(F90FLAGS) -DGIT_SHA1="\"$(GIT_SHA1)\"" -I$(SRC_DIR) -c $<

@@ -451,13 +451,16 @@ program test_scattdata
       integer :: iE            ! Energy index to act on
       real(8), allocatable :: mu(:)     ! tabular mu points
       real(8), allocatable :: distro(:) ! resultant distro (# pts)
-      type(DistAngle), target      :: adist ! My angle dist
+      type(DistAngle), target  :: myadist   ! adist to be pointed to (intel issue)
+      type(DistAngle), pointer :: adist ! My angle dist
       real(8), allocatable :: Eouts(:)  ! Energy out grid @ Ein
       integer :: INTT          ! Energy out INTT grid
       real(8) :: dmu           ! delta-mu for mu grid
       integer :: i             ! Generic loop counter  
       real(8), allocatable :: distro_ref(:)
       integer :: NP            ! Number of pts for ANGLE_TABULR distribution
+      
+      adist => myadist
       
       write(*,*)
       write(*,*) '---------------------------------------------------'

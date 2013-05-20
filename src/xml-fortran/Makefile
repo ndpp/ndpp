@@ -25,6 +25,7 @@ $(reader): $(objects)
 	$(F90) $(objects) -o $@
 clean:
 	@rm -f *.o *.mod $(reader)
+	@rm -rf CodeCoverage *.dyn gmon.out pgopti* *.HTML
 neat:
 	@rm -f *.o *.mod
 
