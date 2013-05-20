@@ -176,7 +176,7 @@ module scattdata_header
       do i = 1, mu_bins - 1
         this % mu(i) = -ONE + real(i - 1, 8) * dmu
       end do
-      ! Set the end point is exactly ONE
+      ! Set the end point to exactly ONE
       this % mu(size(this % mu)) = ONE
       
       ! Allocate the Eouts jagged container and the interpolation type array
@@ -439,7 +439,7 @@ module scattdata_header
               if (data(idata) >= mu(imu)) then
                 ! Find the area of the bin, and use that.
                 if (imu == 1) then
-                  !!! If we are at the start, then use the next data point.
+                  ! If we are at the start, then use the next data point.
                   distro(imu) = R_NUM_EP /  (data(idata + 1) - data(idata)) 
                 else
                   ! Look backwards to figure it out

@@ -17,6 +17,9 @@ program test_scattdata
   ! Test initialization routine
   call test_init()
   
+  ! Test convert_file4 routine
+  call test_convert_file4()
+  
   write(*,*)
   write(*,*) '***************************************************'
   write(*,*) 'Testing ScattData Passed!'
@@ -156,7 +159,6 @@ program test_scattdata
       ! Restore initial conditions
       rxn % MT = ELASTIC
       
-      write(*,*)
       write(*,*) 'Testing File 4 Distribution'
       ! Next test a file 4 distribution initialization (adist)
       call mySD % init(nuc, rxn, edist, E_bins, scatt_type, order, mu_bins)
@@ -234,7 +236,6 @@ program test_scattdata
       call mySD % clear()
       
       ! Test a file 6 distribution case (edist passed)
-      write(*,*)
       write(*,*) 'Testing File 6 Distribution'
       rxn % has_angle_dist = .false.
       rxn % adist % n_energy = 0
@@ -257,7 +258,6 @@ program test_scattdata
         (/ONE, real(NP,8), 1.0E-11_8, 20.0_8, ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, &
         ZERO, ZERO/) 
       edist => myedist
-      
       call mySD % init(nuc, rxn, edist, E_bins, scatt_type, order, mu_bins)
       ! To reduce the scope of each if-block, we will check the scalars,
       ! then the allocatables, then the pointers
@@ -333,7 +333,6 @@ program test_scattdata
       call mySD % clear()
       
       ! Test an isotropic distribution case (adist and edist dont exist)
-      write(*,*)
       write(*,*) 'Testing Isotropic Distribution'
       edist => null()
       call mySD % init(nuc, rxn, edist, E_bins, scatt_type, order, mu_bins)
@@ -411,7 +410,6 @@ program test_scattdata
       
       ! Finally, repeat the isotropic case, but set a threshold energy
       ! above E_bins(1) so that the E_grid(1) == rxn % threshold
-      write(*,*)
       write(*,*) 'Testing Isotropic Distribution w/ Threshold'
       rxn % threshold = 2
       call mySD % init(nuc, rxn, edist, E_bins, scatt_type, order, mu_bins)      
@@ -442,6 +440,361 @@ program test_scattdata
       
       ! Clear all the data set up for this test.
     end subroutine test_init
+   
+!===============================================================================
+! TEST_CONVERT_FILE4 Tests the conversion of File 4 ACE data to a tabular 
+! distribution.
+!===============================================================================    
+    
+    subroutine test_convert_file4()
+      integer :: num_pts       ! Number of angular points to store
+      integer :: iE            ! Energy index to act on
+      real(8), allocatable :: mu(:)     ! tabular mu points
+      real(8), allocatable :: distro(:) ! resultant distro (# pts)
+      type(DistAngle), target      :: adist ! My angle dist
+      real(8), allocatable :: Eouts(:)  ! Energy out grid @ Ein
+      integer :: INTT          ! Energy out INTT grid
+      real(8) :: dmu           ! delta-mu for mu grid
+      integer :: i             ! Generic loop counter  
+      real(8), allocatable :: distro_ref(:)
+      integer :: NP            ! Number of pts for ANGLE_TABULR distribution
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing convert_file4'
+      write(*,*)
+      
+      ! Allocate/Set mu and distro
+      num_pts = 5
+      allocate(mu(num_pts))
+      dmu = TWO / real(num_pts - 1, 8)
+      do i = 1, num_pts - 1
+        mu(i) = -ONE + real(i - 1, 8) * dmu
+      end do
+      ! Set the end point to exactly ONE
+      mu(num_pts) = ONE
+      allocate(distro(num_pts))
+      distro = ZERO
+      allocate(distro_ref(num_pts))
+      
+      ! Set adist (one energy point, at 1 MeV, with data that corresponds to the
+      ! type of data we will need to test.
+      adist % n_energy = 1
+      allocate(adist % energy(1))
+      adist % energy(1) = ONE
+      allocate(adist % type(1))
+      allocate(adist % location(1))
+      iE = 1
+      INTT = -1
+      
+      ! Test an isotropic distribution
+      write(*,*) 'Testing Isotropic Distribution'
+      adist % type(iE) = ANGLE_ISOTROPIC
+      adist % location(1) = 0
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check Eouts and INTT
+      if (allocated(Eouts)) then
+        if (Eouts(1) /= ZERO .or. Eouts(2) /= INFINITY) then
+          write(*,*) 'convert_file4 FAILED! (Isotropic Eouts Values)'
+          stop 10
+        end if
+      else
+        write(*,*) 'convert_file4 FAILED! (Isotropic Eouts Allocation)'
+        stop 10
+      end if
+      if (INTT /= HISTOGRAM) then
+        write(*,*) 'convert_file4 FAILED! (Isotropic INTT Value)'
+        stop 10
+      end if
+      ! Check distro value
+      distro_ref = 0.5_8
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Isotropic Distro Values)'
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+        
+      ! Test Equiprobable distribution. Do not need to check Eouts and INTT
+      ! here since these were already tested above.
+      ! Will test two cases:
+      ! 1) an isotropic distribution
+      ! 2) linear distribution
+      ! Set quantities which are the same for both:
+      adist % type(iE) = ANGLE_32_EQUI
+      adist % location(iE) = 1
+      allocate(adist % data(NUM_EP + 2))
+      ! Move on to isotropic distribution
+      write(*,*) 'Testing Equiprobable Distribution (Isotropic)'
+      ! Set an isotropic distribution
+      dmu = TWO * R_NUM_EP
+      do i = 1, NUM_EP
+        adist % data(i) = -ONE + real(i - 1, 8) * dmu
+      end do
+      ! Set the end point to exactly ONE
+      adist % data(NUM_EP + 1) = ONE
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check distro value
+      distro_ref = 0.5_8
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Equiprob Isotropic Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      
+      ! Repeat for linear distribution
+      ! Set the distribution to be an equiprobable representation of a linear
+      ! pdf.  This is calculated in supporting_calcs.xlsx
+      write(*,*) 'Testing Equiprobable Distribution (Linear)'
+      adist % data = &
+        (/ZERO, -ONE, -0.6464466094_8, -0.5_8, -0.3876275643_8, &
+        -0.2928932188_8, -0.209430585_8, -0.1339745962_8, -0.0645856533_8, &
+        ZERO, 0.0606601718_8, 0.1180339887_8, 0.17260394_8, 0.2247448714_8, &
+        0.2747548784_8, 0.3228756555_8, 0.3693063938_8, 0.4142135624_8, &
+        0.4577379737_8, 0.5_8, 0.5411035007_8, 0.5811388301_8, 0.6201851746_8, &
+        0.6583123952_8, 0.6955824958_8, 0.7320508076_8, 0.767766953_8, &
+        0.8027756377_8, 0.8371173071_8, 0.8708286934_8, 0.9039432765_8, &
+        0.9364916731_8, 0.9685019685_8, ONE/)
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check distro value
+      distro_ref = (/8.8388347646636875E-002_8, 0.21338834765811932_8, &
+        0.48385358672217688_8, 0.73943449322968258_8, 0.99212549203273326_8/)
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Equiprob Linear Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      deallocate(adist % data)
+      
+      ! Test linear distribution.
+      ! Will test three cases (each with histogram and lin-lin interpolation):
+      ! 1) Isotropic
+      ! 2) Linear, with grid width larger than mu
+      ! 3) Linear, with grid width smaller than mu
+      
+      ! Set isotropic tabular representation. Only include the two end points
+      adist % type(iE) = ANGLE_TABULAR
+      adist % location(iE) = 1
+      NP = 2
+      allocate(adist % data(3 + 2 * NP))
+      adist % data(1)   = ZERO
+      adist % data(3)   = NP
+      adist % data(4:5) = (/-ONE, ONE/)
+      adist % data(6:7) = 0.5_8
+      ! Calc histogram case
+      write(*,*) 'Testing Tabular Distribution (Isotropic, Histogram)'
+      adist % data(2) = HISTOGRAM
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check distro value
+      distro_ref = 0.5_8
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Tabular Isotropic, Histogram Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      ! Calc lin-lin case
+      write(*,*) 'Testing Tabular Distribution (Isotropic, Lin-Lin)'
+      adist % data(2) = LINEAR_LINEAR
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check distro value
+      distro_ref = 0.5_8
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Tabular Isotropic, Lin-Lin Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      
+      ! Set linear distribution case with only end-points
+      adist % data(6:7) = (/ZERO, ONE/)
+      ! Calc histogram case
+      write(*,*) 'Testing Tabular Distribution (Linear-1, Histogram)'
+      adist % data(2) = HISTOGRAM
+      distro_ref = (/ZERO, ZERO, ZERO, ZERO, ONE/)
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check distro value
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Tabular Linear-1, Histogram Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      ! Calc linear-linear case
+      write(*,*) 'Testing Tabular Distribution (Linear-1, Lin-Lin)'
+      adist % data(2) = LINEAR_LINEAR
+      distro_ref = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check distro value
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Tabular Linear-1, Lin-Lin Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      deallocate(adist % data)
+      
+      ! Set linear distribution case with 11 points within
+      NP = 11
+      allocate(adist % data(3 + 2 * NP))
+      adist % data(1)   = ZERO
+      adist % data(3)   = NP
+      adist % data(4:) = (/-ONE, -0.8_8, -0.6_8, -0.4_8, -0.2_8, ZERO, &
+                            0.2_8, 0.4_8, 0.6_8, 0.8_8, ONE/)
+      adist % data(4+NP:) = (/ZERO, 0.1_8, 0.2_8, 0.3_8, 0.4_8, 0.5_8, &
+                                  0.6_8, 0.7_8, 0.8_8, 0.9_8, ONE/)
+      ! Calc histogram case
+      write(*,*) 'Testing Tabular Distribution (Linear-2, Histogram)'
+      adist % data(2) = HISTOGRAM
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check distro value
+      distro_ref = (/ZERO, 0.2_8, 0.5_8, 0.7_8, ONE/)
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Tabular Linear-2, Histogram Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      ! Calc lin-lin case
+      write(*,*) 'Testing Tabular Distribution (Linear-2, Lin-Lin)'
+      adist % data(2) = LINEAR_LINEAR
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check distro value
+      distro_ref = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Tabular Linear-2, Lin-Lin Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      
+      ! Test invalid interpolation type. Just expect graceful failure (distro
+      ! still zero)
+      write(*,*) 'Testing Tabular Distribution (Linear-2, Invalid)'
+      adist % data(2) = 17 ! 17 is arbitrarily chosen.
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check Eouts and INTT
+      if (allocated(Eouts)) then
+        if (Eouts(1) /= ZERO .or. Eouts(2) /= INFINITY) then
+          write(*,*) 'convert_file4 FAILED! (Linear-2, Invalid Eouts Values)'
+          stop 10
+        end if
+      else
+        write(*,*) 'convert_file4 FAILED! (Linear-2, Invalid Eouts Allocation)'
+        stop 10
+      end if
+      if (INTT /= HISTOGRAM) then
+        write(*,*) 'convert_file4 FAILED! (Linear-2, Invalid INTT Value)'
+        stop 10
+      end if
+      ! Check distro value
+      distro_ref = ZERO
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Tabular Linear-2, Invalid Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      
+      ! Final test, invalid angular distribution type. 
+      ! Just expect graceful failure (distro still zero)
+      write(*,*) 'Testing Invalid Distribution'
+      adist % type = 17 ! 17 is arbitrarily chosen.
+      call convert_file4(iE, mu, adist, Eouts, INTT, distro)
+      ! Check Eouts and INTT
+      if (allocated(Eouts)) then
+        if (Eouts(1) /= ZERO .or. Eouts(2) /= INFINITY) then
+          write(*,*) 'convert_file4 FAILED! (Invalid Eouts Values)'
+          stop 10
+        end if
+      else
+        write(*,*) 'convert_file4 FAILED! (Invalid Eouts Allocation)'
+        stop 10
+      end if
+      if (INTT /= HISTOGRAM) then
+        write(*,*) 'convert_file4 FAILED! (Invalid INTT Value)'
+        stop 10
+      end if
+      ! Check distro value
+      distro_ref = ZERO
+      if (any(distro /= distro_ref)) then
+        write(*,*) 'convert_file4 FAILED! (Invalid Distro Values)'
+        write(*,*) mu
+        write(*,*) distro
+        stop 10
+      end if
+      ! reset INTT, Eouts, and distro
+      INTT = -1
+      deallocate(Eouts)
+      distro = ZERO
+      
+      write(*,*)
+      write(*,*) 'convert_file4 Passed!'
+      write(*,*) '---------------------------------------------------'
+      
+      ! Clean-up
+      call adist % clear()
+      deallocate(mu)
+      deallocate(distro)
+      deallocate(distro_ref)
+      
+    end subroutine test_convert_file4
+
+!===============================================================================
+! TEST_CALC_MU_BOUNDS Tests the calculation of the angular boundary 
+!===============================================================================    
+    
+    subroutine test_calc_mu_bounds()
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing calc_mu_bounds'
+      
+      write(*,*)
+      write(*,*) 'calc_mu_bounds Passed!'
+      write(*,*) '---------------------------------------------------'
+      
+    end subroutine test_calc_mu_bounds
     
 end program test_scattdata
 
