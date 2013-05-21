@@ -370,10 +370,10 @@ module scattdata_header
           else if (associated(this % edist)) then
             ! 3) calculate the energy boundaries for integration
             call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
-              this % INTT(iE), interp, vals, bins)
+              this % INTT(iE), interp, bins)
             ! 4) integrate according to scatt_type
             call integrate_energyangle_file6_leg(my_distro, this % mu, &
-              this % Eouts(iE) % data, this % E_bins, interp, vals, bins, &
+              this % Eouts(iE) % data, this % E_bins, interp, bins, &
               this % order, distro)
           end if
         case (SCATT_TYPE_TABULAR)
@@ -387,7 +387,7 @@ module scattdata_header
           else if (associated(this % edist)) then
             ! 3) calculate the energy boundaries for integration
             call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
-              this % INTT(iE), interp, vals, bins)
+              this % INTT(iE), interp, bins)
             ! 4) integrate according to scatt_type
             
           end if
@@ -773,47 +773,39 @@ module scattdata_header
 ! bins for a given input energy.
 !===============================================================================
 
-    subroutine calc_E_bounds(E_bins, Eout, INTT, interp, vals, bins)
+    subroutine calc_E_bounds(E_bins, Eout, INTT, interp, bins)
       real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
       real(8), intent(in)  :: Eout(:)     ! Output energies
       integer, intent(in)  :: INTT        ! Output energies interpolation type
       real(8), intent(out) :: interp(:,:) ! Outgoing E interpolants
                                           ! corresponding to the energy groups
-      real(8), intent(out) :: vals(:,:)   ! Outgoing E values corresponding
-                                          ! to the energy groups
       integer, intent(out) :: bins(:,:)   ! Outgoing E indices corresponding
                                           ! to the energy groups
       
-      integer :: g               ! Group index variable
+      integer :: g                        ! Group index variable
       
       do g = 1, size(E_bins) - 1
-        if (E_bins(g) <= Eout(1)) then
-          bins(MU_LO, g)   = 1
-          vals(MU_LO, g)   = ZERO
+        if (E_bins(g) < Eout(1)) then
+          bins(MU_LO, g)   = 0
           interp(MU_LO, g) = ZERO
-        else if (E_bins(g) >= Eout(size(Eout))) then
-          bins(MU_LO, g)   = 1
-          vals(MU_LO, g)   = ZERO
+        else if (E_bins(g) > Eout(size(Eout))) then
+          bins(MU_LO, g)   = 0
           interp(MU_LO, g) = ZERO
         else
           bins(MU_LO, g)   = binary_search(Eout, size(Eout), E_bins(g))
-          vals(MU_LO, g)   = E_bins(g)
           interp(MU_LO, g) = (E_bins(g) - Eout(bins(MU_LO, g))) / & 
-            (Eout(bins(MU_LO, g)) - Eout(bins(MU_LO, g)))
+            (Eout(bins(MU_LO, g) + 1) - Eout(bins(MU_LO, g)))
         end if
-        if (E_bins(g + 1) <= Eout(1)) then
+        if (E_bins(g + 1) < Eout(1)) then
           bins(MU_HI, g)   = 0
-          vals(MU_HI, g)   = ZERO
           interp(MU_HI, g) = ZERO
-        else if (E_bins(g + 1) >= Eout(size(Eout))) then
+        else if (E_bins(g + 1) > Eout(size(Eout))) then
           bins(MU_HI, g)   = 0
-          vals(MU_HI, g)   = ZERO
           interp(MU_HI, g) = ZERO
         else
           bins(MU_HI, g)   = binary_search(Eout, size(Eout), E_bins(g + 1))
-          vals(MU_HI, g)   = E_bins(g + 1)
           interp(MU_HI, g) = (E_bins(g + 1) - Eout(bins(MU_HI, g))) / & 
-            (Eout(bins(MU_HI, g)) - Eout(bins(MU_HI, g)))
+            (Eout(bins(MU_HI, g) + 1) - Eout(bins(MU_HI, g)))
         end if
         ! adjust the interpolant so that if using histogram it is correctly 0
         if (INTT == HISTOGRAM) then
@@ -878,14 +870,13 @@ module scattdata_header
     end subroutine integrate_energyangle_file4_leg
     
     subroutine integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
-      vals, bins, order, distro)
+      bins, order, distro)
       
       real(8), intent(in)  :: fEmu(:,:)      ! Energy-angle distro to act on
       real(8), intent(in)  :: mu(:)          ! fEmu angular grid
       real(8), intent(in)  :: Eout(:)        ! Outgoing energies
       real(8), intent(in)  :: E_bins(:)      ! Energy group boundaries
       real(8), intent(in)  :: interp(:,:)    ! interpolants of E values
-      real(8), intent(in)  :: vals(:,:)      ! E values
       integer, intent(in)  :: bins(:,:)      ! indices of fEmu corresponding to
                                              ! the group boundaries
       integer, intent(in)  :: order          ! Number of moments to find
@@ -898,7 +889,7 @@ module scattdata_header
       real(8) :: Elo, Ehi  ! interpolated value of the energy
       real(8) :: flo, fhi  ! interpolated value of fEmu(imu,Eout)
       
-      allocate(fEmu_int(size(mu), size(vals, dim = 2)))
+      allocate(fEmu_int(size(mu), size(bins, dim = 2)))
       
       ! This routine will perform integration of the outgoing energy of fEmu
       ! over each energy group in E_bins. This will be done with trapezoidal

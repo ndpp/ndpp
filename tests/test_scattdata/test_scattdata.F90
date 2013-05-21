@@ -28,6 +28,9 @@ program test_scattdata
   ! Test calc_mu_bounds
   call test_calc_mu_bounds()
   
+  ! Test calc_E_bounds
+  call test_calc_E_bounds()
+  
   write(*,*)
   write(*,*) '***************************************************'
   write(*,*) 'Testing ScattData Passed!'
@@ -102,6 +105,7 @@ program test_scattdata
 ! TEST_INIT Tests the initialization of the scattdata object. This test is 
 ! written assuming scattdata % clear() has already been tested and passes.
 !===============================================================================    
+    
     subroutine test_init()
       type(ScattData)           :: mySD  ! Testing object
       type(Nuclide)             :: nuc   ! Nuclide we are working on
@@ -750,7 +754,7 @@ program test_scattdata
       ! Final test, invalid angular distribution type. 
       ! Just expect graceful failure (distro still zero)
       write(*,*) 'Testing Invalid Distribution'
-      adist % type = 17 ! 17 is arbitrarily chosen.
+      adist % type(iE) = 17
       call convert_file4(iE, mu, adist, Eouts, INTT, distro)
       ! Check Eouts and INTT
       if (allocated(Eouts)) then
@@ -796,7 +800,6 @@ program test_scattdata
 !===============================================================================    
     
     subroutine test_calc_mu_bounds()
-      
       real(8), allocatable :: mu(:)       ! Angular bin points
       real(8), allocatable :: E_bins(:)   ! Outgoing Energy Bins
       real(8), allocatable :: interp(:,:) ! Outgoing mu interpolants
@@ -922,8 +925,89 @@ program test_scattdata
       
     end subroutine test_calc_mu_bounds
     
+    
+!===============================================================================
+! TEST_CALC_E_BOUNDS Tests the calculation of the energy integration points 
+!===============================================================================  
+
+    subroutine test_calc_E_bounds()
+      real(8), allocatable :: E_bins(:)   ! Energy group boundaries
+      real(8), allocatable :: Eout(:)     ! Output energies
+      integer              :: INTT        ! Output energies interpolation type
+      real(8), allocatable :: interp(:,:) ! Outgoing E interpolants
+                                          ! corresponding to the energy groups
+      integer, allocatable :: bins(:,:)   ! Outgoing E indices corresponding
+                                          ! to the energy groups
+      integer              :: NEout       ! Number of Eout pts
+      integer              :: NEbins      ! Number of E_bins
+      ! Reference solution holders
+      real(8), allocatable :: interp_ref(:,:) 
+      integer, allocatable :: bins_ref(:,:)  
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing calc_E_bounds'
+      write(*,*)
+      
+      ! This test will examine E_bins situated at various positions relative to
+      ! Eout (above, below, between, etc).  
+      ! We will have to do this with linear and histogram interpolations.
+      
+      ! Allocate and set up Eout
+      NEout  = 3
+      allocate(Eout(NEout))
+      Eout = (/ONE, TWO, 3.0_8/)
+      
+      ! Allocate and set up E_bins
+      NEbins = 5
+      allocate(E_bins(NEbins))
+      E_bins = (/0.25_8, 0.75_8, TWO, 2.5_8, 4.0_8/)
+      
+      ! Allocate interp, vals, bins, and their reference solution spaces
+      allocate(interp    (2, NEbins - 1))
+      allocate(bins      (2, NEbins - 1))
+      allocate(interp_ref(2, NEbins - 1))
+      allocate(bins_ref  (2, NEbins - 1))
+      
+      ! First test linear interpolation
+      INTT = LINEAR_LINEAR
+      ! Set reference solution
+      bins_ref(MU_LO, :) = (/0, 0, 2, 2/)
+      bins_ref(MU_HI, :) = (/0, 2, 2, 0/)
+      interp_ref(MU_LO, :) = (/ZERO, ZERO, ZERO, 0.5_8/)
+      interp_ref(MU_HI, :) = (/ZERO, ZERO, 0.5_8, ZERO/)
+      call calc_E_bounds(E_bins, Eout, INTT, interp, bins)
+      ! Check results
+      if (any(bins /= bins_ref)) then
+        write(*,*) 'calc_E_bounds FAILED! (Incorrect Bins - INTT = Linear)'
+        stop 10
+      end if
+      if (any(interp /= interp_ref)) then
+        write(*,*) 'calc_E_bounds FAILED! (Incorrect Interps - INTT = Linear)'
+        stop 10
+      end if
+      
+      ! Test Histogram interpolation.
+      INTT = HISTOGRAM
+      ! Set reference solution
+      bins_ref(MU_LO, :) = (/0, 0, 2, 2/)
+      bins_ref(MU_HI, :) = (/0, 2, 2, 0/)
+      interp_ref = ZERO
+      call calc_E_bounds(E_bins, Eout, INTT, interp, bins)
+      ! Check results
+      if (any(bins /= bins_ref)) then
+        write(*,*) 'calc_E_bounds FAILED! (Incorrect Bins - INTT = Histogram)'
+        stop 10
+      end if
+      if (any(interp /= interp_ref)) then
+        write(*,*) 'calc_E_bounds FAILED! (Incorrect Interps - INTT = Histogram)'
+        stop 10
+      end if
+      
+      write(*,*)
+      write(*,*) 'calc_E_bounds Passed!'
+      write(*,*) '---------------------------------------------------'
+
+    end subroutine test_calc_E_bounds
+     
 end program test_scattdata
-
-
-
-
