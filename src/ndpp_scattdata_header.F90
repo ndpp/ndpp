@@ -690,20 +690,21 @@ module scattdata_header
 
     subroutine calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
       
-      real(8), intent(in)  :: awr            ! Atomic-weight ratio
-      real(8), intent(in)  :: Q              ! Reaction Q-Value
-      real(8), intent(in)  :: Ein            ! Incoming energy
-      real(8), intent(in)  :: E_bins(:)      ! Energy group boundaries
-      real(8), intent(in)  :: mu(:)          ! tabular mu values
+      real(8), intent(in)  :: awr         ! Atomic-weight ratio
+      real(8), intent(in)  :: Q           ! Reaction Q-Value
+      real(8), intent(in)  :: Ein         ! Incoming energy
+      real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+      real(8), intent(in)  :: mu(:)       ! tabular mu values
       real(8), intent(out) :: interp(:,:) ! Outgoing mu interpolants
-                                             ! corresponding to the energy groups
+                                          ! corresponding to the energy groups
       real(8), intent(out) :: vals(:,:)   ! Outgoing mu values corresponding
-                                             ! to the energy groups
+                                          ! to the energy groups
       integer, intent(out) :: bins(:,:)   ! Outgoing mu indices corresponding
-                                             ! to the energy groups
+                                          ! to the energy groups
       
       real(8) :: mu_low, mu_high  ! Low and high angular points
       real(8) :: R            ! The Reduced Mass (takes in to account Qval)
+      real(8) :: alpha        ! Energy-transfer constant
       integer :: g            ! Group index variable
       integer :: imu
       
@@ -712,10 +713,26 @@ module scattdata_header
       
       do g = 1, size(E_bins) - 1
         ! Calculate the values of mu corresponding to this energy group
-        mu_low = 0.5_8 * ((R + ONE) * sqrt(E_bins(g)/ Ein) - &
-          (R - ONE) * sqrt(Ein / E_bins(g)))
-        mu_high = 0.5_8 * ((R + ONE) * sqrt(E_bins(g + 1)/ Ein) - &
-          (R - ONE) * sqrt(Ein / E_bins(g + 1)))
+        ! These come from eqs. 232-233 in Methods for Processing ENDF/B-VII, 
+        ! also on pg 2798
+        
+        ! First check to see if the energy transfer is possible
+        ! (the pg 2798 eqns dont work if R<1)
+        ! If it isnt, then we set the boundary to -1
+        alpha = (R - 1) / (R + 1)
+        alpha = alpha * alpha
+        if (E_bins(g) < alpha * Ein) then
+          mu_low = -ONE
+        else
+          mu_low  = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g) / Ein) + &
+            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g)))
+        end if
+        if (E_bins(g + 1) < alpha * Ein) then
+          mu_high = -ONE
+        else
+          mu_high = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g + 1) / Ein) + &
+            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g + 1)))
+        end if
         
         ! Find the index in mu corresponding to mu_low
         if (mu_low < -ONE) then

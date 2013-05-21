@@ -4,6 +4,8 @@ program test_scattdata
   use scattdata_header
   
   implicit none
+  
+  REAL(8), PARAMETER :: TEST_TOL = 1E-10_8
 
 !===============================================================================
   
@@ -19,6 +21,12 @@ program test_scattdata
   
   ! Test convert_file4 routine
   call test_convert_file4()
+  
+  
+  
+  
+  ! Test calc_mu_bounds
+  call test_calc_mu_bounds()
   
   write(*,*)
   write(*,*) '***************************************************'
@@ -458,7 +466,7 @@ program test_scattdata
       real(8) :: dmu           ! delta-mu for mu grid
       integer :: i             ! Generic loop counter  
       real(8), allocatable :: distro_ref(:)
-      integer :: NP            ! Number of pts for ANGLE_TABULR distribution
+      integer :: NP            ! Number of pts for ANGLE_TABULAR distribution
       
       adist => myadist
       
@@ -789,9 +797,124 @@ program test_scattdata
     
     subroutine test_calc_mu_bounds()
       
+      real(8), allocatable :: mu(:)       ! Angular bin points
+      real(8), allocatable :: E_bins(:)   ! Outgoing Energy Bins
+      real(8), allocatable :: interp(:,:) ! Outgoing mu interpolants
+      real(8), allocatable :: vals(:,:)   ! Outgoing mu values
+      integer, allocatable :: bins(:,:)   ! Outgoing mu indices
+      real(8)              :: Q           ! Reaction Q-Value
+      real(8)              :: awr         ! Atomic-weight ratio
+      real(8)              :: Ein         ! Incoming energy
+      real(8)              :: dmu         ! change in mu
+      integer              :: num_pts     ! Number of angular pts to use
+      integer              :: i           ! temp loop counter
+      integer              :: num_Eout    ! Number of Eout bins
+      
       write(*,*)
       write(*,*) '---------------------------------------------------'
       write(*,*) 'Testing calc_mu_bounds'
+      write(*,*)
+      
+      ! Allocate/Set mu
+      num_pts = 21
+      allocate(mu(num_pts))
+      dmu = TWO / real(num_pts - 1, 8)
+      do i = 1, num_pts - 1
+        mu(i) = -ONE + real(i - 1, 8) * dmu
+      end do
+      ! Set the end point to exactly ONE
+      mu(num_pts) = ONE
+      
+      ! Allocate E_bins, interp, vals, bins
+      num_Eout = 3
+      allocate(E_bins(num_Eout))
+      allocate(interp(2, num_Eout - 1))
+      allocate(  vals(2, num_Eout - 1))
+      allocate(  bins(2, num_Eout - 1))
+      interp = ZERO
+      vals   = ZERO
+      bins   = 0
+      
+      ! Set the awr and Q-value to that for hydrogen (R<1 is the toughest case)
+      awr = 0.999167_8 ! H-1 value
+      Q   = ZERO       
+      
+      ! The possible situations one could encounter for the energy vars are:
+      ! 1) Ein > all of E_bins
+      ! 2) Ein < all of E_bins
+      ! 3) Ein within one bin
+      ! The result of calc_mu_bounds should always return a value b/t [-1,1].  
+      
+      ! 1) Ein > all of E_bins
+      Ein = 20.0_8
+      E_bins = (/1E-11_8, ONE, TWO/)
+      call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
+      ! For transfer to the lower group, hand calcs show that:
+      ! mu_low = -1 and mu_high = 0.22537631014397342822
+      if ((any((interp(:,1) - &
+        (/ZERO, 0.2537631014397342822_8/)) > TEST_TOL)) .or. &
+        (any((vals(:,1) - &
+        (/-ONE, 0.22537631014397342822_8/)) > TEST_TOL)) .or. &
+        (any(bins(:,1) /= (/1, 13/)))) then
+        write(*,*) 'calc_mu_bounds FAILED! (Ein > all of E_bins, MU_LO)'
+        stop 10
+      end if
+      ! For transfer to the higher group, hand calcs show that:
+      ! mu_low = 0.22537631014397342822 and mu_high = 0.31741314579775205019
+      if ((any((interp(:,2) - (/0.2537631014397342822_8, &
+        0.1741314579775205019_8/)) > TEST_TOL)) .or. &
+        (any((vals(:,2) - (/0.22537631014397342822_8, &
+        0.31741314579775205019_8/)) > TEST_TOL)) .or. &
+        (any(bins(:,2) /= (/13, 14/)))) then
+        write(*,*) 'calc_mu_bounds FAILED! (Ein > all of E_bins, MU_HI)'
+        stop 10
+      end if
+      ! Reset values
+      interp = ZERO
+      vals   = ZERO
+      bins   = 0
+      
+      ! 2) Ein < all of E_bins
+      Ein = 1E-11_8
+      E_bins = (/ONE, TWO, 20.0_8/)
+      call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
+      ! Check results
+      ! Since Ein < min(E_bins), we know that all mu transfers are to mu=1
+      ! (and thus improbable). This means interp == 1, bins == size(mu) - 1,
+      ! and vals == 1
+      if ((any(interp /= ONE)) .or. (any(vals /= ONE)) .or. &
+        (any(bins /= num_pts-1))) then
+        write(*,*) 'calc_mu_bounds FAILED! (Ein < min(E_bins))'
+        stop 10
+      end if
+      ! Reset values
+      interp = ZERO
+      vals   = ZERO
+      bins   = 0
+      
+      ! 3) Ein within one bin
+      Ein = 1.5_8
+      E_bins = (/ONE, TWO, 20.0_8/)
+      call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
+      ! Check results
+      ! Since Ein < E_bins(2), we know that in the 1st group, the upper mu
+      ! transfer is to mu=1 (like in the previous case).
+      ! Next, a hand calculation shows that mu=0.81666661634070423168 for Eout=1
+      if ((any((interp(:,1) - &
+        (/0.1666661634070423168_8, ONE/)) > TEST_TOL)) .or. &
+        (any((vals(:,1) - (/0.81666661634070423168_8, ONE/)) > TEST_TOL)) .or. &
+        (any(bins(:,1) /= (/19, num_pts - 1/)))) then
+        write(*,*) 'calc_mu_bounds FAILED! (Ein within one bin, MU_LO)'
+        stop 10
+      end if
+      ! Since Ein < E_bins(2:3), we know that the 2nd group mu transfers are to 
+      ! mu=1 (and thus improbable). This means interp == 1, bins == num_pts-1,
+      ! and vals == 1
+      if ((any(interp(:,2) /= ONE)) .or. (any(vals(:,2) /= ONE)) .or. &
+        (any(bins(:,2) /= num_pts-1))) then
+        write(*,*) 'calc_mu_bounds FAILED! (Ein within one bin, MU_HI)'
+        stop 10
+      end if
       
       write(*,*)
       write(*,*) 'calc_mu_bounds Passed!'
@@ -800,5 +923,7 @@ program test_scattdata
     end subroutine test_calc_mu_bounds
     
 end program test_scattdata
+
+
 
 
