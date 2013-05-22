@@ -22,7 +22,8 @@ program test_scattdata
   ! Test convert_file4 routine
   call test_convert_file4()
   
-  
+  ! Test convert_file6 routine
+  call test_convert_file6()
   
   
   ! Test calc_mu_bounds
@@ -796,6 +797,201 @@ program test_scattdata
     end subroutine test_convert_file4
 
 !===============================================================================
+! TEST_CONVERT_FILE6 Tests the conversion of File 6 ACE data to a tabular 
+! distribution.
+!===============================================================================    
+    
+    subroutine test_convert_file6()
+      integer                   :: iE          ! Energy index to act on
+      real(8), allocatable      :: mu(:)       ! tabular mu points
+      type(DistEnergy), pointer :: edist       ! My energy dist
+      type(DistEnergy), target  :: myedist     ! My energy dist
+      real(8), allocatable      :: Eouts(:)    ! Energy out grid @ Ein
+      integer                   :: INTT        ! Energy out INTT grid
+      real(8), allocatable      :: distro(:,:) ! resultant distro (pts x NEout)
+      real(8)                   :: dmu         ! delta-mu
+      integer                   :: num_pts     ! number of mu pts
+      real(8), allocatable      :: distro_ref(:,:) ! resultant distro (pts x NEout)
+      integer                   :: i           ! loop counter
+      
+      ! Law 44/61 data holders
+      integer :: NR, NEin, INTTp, NPEout, NPang, JJ 
+      real(8), allocatable :: Ein(:), P(:), L(:), Eout(:), PDF(:), CDF(:), &
+                              LC(:,:), R(:), A(:), CSOUT(:), PDFang(:), &
+                              CDFang(:)
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing convert_file6'
+      write(*,*)
+      
+      ! Set the quantities which dont change with all the varying tests
+      edist => myedist
+      
+      ! Set the law-independent information
+      NR = ZERO
+      NEin = TWO
+      allocate(Ein(NEin))
+      Ein = (/ONE, TWO/)
+      allocate(P(NEin))
+      P = ONE
+      NPEout = TWO
+      allocate(Eout(NPEout))
+      Eout = (/0.5_8, ONE/)
+      allocate(PDF(NPEout))
+      PDF = (/0.5_8, 0.5_8/)
+      allocate(CDF(NPEout))
+      CDF = (/ZERO, ONE/)
+      
+      ! Set the storage grid
+      iE = 2
+      num_pts = 5
+      allocate(mu(num_pts))
+      dmu = TWO / real(num_pts - 1, 8)
+      do i = 1, num_pts - 1
+        mu(i) = -ONE + real(i - 1, 8) * dmu
+      end do
+      ! Set the end point to exactly ONE
+      mu(num_pts) = ONE
+      allocate(distro(num_pts, NPEout))
+      distro = ZERO
+      allocate(distro_ref(num_pts, NPEout))
+      
+      ! This test will test laws 44 (KM) and 61 (tabular).  
+      ! Included that is testing law 61 with isotropic, histogram, lin-lin,
+      ! and an unknown interpolation type (although a fatal error will be 
+      ! called, so I'll have to figure out how to deal with that.
+      ! We will also need to try INTT < 10 and > 10.
+      
+      ! Test Kalbach-Mann (will do with INTT <10 and >10).
+      ! Doing INTT < 10 first.
+      write(*,*) 'Testing Law 44 (INTTp < 10)'
+      ! First set up edist
+      edist % law = 44
+      ! Set L, INTTp, R, A
+      allocate(L(NEin))
+      L = (/6.0_8, 18.0_8/)
+      INTTp = 1
+      R = (/ONE, ZERO/)
+      A = (/ONE, 0.5_8/)
+      ! allocate edist % data to ((3+2+NR+NEin + 2*(2+5*NPEout)))
+      allocate(edist % data((3+2+NR+NEin + 2*(2+5*NPEout))))
+      ! Set edist. The first Ein's R and A are twice the normal values so it is
+      ! clear if we accidentally hit them.
+      edist % data = (/real(NR,8), real(NEin,8), Ein, L, &
+        real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, TWO * R, TWO * A, &
+        real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, R, A/)
+      ! Set the reference solution
+      distro_ref(:, 1) = (/0.1565176427_8, 0.2580539668_8, 0.4254590641_8, &
+        0.7014634088_8, 1.1565176427_8/)
+      distro_ref(:, 2) = (/0.5409883534_8, 0.4948293954_8, 0.4797586878_8, &
+        0.4948293954_8, 0.5409883534_8/)
+      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      ! Check results
+      if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
+        (any((distro(:,2) - distro_ref(:,2)) > TEST_TOL))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Law 44 INTT=1)'
+        write(*,*) distro
+        write(*,*) distro_ref
+        stop 10
+      end if
+      if (any(Eouts /= Eout)) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Eouts Values - Law 44 INTT=1)'
+        write(*,*) Eouts
+        write(*,*) Eout
+        stop 10
+      end if
+      if (INTT /= INTTp) then
+        write(*,*) 'convert_file6 FAILED! (Invalid INTT Value - Law 44 INTT=1)'
+        write(*,*) INTT, INTTp
+        stop 10
+      end if
+      ! Reset values
+      deallocate(Eouts)
+      distro = ZERO
+      INTT = -1
+      
+      ! Now set INTTp > 10, and make sure we get correct results
+      write(*,*) 'Testing Law 44 (INTTp > 10)'
+      INTTp = 12
+      edist % data = (/real(NR,8), real(NEin,8), Ein, L, &
+        real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, TWO * R, TWO * A, &
+        real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, R, A/)
+      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      ! Check results
+      if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
+        (any((distro(:,2) - distro_ref(:,2)) > TEST_TOL))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Law 44 INTT=2)'
+        write(*,*) distro
+        write(*,*) distro_ref
+        stop 10
+      end if
+      if (any(Eouts /= Eout)) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Eouts Values - Law 44 INTT=2)'
+        write(*,*) Eouts
+        write(*,*) Eout
+        stop 10
+      end if
+      if (INTT /= 2) then
+        write(*,*) 'convert_file6 FAILED! (Invalid INTT Value - Law 44 INTT=2)'
+        write(*,*) INTT, 2
+        stop 10
+      end if
+      ! Reset values
+      deallocate(Eouts)
+      distro = ZERO
+      INTT = -1
+      deallocate(edist % data)
+      
+      ! Test Law 61
+      write(*,*) 'Testing Law 61'
+      ! Set the things which dont depend on type of LDAT
+      edist % law = 61
+      INTTp = 1
+      ! Start with isotropic
+      L = (/6.0_8, 16.0_8/)
+      allocate(LC(NPEout, NEin))
+      LC(:, 1) = (/0, 0/) ! LC == 0 signifies isotropic
+      LC(:, 2) = (/0, 0/) ! LC == 0 signifies isotropic
+      allocate(edist % data(26))
+      edist % data = (/real(NR,8), real(NEin,8), Ein, L, &
+        real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, LC(:, 1), &
+        real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, LC(:, 2)/)
+      ! Set the reference solution
+      distro_ref(:, 1) = 0.5_8
+      distro_ref(:, 2) = 0.5_8
+      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      ! Check results
+      if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
+        (any((distro(:,2) - distro_ref(:,2)) > TEST_TOL))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Law 61)'
+        write(*,*) distro
+        write(*,*) distro_ref
+        stop 10
+      end if
+      if (any(Eouts /= Eout)) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Eouts Values - Law 61)'
+        write(*,*) Eouts
+        write(*,*) Eout
+        stop 10
+      end if
+      if (INTT /= INTTp) then
+        write(*,*) 'convert_file6 FAILED! (Invalid INTT Value - Law 61)'
+        write(*,*) INTT, INTTp
+        stop 10
+      end if
+      ! Reset values
+      deallocate(Eouts)
+      distro = ZERO
+      INTT = -1
+      
+      
+      write(*,*)
+      write(*,*) 'convert_file6 Passed!'
+      write(*,*) '---------------------------------------------------'
+    end subroutine test_convert_file6
+
+!===============================================================================
 ! TEST_CALC_MU_BOUNDS Tests the calculation of the angular boundary 
 !===============================================================================    
     
@@ -849,6 +1045,7 @@ program test_scattdata
       ! The result of calc_mu_bounds should always return a value b/t [-1,1].  
       
       ! 1) Ein > all of E_bins
+      write(*,*) 'Testing Ein > all E_bins'
       Ein = 20.0_8
       E_bins = (/1E-11_8, ONE, TWO/)
       call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
@@ -878,6 +1075,7 @@ program test_scattdata
       bins   = 0
       
       ! 2) Ein < all of E_bins
+      write(*,*) 'Testing Ein < all E_bins'
       Ein = 1E-11_8
       E_bins = (/ONE, TWO, 20.0_8/)
       call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
@@ -896,6 +1094,7 @@ program test_scattdata
       bins   = 0
       
       ! 3) Ein within one bin
+      write(*,*) 'Testing Ein within one E_bin'
       Ein = 1.5_8
       E_bins = (/ONE, TWO, 20.0_8/)
       call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
@@ -924,7 +1123,6 @@ program test_scattdata
       write(*,*) '---------------------------------------------------'
       
     end subroutine test_calc_mu_bounds
-    
     
 !===============================================================================
 ! TEST_CALC_E_BOUNDS Tests the calculation of the energy integration points 
@@ -970,6 +1168,7 @@ program test_scattdata
       allocate(bins_ref  (2, NEbins - 1))
       
       ! First test linear interpolation
+      write(*,*) 'Testing Linear Interpolation'
       INTT = LINEAR_LINEAR
       ! Set reference solution
       bins_ref(MU_LO, :) = (/0, 0, 2, 2/)
@@ -988,6 +1187,7 @@ program test_scattdata
       end if
       
       ! Test Histogram interpolation.
+      write(*,*) 'Testing Histogram Interpolation'
       INTT = HISTOGRAM
       ! Set reference solution
       bins_ref(MU_LO, :) = (/0, 0, 2, 2/)

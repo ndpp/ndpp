@@ -511,14 +511,14 @@ module scattdata_header
       real(8), intent(in)  :: mu(:)         ! tabular mu points
       type(DistEnergy), pointer, intent(in) :: edist    ! My energy dist
       real(8), allocatable, intent(inout)   :: Eouts(:) ! Energy out grid @ Ein
-      integer,  intent(inout)               :: INTT     ! Energy out INTT grid
+      integer, intent(inout)                :: INTT     ! Energy out INTT grid
       real(8), intent(inout) :: distro(:,:) ! resultant distro (pts x NEout)
       
       real(8), pointer :: data(:) => null() ! Shorthand for adist % data
       integer :: lcin, lc     ! Locations inside edist % data
       integer :: idata, idata_prev ! Loop counters
       integer :: imu          ! mu loop indices
-      integer :: iEout, NEout ! outgoing loop indices and number of points
+      integer :: iEout        ! outgoing loop indices and number of points
       integer :: interp, NP   ! Tabular format data (interp type and # pts)
       real(8) :: r            ! Interpolation parameter
       integer :: NR, NE       ! edist % data navigation information
@@ -527,28 +527,35 @@ module scattdata_header
       data => edist % data  
       
       NR = int(data(1))
+      if (NR > 0) then
+        message = "Multiple interpolation regions not supported while &
+             &attempting to sample Kalbach-Mann distribution."
+        call fatal_error()
+      end if
       NE = int(data(2 + 2*NR))
       
-      lc = int(data(2 + 2 * NR + NE + iE)) ! start of LDAT for iE
-      NEout = int(data(lc + 2))
-      allocate(Eouts(NEout))
-      Eouts = data(lc + 2 + 1 : lc + 2 + NP)
+      lc = int(data(2 + 2*NR + NE + iE)) ! start of LDAT for iE
       
       ! determine type of interpolation
       INTT = int(edist % data(lc + 1))
       if (INTT > 10) INTT = mod(INTT,10)
       
+      ! Get number of outgoing energy points at Ein
+      NP = int(data(lc + 2))
+      allocate(Eouts(NP))
+      Eouts = data(lc + 2 + 1 : lc + 2 + NP)
+      
       if (edist % law  == 44) then
         lc = lc + 2
-        do iEout = 1, NEout
-          KMR = data(lc + 3 * NEout + iEout)
-          KMA = data(lc + 4 * NEout + iEout)
+        do iEout = 1, NP
+          KMR = data(lc + 3 * NP + iEout)
+          KMA = data(lc + 4 * NP + iEout)
           KMconst = 0.5_8 * KMA / sinh(KMA)
           distro(:, iEout) = KMconst * (cosh(KMA * mu(:)) + KMR * sinh(KMA * mu(:)))
         end do
       else if (edist % law  == 61) then
         lcin = lc + 2
-        do iEout = 1, NEout
+        do iEout = 1, NP
           lc = int(data(lcin + 3*NP + iEout))
           ! Check if isotropic
           if (lc == 0) then
