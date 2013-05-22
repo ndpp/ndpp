@@ -644,12 +644,9 @@ module scattdata_header
       
       mu_bins = size(data, dim = 1)
       
-      ! Calculate the effective mass ratio
-      if (Q /= ZERO) then
-        R = awr * sqrt(ONE - (awr + ONE) * Q / (awr * Ein))
-      else 
-        R = awr
-      end if
+      ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
+      R = sqrt(awr * awr  * (ONE + Q * (awr + ONE) / (awr * Ein)))
+
       Rinv = ONE / R
       R2   = R * R
       

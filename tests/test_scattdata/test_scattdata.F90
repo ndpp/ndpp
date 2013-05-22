@@ -25,6 +25,8 @@ program test_scattdata
   ! Test convert_file6 routine
   call test_convert_file6()
   
+  ! Test cm2lab
+  call test_cm2lab()
   
   ! Test calc_mu_bounds
   call test_calc_mu_bounds()
@@ -1113,6 +1115,103 @@ program test_scattdata
       nullify(edist)
       
     end subroutine test_convert_file6
+
+!===============================================================================
+! TEST_CM2LAB Tests the conversion of a CM distro to a lab one.
+!===============================================================================
+
+    subroutine test_cm2lab()
+      real(8)              :: awr             ! Atomic Weight Ratio
+      real(8)              :: Q               ! Binding Energy of reaction
+      real(8)              :: Ein             ! Incoming energy
+      real(8), allocatable :: mu(:)           ! Angular grid
+      real(8), allocatable :: distro(:,:)     ! The distribution to convert
+      real(8), allocatable :: distro_ref(:,:) ! The reference sol'n
+      real(8)              :: dmu             ! delta-mu
+      integer              :: num_pts         ! Number of angular pts
+      integer              :: NP              ! Number of energy grid
+      integer              :: i               ! loop counter
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing cm2lab'
+      write(*,*)
+      
+      ! In this test we will take an angular distribution and convert it to CM
+      ! for the cases of R > 1 and R < 1.  To properly test the presence of
+      ! multiple Eout distributions, we will include an isotropic and linear
+      ! distribution.
+      
+      ! Set the storage grid
+      num_pts = 5
+      allocate(mu(num_pts))
+      dmu = TWO / real(num_pts - 1, 8)
+      do i = 1, num_pts - 1
+        mu(i) = -ONE + real(i - 1, 8) * dmu
+      end do
+      ! Set the end point to exactly ONE
+      NP = 2
+      mu(num_pts) = ONE
+      allocate(distro(num_pts, NP))
+      allocate(distro_ref(num_pts, NP))
+      
+      ! Set the center-of-mass distribution in distro
+      distro(:, 1) = 0.5_8
+      distro(:, 2) = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
+      
+      ! Set Ein, will keep it a constant throughout this test.
+      Ein = ONE
+      
+      ! First test R > 1 (this case will have R = awr = 235)
+      write(*,*) 'Testing R > 1'
+      awr = 235.0_8
+      Q = ZERO
+      distro_ref(:, 1) = (/0.495753734721593_8, 0.497871208695558_8, &
+        0.499995473044242_8, 0.502126527844494_8, 0.504264373019466_8/)
+      distro_ref(:, 2) = (/ZERO, 0.247348344060518_8, 0.497867832733415_8, &
+        0.751585555468395_8, 1.00852874603893_8/)
+      call cm2lab(awr, Q, Ein, mu, distro)
+      ! Check results
+      if ((any(abs(distro(:,1) - distro_ref(:,1)) > 1.0E-7_8)) .or. &
+        (any(abs(distro(:,2) - distro_ref(:,2)) > 1.0E-4_8))) then
+        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R > 1)'
+        write(*,*) distro(:,1)
+        write(*,*) distro_ref(:,1)
+        write(*,*) abs(distro(:,1)-distro_ref(:,1))
+        write(*,*) distro(:,2)
+        write(*,*) distro_ref(:,2)
+        write(*,*) distro(:,2)-distro_ref(:,2)
+        stop 10
+      end if
+      
+      ! Test R < 1
+      write(*,*) 'Testing R < 1'
+      awr = 0.9_8
+      Q = ZERO
+      distro_ref(:, 1) = (/ZERO, ZERO, ZERO, 1.25864983357665_8, &
+        2.22839506172840_8/)
+      distro_ref(:, 2) = (/ZERO, ZERO, ZERO, 0.381055519879540_8, &
+        4.45679012345679_8/)
+      call cm2lab(awr, Q, Ein, mu, distro)
+      ! Check results
+      if ((any(abs(distro(:,1) - distro_ref(:,1)) > 1.0E-7_8)) .or. &
+        (any(abs(distro(:,2) - distro_ref(:,2)) > 1.0E-4_8))) then
+        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R > 1)'
+        write(*,*) distro(:,1)
+        write(*,*) distro_ref(:,1)
+        write(*,*) abs(distro(:,1)-distro_ref(:,1))
+        write(*,*) distro(:,2)
+        write(*,*) distro_ref(:,2)
+        write(*,*) distro(:,2)-distro_ref(:,2)
+        stop 10
+      end if
+      
+      
+      write(*,*)
+      write(*,*) 'cm2lab Passed!'
+      write(*,*) '---------------------------------------------------'
+      
+    end subroutine test_cm2lab
 
 !===============================================================================
 ! TEST_CALC_MU_BOUNDS Tests the calculation of the angular boundary 
