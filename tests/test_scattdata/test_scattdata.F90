@@ -830,13 +830,13 @@ program test_scattdata
       edist => myedist
       
       ! Set the law-independent information
-      NR = ZERO
-      NEin = TWO
+      NR = 0
+      NEin = 2
       allocate(Ein(NEin))
       Ein = (/ONE, TWO/)
       allocate(P(NEin))
       P = ONE
-      NPEout = TWO
+      NPEout = 2
       allocate(Eout(NPEout))
       Eout = (/0.5_8, ONE/)
       allocate(PDF(NPEout))
@@ -873,7 +873,9 @@ program test_scattdata
       allocate(L(NEin))
       L = (/6.0_8, 18.0_8/)
       INTTp = 1
+      allocate(R(NPEout))
       R = (/ONE, ZERO/)
+      allocate(A(NPEout))
       A = (/ONE, 0.5_8/)
       ! allocate edist % data to ((3+2+NR+NEin + 2*(2+5*NPEout)))
       allocate(edist % data((3+2+NR+NEin + 2*(2+5*NPEout))))
