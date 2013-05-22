@@ -520,9 +520,13 @@ module scattdata_header
       integer :: imu          ! mu loop indices
       integer :: iEout        ! outgoing loop indices and number of points
       integer :: interp, NP   ! Tabular format data (interp type and # pts)
+      integer :: NPang        ! Number of angular points
       real(8) :: r            ! Interpolation parameter
       integer :: NR, NE       ! edist % data navigation information
       real(8) :: KMR, KMA, KMconst ! Various data for Kalbach-Mann
+      
+      ! Exit if using an unsupported law
+      if ((edist % law /= 44) .and. (edist % law /= 61)) return
       
       data => edist % data  
       
@@ -564,22 +568,22 @@ module scattdata_header
           end if
           
           interp = int(data(lc + 1))
-          NP = int(data(lc + 2))
+          NPang = int(data(lc + 2))
           lc = lc + 3
           
           ! Calculate a PDF value for each mu pt.
           if (interp == HISTOGRAM) then
             idata_prev = lc
             do imu = 1, size(mu)
-              do idata = idata_prev , lc + NP -1
+              do idata = idata_prev , lc + NPang -1
                 if ((data(idata) - mu(imu)) > FP_PRECISION) then
                   ! Found a match, take value at mu(imu - 1)
-                  distro(imu, iEout) = data(idata + NP - 1)
+                  distro(imu, iEout) = data(idata + NPang - 1)
                   idata_prev = idata
                   exit
                 else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
                   ! Found a match, take value at mu(imu)
-                  distro(imu, iEout) = data(idata + NP)
+                  distro(imu, iEout) = data(idata + NPang)
                   idata_prev = idata
                   exit
                 end if
@@ -588,17 +592,17 @@ module scattdata_header
           else if (interp == LINEAR_LINEAR) then
             idata_prev = lc
             do imu = 1, size(mu)
-              do idata = idata_prev, lc + NP -1
+              do idata = idata_prev, lc + NPang -1
                 if ((data(idata) - mu(imu)) > FP_PRECISION) then
                   ! Found a match, interpolate value
                   r = (mu(imu) - data(idata -1)) / (data(idata) - data(idata-1))
-                  distro(imu, iEout) = data(idata + NP - 1) + r * &
-                    (data(idata + NP) - data(idata - 1 + NP))
+                  distro(imu, iEout) = data(idata + NPang - 1) + r * &
+                    (data(idata + NPang) - data(idata - 1 + NPang))
                   idata_prev = idata
                   exit
                 else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
                   ! Found a match, take value at mu(imu)
-                  distro(imu, iEout) = data(idata + NP)
+                  distro(imu, iEout) = data(idata + NPang)
                   idata_prev = idata
                   exit
                 end if

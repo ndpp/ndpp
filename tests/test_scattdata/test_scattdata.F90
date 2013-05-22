@@ -815,10 +815,11 @@ program test_scattdata
       integer                   :: i           ! loop counter
       
       ! Law 44/61 data holders
-      integer :: NR, NEin, INTTp, NPEout, NPang, JJ 
+      integer :: NR, NEin, INTTp, NPEout
       real(8), allocatable :: Ein(:), P(:), L(:), Eout(:), PDF(:), CDF(:), &
-                              LC(:,:), R(:), A(:), CSOUT(:), PDFang(:), &
-                              CDFang(:)
+                              LC(:,:), R(:), A(:), CSOUT(:,:), PDFang(:,:), &
+                              CDFang(:,:)
+      integer, allocatable :: NPang(:), JJ(:)
       
       write(*,*)
       write(*,*) '---------------------------------------------------'
@@ -944,11 +945,11 @@ program test_scattdata
       deallocate(edist % data)
       
       ! Test Law 61
-      write(*,*) 'Testing Law 61'
       ! Set the things which dont depend on type of LDAT
       edist % law = 61
       INTTp = 1
       ! Start with isotropic
+      write(*,*) 'Testing Law 61, Isotropic'
       L = (/6.0_8, 16.0_8/)
       allocate(LC(NPEout, NEin))
       LC(:, 1) = (/0, 0/) ! LC == 0 signifies isotropic
@@ -984,11 +985,131 @@ program test_scattdata
       deallocate(Eouts)
       distro = ZERO
       INTT = -1
+      deallocate(edist % data)
       
+      ! Law 61, tabular 
+      ! for iE = 1, will use isotropic hist and lin-lin distros
+      ! for iE = 2, will use linear hist and lin-lin distros
+      write(*,*) 'Testing Law 61, Tabular'
+      allocate(JJ(NPEout))
+      JJ = (/HISTOGRAM, LINEAR_LINEAR/)
+      allocate(NPang(NPEout))
+      NPang = (/2, 11/)
+      allocate(CSOUT(NPang(2),NPEout))
+      CSOUT = ZERO
+      CSOUT(:, 1) = (/-ONE, ONE/)
+      CSOUT(:, 2) = (/-ONE, -0.8_8, -0.6_8, -0.4_8, -0.2_8, ZERO, 0.2_8, &
+                      0.4_8, 0.6_8, 0.8_8, ONE/)
+      allocate(PDFang(NPang(2),NPEout))
+      PDFang = ZERO
+      PDFang(:, 1) = (/0.5_8, 0.5_8/)
+      PDFang(:, 2) = (/ZERO, 0.1_8, 0.2_8, 0.3_8, 0.4_8, 0.5_8, &
+                       0.6_8, 0.7_8, 0.8_8, 0.9_8, ONE/)
+      allocate(CDFang(NPang(2),NPEout))
+      CDFang = ZERO ! Values are unnecessary, just need it to take up space.
+      ! Set L
+      L = (/6.0_8, 32.0_8/)
+      ! Set LC
+      LC(:, 1) = (/16.0_8, 24.0_8/)
+      LC(:, 2) = (/42.0_8, 77.0_8/)
+      ! Build edist % data
+      allocate(edist % data(166))
+      edist % data = (/real(NR,8), real(NEin,8), Ein, L, &
+        real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, LC(:, 1), &
+        real(JJ(1),8), real(NPang(1),8), CSOUT(1:NPang(1),1), &
+        PDFang(1:NPang(1),1), CDFang(1:NPang(1),1), &
+        real(JJ(2),8), real(NPang(1),8), CSOUT(1:NPang(1),1), &
+        PDFang(1:NPang(1),1), CDFang(1:NPang(1),1), &
+        real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, LC(:, 2), &
+        real(JJ(1),8), real(NPang(2),8), CSOUT(:,2), PDFang(:,2), CDFang(:,2), &
+        real(JJ(2),8), real(NPang(2),8), CSOUT(:,2), PDFang(:,2), CDFang(:,2)/)
+      
+      ! Test the isotropic values
+      iE = 1
+      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      ! Check results
+      if ((any(distro(:,1) /= 0.5_8)) .or. (any(distro(:,2) /= 0.5_8))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Law 61 Iso)'
+        write(*,*) distro
+        stop 10
+      end if
+      if (any(Eouts /= Eout)) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Eouts Values - Law 61 Iso)'
+        write(*,*) Eouts
+        write(*,*) Eout
+        stop 10
+      end if
+      if (INTT /= INTTp) then
+        write(*,*) 'convert_file6 FAILED! (Invalid INTT Value - Law 61 Iso)'
+        write(*,*) INTT, INTTp
+        stop 10
+      end if
+      ! Reset values
+      deallocate(Eouts)
+      distro = ZERO
+      INTT = -1
+      
+      ! Test the linear values
+      iE = 2
+      distro_ref(:, 1) = (/ZERO, 0.2_8, 0.5_8, 0.7_8, ONE/)
+      distro_ref(:, 2) = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
+      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      ! Check results
+      if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
+        (any((distro(:,2) - distro_ref(:,2)) > TEST_TOL))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Law 61 Lin)'
+        write(*,*) distro(:,1)
+        write(*,*) distro_ref(:,1)
+        write(*,*) distro(:,2)
+        write(*,*) distro_ref(:,2)
+        stop 10
+      end if
+      if (any(Eouts /= Eout)) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Eouts Values - Law 61 Lin)'
+        write(*,*) Eouts
+        write(*,*) Eout
+        stop 10
+      end if
+      if (INTT /= INTTp) then
+        write(*,*) 'convert_file6 FAILED! (Invalid INTT Value - Law 61 Lin)'
+        write(*,*) INTT, INTTp
+        stop 10
+      end if
+      ! Reset values
+      deallocate(Eouts)
+      distro = -ONE
+      INTT = -1
+      
+      ! Invalid Law
+      write(*,*) 'Testing Invalid Law'
+      edist % law = 7
+      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      ! Check results
+      if ((any(distro(:,1) /= -ONE)) .or. (any(distro(:,2) /= -ONE))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Invalid Law)'
+        write(*,*) distro(:,1)
+        write(*,*) distro_ref(:,1)
+        write(*,*) distro(:,2)
+        write(*,*) distro_ref(:,2)
+        stop 10
+      end if
+      if (allocated(Eouts)) then
+        write(*,*) 'convert_file6 FAILED! (Allocated Eouts Values - Invalid Law)'
+        stop 10
+      end if
+      if (INTT /= -1) then
+        write(*,*) 'convert_file6 FAILED! (Invalid INTT Value - Invalid Law)'
+        write(*,*) INTT
+        stop 10
+      end if      
       
       write(*,*)
       write(*,*) 'convert_file6 Passed!'
       write(*,*) '---------------------------------------------------'
+      
+      call edist % clear()
+      nullify(edist)
+      
     end subroutine test_convert_file6
 
 !===============================================================================
