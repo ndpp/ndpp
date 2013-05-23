@@ -1131,7 +1131,7 @@ program test_scattdata
       integer              :: num_pts         ! Number of angular pts
       integer              :: NP              ! Number of energy grid
       integer              :: i               ! loop counter
-      integer              :: max_loc         ! loc of max error for reporting
+      integer              :: max_loc         ! loc of 1st valid ref value
       
       write(*,*)
       write(*,*) '---------------------------------------------------'
@@ -1152,6 +1152,7 @@ program test_scattdata
       dmu = TWO / real(num_pts - 1, 8)
       do i = 1, num_pts
         mu(i) = -ONE + real(i - 1, 8) * dmu
+        if (i == num_pts) mu(i) = ONE
         ! distro(:, 1) is isotropic
         distro(i, 1) = 0.5_8
         ! Set distro(:, 1) ref soln for R > 1 (from sage workbook)
@@ -1167,7 +1168,7 @@ program test_scattdata
             1.00083369446749_8 * mu(i) + &
             0.500416847233746_8 * sqrt((mu(i)*mu(i)) - 0.00166530611099991_8)
         else
-          distro_ref(i, 1, 2) = ZERO
+          max_loc = i
         end if
         
         ! distro(:, 2) is linear with mu
@@ -1187,16 +1188,16 @@ program test_scattdata
             sqrt((mu(i)*mu(i)) - 0.00166530611099991_8) + &
             2.00166738893498_8*mu(i) + 1.00083369446749_8*sqrt((mu(i)*mu(i)) - &
             0.0016653061109999_8))
-        else
-          distro_ref(i, 2, 2) = ZERO
         end if
-        
       end do
+      
+      distro_ref(1:max_loc, 1, 2) = ZERO
+      distro_ref(1:max_loc, 2, 2) = ZERO
       
       ! Set Ein, will keep it a constant throughout this test.
       Ein = ONE
       
-      ! First test R > 1 (this case will have R = awr = 235)
+      ! Test R > 1
       write(*,*) 'Testing R > 1'
       awr = 235.0_8
       Q = ZERO
@@ -1216,11 +1217,22 @@ program test_scattdata
       Q = ZERO
       call cm2lab(awr, Q, Ein, mu, distro)
       ! Check results
-      if ((any(abs(distro(:,1) - distro_ref(:,1,2)) > 1.0E-6_8)) .or. &
+      write(*,*) mu(7:)
+      write(*,*)
+      write(*,*) distro(7:,1)
+      write(*,*)
+      write(*,*) distro_ref(7:,1,2)
+      write(*,*)
+      write(*,*) distro(7:,2)
+      write(*,*)
+      write(*,*) distro_ref(7:,2,2)
+      if ((any(abs(distro(:,1) - distro_ref(:,1,2)) > 1.0E-3_8)) .or. &
         (any(abs(distro(:,2) - distro_ref(:,2,2)) > 1.0E-3_8))) then
         write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1)'
-        write(*,*) maxval(abs(distro(:,1)-distro_ref(:,1,2)))
-        write(*,*) maxval(abs(distro(:,2)-distro_ref(:,2,2)))
+        write(*,*) maxval(abs(distro(:,1)-distro_ref(:,1,2))), &
+          mu(maxloc(abs(distro(:,1)-distro_ref(:,1,2))))
+        write(*,*) maxval(abs(distro(:,2)-distro_ref(:,2,2))), &
+          mu(maxloc(abs(distro(:,2)-distro_ref(:,2,2))))
         stop 10
       end if
       
