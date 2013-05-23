@@ -1186,12 +1186,12 @@ program test_scattdata
       
       ! Test R < 1
       write(*,*) 'Testing R < 1'
-      awr = 0.9_8
+      awr = 0.999167_8
       Q = ZERO
-      distro_ref(:, 1) = (/ZERO, ZERO, ZERO, 1.25864983357665_8, &
-        2.22839506172840_8/)
-      distro_ref(:, 2) = (/ZERO, ZERO, ZERO, 0.381055519879540_8, &
-        4.45679012345679_8/)
+      distro_ref(:, 1) = (/ZERO, ZERO, ZERO, 1.00083648862876_8, &
+        2.00166773645822_8/)
+      distro_ref(:, 2) = (/ZERO, ZERO, ZERO, 0.499165610488964_8, &
+        4.00333547291643_8/)
       call cm2lab(awr, Q, Ein, mu, distro)
       ! Check results
       if ((any(abs(distro(:,1) - distro_ref(:,1)) > 1.0E-7_8)) .or. &
