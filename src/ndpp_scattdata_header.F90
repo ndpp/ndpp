@@ -641,6 +641,7 @@ module scattdata_header
       integer :: imu, imu_l, iEout      ! mu indices, outgoing energy index
       real(8) :: interp                 ! Interpolation parameter
       integer :: mu_bins                ! Number of mu bins in dim 1 of data
+      real(8) :: mu_min                 ! Minimum value of mu for R < 1
       
       mu_bins = size(data, dim = 1)
       
@@ -650,44 +651,121 @@ module scattdata_header
       Rinv = ONE / R
       R2   = R * R
       
-      ! Calculate the lower bounds of integration (-1 for everything besides
-      ! H-1)
-      if (R < ONE) then 
-        !  Since mu(imu) = -1 + (i-1)*dmu, imu_min = ceiling((mu_min + 1)/dmu+1)
-        imu_min = int(ceiling((sqrt(ONE - R2) + ONE)/(mu(2) - mu(1)) + ONE))
-      else
-        imu_min = 1
-      end if
+      ! Hydrogen requires a separate calculation path since the results would be
+      ! complex with the traditional path
       
-      ! Calculate the lab (mu) and CM (mu_l) mu grid points.
-      do imu = 1, mu_bins
-        mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
-      end do
-      
-      do iEout = 1, size(data, dim = 2)
-        ! Convert the CM distro to the laboratory system
-        do imu = 1, mu_bins
-          tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
-          tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
-            mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
+      if (R2 < ONE) then
+        ! Hydrogen path (we test R2 here since it is already in a register and
+        ! is needed immediately anyways
+        
+        ! Find the minimum value of mu and the index just above where it would
+        ! sit
+        mu_min = sqrt(ONE - R2)
+        ! Since mu(imu) = -1 + (i-1)*dmu, imu_min = ceiling((mu_min + 1)/dmu+1)
+        imu_min = int(ceiling((mu_min + ONE)/(mu(2) - mu(1)) + ONE))
+        
+        ! Calculate the lab (mu) and CM (mu_l) mu grid points.
+        mu_l(1 : imu_min - 2) = ZERO
+        ! Set the imu_min - 1 value so that we can properly
+        ! interpolate in the do iEout loop
+        mu_l(imu_min - 1) = mu_min 
+        do imu = imu_min, mu_bins
+          mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
         end do
         
-        ! Now put this back on to the original mu grid.
-        ! First begin with the points which are impossible
-        do imu = 1, imu_min - 1
-          data(imu, iEout) = ZERO
+        do iEout = 1, size(data, dim = 2)
+          ! Convert the CM distro to the laboratory system
+          tempdistro(1 : imu_min - 1) = ZERO
+          do imu = imu_min, mu_bins
+            tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
+            tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
+              mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
+          end do
+          
+          ! Now put this back on to the original mu grid.
+          do imu = imu_min , mu_bins - 1
+            imu_l = binary_search(mu_l(imu_min-1:), &
+              size(mu_l(imu_min-1:)), mu(imu)) + (imu_min - 2)
+              
+            ! Get the interpolation parameter
+            interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
+            data(imu, iEout) = tempdistro(imu_l) + interp * &
+              (tempdistro(imu_l + 1) - tempdistro(imu_l))
+          end do
+          data(mu_bins, iEout) = tempdistro(mu_bins)
+          
+          ! Now zero out all the others (below imu_min)
+          data(1 : imu_min - 1, iEout) = ZERO
         end do
-        ! Move on to the rest, which just need to have their mu values
-        ! found on the mu_l grid. We will then need to interpolate to set data.
-        do imu = imu_min , mu_bins - 1
-          imu_l = binary_search(mu_l, mu_bins, mu(imu))
-          ! Get the interpolation parameter
-          interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
-          data(imu, iEout) = tempdistro(imu_l) + interp * &
-            (tempdistro(imu_l + 1) - tempdistro(imu_l))
+        
+      else
+        ! Everything else
+        
+        ! Calculate the lab (mu) and CM (mu_l) mu grid points.
+        do imu = 1, mu_bins
+          mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
         end do
-        data(mu_bins, iEout) = tempdistro(mu_bins)
-      end do
+        
+        do iEout = 1, size(data, dim = 2)
+          ! Convert the CM distro to the laboratory system
+          do imu = 1, mu_bins
+            tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
+            tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
+              mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
+          end do
+          
+          ! Now put this back on to the original mu grid.
+          do imu = 1 , mu_bins - 1
+            imu_l = binary_search(mu_l, mu_bins, mu(imu))
+            ! Get the interpolation parameter
+            interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
+            data(imu, iEout) = tempdistro(imu_l) + interp * &
+              (tempdistro(imu_l + 1) - tempdistro(imu_l))
+          end do
+          data(mu_bins, iEout) = tempdistro(mu_bins)
+        end do
+        
+      end if
+      
+      
+      ! Calculate the lower bounds of integration (-1 for everything besides
+      ! H-1)
+!~       if (R < ONE) then 
+!~         !  Since mu(imu) = -1 + (i-1)*dmu, imu_min = ceiling((mu_min + 1)/dmu+1)
+!~         imu_min = int(ceiling((sqrt(ONE - R2) + ONE)/(mu(2) - mu(1)) + ONE))
+!~       else
+!~         imu_min = 1
+!~       end if
+!~       
+!~       ! Calculate the lab (mu) and CM (mu_l) mu grid points.
+!~       do imu = 1, mu_bins
+!~         mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
+!~       end do
+!~       
+!~       do iEout = 1, size(data, dim = 2)
+!~         ! Convert the CM distro to the laboratory system
+!~         do imu = 1, mu_bins
+!~           tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
+!~           tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
+!~             mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
+!~         end do
+!~         
+!~         ! Now put this back on to the original mu grid.
+!~         ! First begin with the points which are impossible
+!~         do imu = 1, imu_min - 1
+!~           data(imu, iEout) = ZERO
+!~         end do
+!~         ! Move on to the rest, which just need to have their mu values
+!~         ! found on the mu_l grid. We will then need to interpolate to set data.
+!~         do imu = imu_min , mu_bins - 1
+!~           imu_l = binary_search(mu_l, mu_bins, mu(imu))
+!~           ! Get the interpolation parameter
+!~           interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
+!~           data(imu, iEout) = tempdistro(imu_l) + interp * &
+!~             (tempdistro(imu_l + 1) - tempdistro(imu_l))
+!~         end do
+!~         data(mu_bins, iEout) = tempdistro(mu_bins)
+!~       end do
       
     end subroutine cm2lab
 

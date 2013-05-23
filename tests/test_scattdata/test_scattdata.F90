@@ -1196,13 +1196,13 @@ program test_scattdata
       ! Check results
       if ((any(abs(distro(:,1) - distro_ref(:,1)) > 1.0E-7_8)) .or. &
         (any(abs(distro(:,2) - distro_ref(:,2)) > 1.0E-4_8))) then
-        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R > 1)'
+        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1)'
         write(*,*) distro(:,1)
         write(*,*) distro_ref(:,1)
-        write(*,*) abs(distro(:,1)-distro_ref(:,1))
+!~         write(*,*) abs(distro(:,1)-distro_ref(:,1))
         write(*,*) distro(:,2)
         write(*,*) distro_ref(:,2)
-        write(*,*) distro(:,2)-distro_ref(:,2)
+!~         write(*,*) distro(:,2)-distro_ref(:,2)
         stop 10
       end if
       
