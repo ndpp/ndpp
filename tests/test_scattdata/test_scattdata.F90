@@ -1180,7 +1180,7 @@ program test_scattdata
         write(*,*) abs(distro(:,1)-distro_ref(:,1))
         write(*,*) distro(:,2)
         write(*,*) distro_ref(:,2)
-        write(*,*) distro(:,2)-distro_ref(:,2)
+        write(*,*) abs(distro(:,2)-distro_ref(:,2))
         stop 10
       end if
       
