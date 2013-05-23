@@ -1126,11 +1126,12 @@ program test_scattdata
       real(8)              :: Ein             ! Incoming energy
       real(8), allocatable :: mu(:)           ! Angular grid
       real(8), allocatable :: distro(:,:)     ! The distribution to convert
-      real(8), allocatable :: distro_ref(:,:) ! The reference sol'n
+      real(8), allocatable :: distro_ref(:,:,:) ! The reference sol'n
       real(8)              :: dmu             ! delta-mu
       integer              :: num_pts         ! Number of angular pts
       integer              :: NP              ! Number of energy grid
       integer              :: i               ! loop counter
+      integer              :: max_loc         ! loc of max error for reporting
       
       write(*,*)
       write(*,*) '---------------------------------------------------'
@@ -1142,22 +1143,55 @@ program test_scattdata
       ! multiple Eout distributions, we will include an isotropic and linear
       ! distribution.
       
-      ! Set the storage grid
-      num_pts = 5
-      allocate(mu(num_pts))
-      dmu = TWO / real(num_pts - 1, 8)
-      do i = 1, num_pts - 1
-        mu(i) = -ONE + real(i - 1, 8) * dmu
-      end do
-      ! Set the end point to exactly ONE
+      ! Set the storage grid and distro values
+      num_pts = 11
       NP = 2
-      mu(num_pts) = ONE
+      allocate(mu(num_pts))
       allocate(distro(num_pts, NP))
-      allocate(distro_ref(num_pts, NP))
-      
-      ! Set the center-of-mass distribution in distro
-      distro(:, 1) = 0.5_8
-      distro(:, 2) = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
+      allocate(distro_ref(num_pts, NP, 2))
+      dmu = TWO / real(num_pts - 1, 8)
+      do i = 1, num_pts
+        mu(i) = -ONE + real(i - 1, 8) * dmu
+        ! distro(:, 1) is isotropic
+        distro(i, 1) = 0.5_8
+        ! Set distro(:, 1) ref soln for R > 1 (from sage workbook)
+        distro_ref(i, 1, 1) = 0.00212765957446809_8*(mu(i)*mu(i)) / &
+          sqrt((mu(i)*mu(i)) + 55224.0_8) + &
+          0.00425531914893617_8*mu(i) + 0.00212765957446809_8 * &
+          sqrt((mu(i)*mu(i)) + 55224.0_8)
+
+        ! Set distro(:, 1) reference solution for R < 1(comes from sage workbook)
+        if ((mu(i)*mu(i)) > 0.00166530611099991_8) then
+          distro_ref(i, 1, 2) = 0.500416847233746_8 * (mu(i)*mu(i)) / &
+            sqrt((mu(i)*mu(i)) - 0.00166530611099991_8) + &
+            1.00083369446749_8 * mu(i) + &
+            0.500416847233746_8 * sqrt((mu(i)*mu(i)) - 0.00166530611099991_8)
+        else
+          distro_ref(i, 1, 2) = ZERO
+        end if
+        
+        ! distro(:, 2) is linear with mu
+        distro(i, 2) = 0.5_8 * (mu(i) + ONE)
+        ! Set distro(:, 2) ref soln for R > 1 (from sage workbook)
+        distro_ref(i, 2, 1) = (0.00212765957446809_8*(mu(i)*mu(i)) + &
+          0.00212765957446809_8*sqrt((mu(i)*mu(i)) + 55224.0_8)*mu(i) + &
+          0.497872340425532_8)*(0.00425531914893617_8*(mu(i)*mu(i)) / &
+          sqrt((mu(i)*mu(i)) + 55224.0_8) + &
+          0.00851063829787234_8*mu(i) + 0.00425531914893617_8 * &
+          sqrt((mu(i)*mu(i)) + 55224.0_8))
+        ! Set distro(:, 2) reference solution (comes from sage workbook)
+        if ((mu(i)*mu(i)) > 0.00166530611099991_8) then
+          distro_ref(i, 2, 2) = (0.500416847233746_8*(mu(i)*mu(i)) + &
+            0.500416847233746_8*sqrt((mu(i)*mu(i)) - 0.00166530611099991_8) * &
+            mu(i) - 0.000416847233745687_8)*(1.00083369446749_8*(mu(i)*mu(i)) / &
+            sqrt((mu(i)*mu(i)) - 0.00166530611099991_8) + &
+            2.00166738893498_8*mu(i) + 1.00083369446749_8*sqrt((mu(i)*mu(i)) - &
+            0.0016653061109999_8))
+        else
+          distro_ref(i, 2, 2) = ZERO
+        end if
+        
+      end do
       
       ! Set Ein, will keep it a constant throughout this test.
       Ein = ONE
@@ -1166,21 +1200,13 @@ program test_scattdata
       write(*,*) 'Testing R > 1'
       awr = 235.0_8
       Q = ZERO
-      distro_ref(:, 1) = (/0.495753734721593_8, 0.497871208695558_8, &
-        0.499995473044242_8, 0.502126527844494_8, 0.504264373019466_8/)
-      distro_ref(:, 2) = (/ZERO, 0.247348344060518_8, 0.497867832733415_8, &
-        0.751585555468395_8, 1.00852874603893_8/)
       call cm2lab(awr, Q, Ein, mu, distro)
       ! Check results
-      if ((any(abs(distro(:,1) - distro_ref(:,1)) > 1.0E-7_8)) .or. &
-        (any(abs(distro(:,2) - distro_ref(:,2)) > 1.0E-4_8))) then
+      if ((any(abs(distro(:,1) - distro_ref(:,1,1)) > 1.0E-6_8)) .or. &
+        (any(abs(distro(:,2) - distro_ref(:,2,1)) > 1.0E-3_8))) then
         write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R > 1)'
-        write(*,*) distro(:,1)
-        write(*,*) distro_ref(:,1)
-        write(*,*) abs(distro(:,1)-distro_ref(:,1))
-        write(*,*) distro(:,2)
-        write(*,*) distro_ref(:,2)
-        write(*,*) abs(distro(:,2)-distro_ref(:,2))
+        write(*,*) maxval(abs(distro(:,1)-distro_ref(:,1,1)))
+        write(*,*) maxval(abs(distro(:,2)-distro_ref(:,2,1)))
         stop 10
       end if
       
@@ -1188,21 +1214,13 @@ program test_scattdata
       write(*,*) 'Testing R < 1'
       awr = 0.999167_8
       Q = ZERO
-      distro_ref(:, 1) = (/ZERO, ZERO, ZERO, 1.00083648862876_8, &
-        2.00166773645822_8/)
-      distro_ref(:, 2) = (/ZERO, ZERO, ZERO, 0.499165610488964_8, &
-        4.00333547291643_8/)
       call cm2lab(awr, Q, Ein, mu, distro)
       ! Check results
-      if ((any(abs(distro(:,1) - distro_ref(:,1)) > 1.0E-7_8)) .or. &
-        (any(abs(distro(:,2) - distro_ref(:,2)) > 1.0E-4_8))) then
+      if ((any(abs(distro(:,1) - distro_ref(:,1,2)) > 1.0E-6_8)) .or. &
+        (any(abs(distro(:,2) - distro_ref(:,2,2)) > 1.0E-3_8))) then
         write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1)'
-        write(*,*) distro(:,1)
-        write(*,*) distro_ref(:,1)
-!~         write(*,*) abs(distro(:,1)-distro_ref(:,1))
-        write(*,*) distro(:,2)
-        write(*,*) distro_ref(:,2)
-!~         write(*,*) distro(:,2)-distro_ref(:,2)
+        write(*,*) maxval(abs(distro(:,1)-distro_ref(:,1,2)))
+        write(*,*) maxval(abs(distro(:,2)-distro_ref(:,2,2)))
         stop 10
       end if
       
