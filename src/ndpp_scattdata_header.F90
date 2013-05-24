@@ -674,13 +674,9 @@ module scattdata_header
         do iEout = 1, size(data, dim = 2)
           ! Convert the CM distro to the laboratory system
           do imu = 1, mu_bins
-!~             if (mu(imu) < -R) then
-!~               tempdistro(imu) = ZERO
-!~             else
               tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
               tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
                 mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
-!~             end if
           end do
           ! Now we put this tempdistro, which is on the mu_l grid, back on to the
           ! mu grid, which is what we want our output to be. This will be done
