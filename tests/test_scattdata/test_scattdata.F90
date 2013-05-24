@@ -1228,7 +1228,7 @@ program test_scattdata
       ! clean up
       call edist % clear()
       call adist % clear()
-      call mySD % clear()
+      call mySD  % clear()
       
     end subroutine test_convert_distro
 

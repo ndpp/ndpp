@@ -16,7 +16,6 @@ $(SRC_DIR)/ndpp_error.o \
 $(SRC_DIR)/ndpp_global.o \
 $(SRC_DIR)/interpolation.o \
 $(SRC_DIR)/ndpp_legendre.o \
-$(SRC_DIR)/ndpp_jacobian.o \
 $(SRC_DIR)/ndpp_output.o \
 $(SRC_DIR)/search.o \
 $(SRC_DIR)/string.o \

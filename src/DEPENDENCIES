@@ -73,11 +73,8 @@ ndpp_init.o: ndpp_global.o
 ndpp_init.o: ndpp_output.o
 ndpp_init.o: string.o
 
-ndpp_jacobian.o: ndpp_constants.o
-
 ndpp_legendre.o: ace_header.o
 ndpp_legendre.o: ndpp_constants.o
-ndpp_legendre.o: ndpp_jacobian.o
 ndpp_legendre.o: ndpp_error.o
 ndpp_legendre.o: ndpp_global.o
 

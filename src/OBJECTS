@@ -16,7 +16,6 @@ ndpp_constants.o \
 ndpp_error.o \
 ndpp_hdf5.o \
 ndpp_init.o \
-ndpp_jacobian.o \
 ndpp_legendre.o \
 ndpp_output.o \
 ndpp_scatt.o \
