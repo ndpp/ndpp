@@ -25,6 +25,9 @@ program test_scattdata
   ! Test convert_file6 routine
   call test_convert_file6()
   
+  ! Test convert_distro
+  call test_convert_distro()
+  
   ! Test cm2lab
   call test_cm2lab()
   
@@ -879,7 +882,6 @@ program test_scattdata
       R = (/ONE, ZERO/)
       allocate(A(NPEout))
       A = (/ONE, 0.5_8/)
-      ! allocate edist % data to ((3+2+NR+NEin + 2*(2+5*NPEout)))
       allocate(edist % data((3+2+NR+NEin + 2*(2+5*NPEout))))
       ! Set edist. The first Ein's R and A are twice the normal values so it is
       ! clear if we accidentally hit them.
@@ -1117,7 +1119,122 @@ program test_scattdata
     end subroutine test_convert_file6
 
 !===============================================================================
-! TEST_CM2LAB Tests the conversion of a CM distro to a lab one.
+! TEST_CONVERT_DISTRO Tests the functionality of scatt_convert_distro
+!===============================================================================
+
+    subroutine test_convert_distro()
+      type(ScattData)           :: mySD    ! Testing object
+      type(DistAngle), target   :: myadist ! adist to be pointed to (intel issue)
+      type(DistAngle), pointer  :: adist   ! My angle dist
+      type(DistEnergy), pointer :: edist   ! My energy dist
+      type(DistEnergy), target  :: myedist ! My energy dist
+      integer                   :: num_pts ! Number of angular pts in mu
+      real(8)                   :: dmu     ! delta-mu
+      integer                   :: NE      ! # incoming energy pts
+      integer                   :: i       ! Loop counter
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing convert_distro'
+      write(*,*)
+      
+      ! convert_distro simply takes a ScattData object and enters either 
+      ! convert_file6 or convert_file4 depending on the type of distribution
+      ! that is associated with it.
+      ! There are four code paths for this routine, which are envoked by the 
+      ! following situations: 
+      ! 1) an energy-angle distribution is passed
+      ! 2) an angle distribution is passed
+      ! 3) both energy-angle and angle distributions are passed 
+      ! 4) no distributions are passed.
+      ! 3) and 4) yield in fatal errors and therefore cant be tested here.
+      ! So we will test 1) and 2) by setting up edists and adists and ensuring
+      ! the correct routine was called. The validity of the convert_file* 
+      ! results does not need to be checked here since other unit tests fill
+      ! that role.
+      
+      ! Begin by setting up mySD
+      NE = 2
+      mySD % NE = NE
+      ! Allocate/Set mu and distro
+      num_pts = 5
+      allocate(mySD % mu(num_pts))
+      dmu = TWO / real(num_pts - 1, 8)
+      do i = 1, num_pts - 1
+        mySD % mu(i) = -ONE + real(i - 1, 8) * dmu
+      end do
+      ! Set the end point to exactly ONE
+      mySD % mu(num_pts) = ONE
+      allocate(mySD % distro(NE))
+      allocate(mySD % distro(1) % data(num_pts, 2))
+      allocate(mySD % distro(2) % data(num_pts, 2))
+      mySD % distro (1) % data = ZERO
+      mySD % distro (2) % data = ZERO
+      ! Set other info needed in mySD
+      allocate(mySD % Eouts(NE))
+      allocate(mySD % INTT(NE))
+      mySD % INTT = 0
+      ! Set the angular distribution info 
+      adist => myadist
+      adist % n_energy = NE
+      allocate(adist % energy(NE))
+      adist % energy(1) = ONE
+      adist % energy(2) = TWO
+      allocate(adist % type(NE))
+      allocate(adist % location(NE))
+      adist % type = ANGLE_ISOTROPIC
+      adist % location = 0
+      allocate(adist % data(1))
+      ! Set energy-angle distribution info
+      edist => myedist
+      edist % law = 44
+      allocate(edist % data(31))
+      edist % data = (/ZERO, TWO, ONE, TWO, 6.0_8, 18.0_8, ONE, TWO, 0.5_8, &    
+        ONE, 0.5_8, 0.5_8, ZERO, ONE, TWO, ZERO, TWO, ONE, ONE, TWO, 0.5_8, &
+        ONE, 0.5_8, 0.5_8, ZERO, ONE, ONE, ZERO, ONE, 0.5_8/)
+      
+      ! Test passing energy-angle distribution
+      write(*,*) 'Testing File 6 Distribution'
+      mySD % edist => edist
+      call mySD % convert_distro()
+      ! Check we got to convert_file6 by ensuring Eouts is not ZERO and INFINITY
+      ! as it would be for file 4
+      if (all(mySD % Eouts(1) % data(:) == (/ZERO, INFINITY/)) .and. &
+        all(mySD % Eouts(2) % data(:) == (/ZERO, INFINITY/))) then
+        write(*,*) 'convert_distro FAILED! (File 6)'
+        stop 10
+      end if
+      ! Reset the info
+      mySD % distro (1) % data = ZERO
+      mySD % distro (2) % data = ZERO
+      mySD % INTT = 0
+      deallocate(mySD % Eouts(1) % data, mySD % Eouts(2) % data)
+      nullify(mySD % edist)
+      
+      ! Test passing angle distribution
+      write(*,*) 'Testing File 4 Distribution'
+      mySD % adist => adist
+      call mySD % convert_distro()
+      ! Check we got to convert_file4 by ensuring Eouts are ZERO and INFINITY
+      if (all(mySD % Eouts(1) % data(:) /= (/ZERO, INFINITY/)) .and. &
+        all(mySD % Eouts(2) % data(:) /= (/ZERO, INFINITY/))) then
+        write(*,*) 'convert_distro FAILED! (File 4)'
+        stop 10
+      end if
+      
+      write(*,*)
+      write(*,*) 'convert_distro Passed!'
+      write(*,*) '---------------------------------------------------'
+      ! clean up
+      call edist % clear()
+      call adist % clear()
+      call mySD % clear()
+      
+    end subroutine test_convert_distro
+
+
+!===============================================================================
+! TEST_CM2LAB Tests the conversion of a CM distro to the lab frame
 !===============================================================================
 
     subroutine test_cm2lab()

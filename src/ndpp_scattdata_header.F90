@@ -239,6 +239,17 @@ module scattdata_header
       
       integer :: iE ! incoming energy grid index
       
+      if ((associated(this % edist)) .and. (associated(this % adist))) then
+        message = "Multiple distributions associated with this ScattData &
+          &object."
+        call fatal_error()
+      else if ((.not. associated(this % edist)) .and. &
+        (.not. associated(this % adist))) then
+        message = "No distribution associated with this ScattData &
+          &object."
+        call fatal_error()
+      end if
+      
       ! Step through each incoming energy value to do these calculations
       do iE = 1, this % NE
         if (associated(this % edist)) then
