@@ -1145,7 +1145,7 @@ program test_scattdata
       ! distribution.
       
       ! Set the storage grid and distro values
-      num_pts = 11
+      num_pts = 201
       NP = 2
       allocate(mu(num_pts))
       allocate(distro(num_pts, NP))
@@ -1225,30 +1225,42 @@ program test_scattdata
       ! check the zero, first non-zero point, and remaining points separate.
       ! Check the first zeros
       if ((any(distro(:nz_loc,1) /= ZERO)) .or. &
-        (any(distro(:nz_loc,1) /= ZERO))) then
+        (any(distro(:nz_loc,2) /= ZERO))) then
         write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1, Zeros)'
         stop 10
       end if
-      
-      if ((abs(distro(nz_loc+1,1) - distro_ref(nz_loc+1,1,2)) > 1E-1_8) .or. &
-        (abs(distro(nz_loc+1,2) - distro_ref(nz_loc+1,2,2)) > 1E-1_8)) then
+      ! Check the first non-zero value, since this will be the most likely to
+      ! have the highest error
+      if ((abs(distro(nz_loc+1,1) - distro_ref(nz_loc+1,1,2)) > 2E-3_8) .or. &
+        (abs(distro(nz_loc+1,2) - distro_ref(nz_loc+1,2,2)) > 3E-4_8)) then
         write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1, First Non-zero)'
+        write(*,*) distro(nz_loc+1,1), distro_ref(nz_loc+1,1,2)
+        write(*,*) distro(nz_loc+1,2), distro_ref(nz_loc+1,2,2)
         stop 10
       end if
-      
+      ! Finally, check the rest   
       if ((any(abs(distro(nz_loc+2:,1) - &
-        distro_ref(nz_loc+2:,1,2)) > 1.0E-1_8)) .or. &
+        distro_ref(nz_loc+2:,1,2)) > 4.0E-3_8)) .or. &
         (any(abs(distro(nz_loc+2:,2) - &
-        distro_ref(nz_loc+2:,2,2)) > 1.0E-1_8))) then
-        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1, Non-Zeros)'
-        write(*,*) maxval(abs(distro(nz_loc+2:,1)-distro_ref(nz_loc+2:,1,2))), &
-          mu(maxloc(abs(distro(nz_loc+2:,1)-distro_ref(nz_loc+2:,1,2))))
-        write(*,*) maxval(abs(distro(nz_loc+2:,2)-distro_ref(nz_loc+2:,2,2))), &
-          mu(maxloc(abs(distro(nz_loc+2:,2)-distro_ref(nz_loc+2:,2,2))))
+        distro_ref(nz_loc+2:,2,2)) > 3.0E-4_8))) then
+        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1, Last Non-Zeros)'
+        write(*,*) mu(nz_loc+2:)
+        write(*,*) 
+        write(*,*) distro(nz_loc+2:,2)
+        write(*,*) 
+        write(*,*) distro_ref(nz_loc+2:,2,2)
+        write(*,*) 
+        write(*,*) (abs(distro(nz_loc+2:,2) - distro_ref(nz_loc+2:,2,2)))
+        write(*,*) maxval(abs(distro(nz_loc+2:,2) - distro_ref(nz_loc+2:,2,2)))
+        write(*,*) maxloc(abs(distro(nz_loc+2:,2) - distro_ref(nz_loc+2:,2,2)))
         stop 10
       end if
       
-      
+      write(*,*) 'Max Error in R < 1 Isotropic Distribution: '
+      write(*,*) maxval(abs(distro(nz_loc+2:,1) - distro_ref(nz_loc+2:,1,2)))
+      write(*,*) 'Max Error in R < 1 Linear Distribution: '
+      write(*,*) maxval(abs(distro(nz_loc+2:,2) - distro_ref(nz_loc+2:,2,2)))
+    
       write(*,*)
       write(*,*) 'cm2lab Passed!'
       write(*,*) '---------------------------------------------------'

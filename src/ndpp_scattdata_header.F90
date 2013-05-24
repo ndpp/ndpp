@@ -630,9 +630,6 @@ module scattdata_header
       real(8), intent(inout) :: data(:,:) ! The distribution to convert
       
       real(8) :: R, Rinv, R2       ! Reduced Effective Mass, 1/R, and R^2
-      integer :: imu_min           ! Location in mu of the minimum feasible
-                                   ! cm to lab mu point.
-      
       real(8) :: mu_l(size(data, dim = 1))  ! CM angular points corresponding to 
                                             ! mu(:), if mu was in Lab.
       real(8) :: tempdistro(size(data, dim = 1)) ! Temporary storage of the 
@@ -641,7 +638,8 @@ module scattdata_header
       integer :: imu, imu_l, iEout      ! mu indices, outgoing energy index
       real(8) :: interp                 ! Interpolation parameter
       integer :: mu_bins                ! Number of mu bins in dim 1 of data
-      real(8) :: mu_min                 ! Minimum value of mu for R < 1
+      real(8) :: mu_tmp                 ! Temp mu value for finding critical pt
+      integer :: imu_tmp
       
       mu_bins = size(data, dim = 1)
       
@@ -651,48 +649,86 @@ module scattdata_header
       Rinv = ONE / R
       R2   = R * R
         
-      ! Calculate the lab (mu) and CM (mu_l) mu grid points.
-      do imu = 1, mu_bins
-        if ((R < 1) .and. (mu(imu) == -ONE)) then
-          mu_l(imu) = sqrt(ONE - R2)
-        else
-          tempsqrt = sqrt(ONE + R2 + TWO * R * mu(imu))
-          mu_l(imu) = (ONE + R * mu(imu)) / tempsqrt
-        end if
-      end do
-      
-      do iEout = 1, size(data, dim = 2)
-        ! Convert the CM distro to the laboratory system
+      if (R2 < ONE) then
+        ! Calculate the lab (mu) and CM (mu_l) mu grid points.
         do imu = 1, mu_bins
-          if ((R < 1) .and. (mu(imu) == -ONE)) then
-            ! Is this really zero??
-            tempdistro(imu) = ZERO
-!~             tempdistro(imu) = 0.0816843676954_8 * data(imu, iEout)
+          if (mu(imu) < -R) then
+            ! Try and get a reference value that is close to the critical point
+            ! Of course, we can't get too close, b/c it blows up, but we'll try
+            ! anyways.
+            ! Since I want to pick an intelligent point which doesnt overlap the
+            ! next mu_l point, lets calculate the next mu_l, then take 10% of 
+            ! the difference and add that on to the critical point
+            do imu_tmp = imu + 1, mu_bins
+              if (mu_l(imu_tmp) > -R) exit
+            end do
+            mu_tmp = (ONE + R * mu(imu_tmp)) / &
+              sqrt(ONE + R2 + TWO * R * mu(imu_tmp))
+            tempsqrt = sqrt(ONE - R2)
+            mu_l(imu) = tempsqrt + 0.2_8 * (mu_tmp - tempsqrt)
           else
+            mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
+          end if
+        end do
+        
+        do iEout = 1, size(data, dim = 2)
+          ! Convert the CM distro to the laboratory system
+          do imu = 1, mu_bins
+!~             if (mu(imu) < -R) then
+!~               tempdistro(imu) = ZERO
+!~             else
+              tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
+              tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
+                mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
+!~             end if
+          end do
+          ! Now we put this tempdistro, which is on the mu_l grid, back on to the
+          ! mu grid, which is what we want our output to be. This will be done
+          ! with linear interpolation
+          do imu = 1 , mu_bins - 1
+            if (mu(imu) <= mu_l(1)) then
+              data(imu, iEout) = ZERO
+            else
+              imu_l = binary_search(mu_l, mu_bins, mu(imu))
+              ! Get the interpolation parameter
+              interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
+              data(imu, iEout) = tempdistro(imu_l) + interp * &
+                (tempdistro(imu_l + 1) - tempdistro(imu_l))
+            end if
+          end do
+          ! Set the last point explicitly since mu_l(last) and mu(last) will
+          ! always be the same
+          data(mu_bins, iEout) = tempdistro(mu_bins)
+        end do
+      else
+        ! Calculate the lab (mu) and CM (mu_l) mu grid points.
+        do imu = 1, mu_bins
+          mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
+        end do
+        
+        do iEout = 1, size(data, dim = 2)
+          ! Convert the CM distro to the laboratory system
+          do imu = 1, mu_bins
             tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
             tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
               mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
-          end if
-        end do
-        
-        ! Now put this back on to the original mu grid.
-        do imu = 1 , mu_bins - 1
-          if (mu(imu) < mu_l(1)) then
-            imu_l = 1
-          else
+          end do
+          
+          ! Now we put this tempdistro, which is on the mu_l grid, back on to the
+          ! mu grid, which is what we want our output to be. This will be done
+          ! with linear interpolation
+          do imu = 1 , mu_bins - 1
             imu_l = binary_search(mu_l, mu_bins, mu(imu))
-          end if
-          ! Get the interpolation parameter
-          interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
-          data(imu, iEout) = tempdistro(imu_l) + interp * &
-            (tempdistro(imu_l + 1) - tempdistro(imu_l))
+            ! Get the interpolation parameter
+            interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
+            data(imu, iEout) = tempdistro(imu_l) + interp * &
+              (tempdistro(imu_l + 1) - tempdistro(imu_l))
+          end do
+          ! Set the last point explicitly since mu_l(last) and mu(last) will
+          ! always be the same
+          data(mu_bins, iEout) = tempdistro(mu_bins)
         end do
-        data(mu_bins, iEout) = tempdistro(mu_bins)
-        
-        do imu = 1, mu_bins
-          if (data(imu, iEout) < ZERO) data(imu, iEout) = ZERO
-        end do
-      end do
+      end if
             
     end subroutine cm2lab
 
