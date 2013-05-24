@@ -667,6 +667,7 @@ module scattdata_header
           if ((R < 1) .and. (mu(imu) == -ONE)) then
             ! Is this really zero??
             tempdistro(imu) = ZERO
+!~             tempdistro(imu) = 0.0816843676954_8 * data(imu, iEout)
           else
             tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
             tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &

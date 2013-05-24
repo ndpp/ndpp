@@ -1126,12 +1126,13 @@ program test_scattdata
       real(8)              :: Ein             ! Incoming energy
       real(8), allocatable :: mu(:)           ! Angular grid
       real(8), allocatable :: distro(:,:)     ! The distribution to convert
+      real(8), allocatable :: distro_in(:,:)  ! The input distro for each test
       real(8), allocatable :: distro_ref(:,:,:) ! The reference sol'n
       real(8)              :: dmu             ! delta-mu
       integer              :: num_pts         ! Number of angular pts
       integer              :: NP              ! Number of energy grid
       integer              :: i               ! loop counter
-      integer              :: max_loc         ! loc of 1st valid ref value
+      integer              :: nz_loc          ! loc of 1st non-zero ref value
       
       write(*,*)
       write(*,*) '---------------------------------------------------'
@@ -1148,31 +1149,32 @@ program test_scattdata
       NP = 2
       allocate(mu(num_pts))
       allocate(distro(num_pts, NP))
+      allocate(distro_in(num_pts, NP))
       allocate(distro_ref(num_pts, NP, 2))
       dmu = TWO / real(num_pts - 1, 8)
       do i = 1, num_pts
         mu(i) = -ONE + real(i - 1, 8) * dmu
         if (i == num_pts) mu(i) = ONE
-        ! distro(:, 1) is isotropic
-        distro(i, 1) = 0.5_8
-        ! Set distro(:, 1) ref soln for R > 1 (from sage workbook)
+        ! distro_in(:, 1) is isotropic
+        distro_in(i, 1) = 0.5_8
+        ! Set distro_in(:, 1) ref soln for R > 1 (from sage workbook)
         distro_ref(i, 1, 1) = 0.00212765957446809_8*(mu(i)*mu(i)) / &
           sqrt((mu(i)*mu(i)) + 55224.0_8) + &
           0.00425531914893617_8*mu(i) + 0.00212765957446809_8 * &
           sqrt((mu(i)*mu(i)) + 55224.0_8)
 
-        ! Set distro(:, 1) reference solution for R < 1(comes from sage workbook)
+        ! Set distro_in(:, 1) reference solution for R < 1(comes from sage workbook)
         if ((mu(i)*mu(i)) > 0.00166530611099991_8) then
           distro_ref(i, 1, 2) = 0.500416847233746_8 * (mu(i)*mu(i)) / &
             sqrt((mu(i)*mu(i)) - 0.00166530611099991_8) + &
             1.00083369446749_8 * mu(i) + &
             0.500416847233746_8 * sqrt((mu(i)*mu(i)) - 0.00166530611099991_8)
         else
-          max_loc = i
+          nz_loc = i
         end if
         
-        ! distro(:, 2) is linear with mu
-        distro(i, 2) = 0.5_8 * (mu(i) + ONE)
+        ! distro_in(:, 2) is linear with mu
+        distro_in(i, 2) = 0.5_8 * (mu(i) + ONE)
         ! Set distro(:, 2) ref soln for R > 1 (from sage workbook)
         distro_ref(i, 2, 1) = (0.00212765957446809_8*(mu(i)*mu(i)) + &
           0.00212765957446809_8*sqrt((mu(i)*mu(i)) + 55224.0_8)*mu(i) + &
@@ -1191,8 +1193,8 @@ program test_scattdata
         end if
       end do
       
-      distro_ref(1:max_loc, 1, 2) = ZERO
-      distro_ref(1:max_loc, 2, 2) = ZERO
+      distro_ref(1:nz_loc, 1, 2) = ZERO
+      distro_ref(1:nz_loc, 2, 2) = ZERO
       
       ! Set Ein, will keep it a constant throughout this test.
       Ein = ONE
@@ -1201,6 +1203,7 @@ program test_scattdata
       write(*,*) 'Testing R > 1'
       awr = 235.0_8
       Q = ZERO
+      distro = distro_in
       call cm2lab(awr, Q, Ein, mu, distro)
       ! Check results
       if ((any(abs(distro(:,1) - distro_ref(:,1,1)) > 1.0E-6_8)) .or. &
@@ -1215,24 +1218,33 @@ program test_scattdata
       write(*,*) 'Testing R < 1'
       awr = 0.999167_8
       Q = ZERO
+      distro = distro_in
       call cm2lab(awr, Q, Ein, mu, distro)
       ! Check results
-      write(*,*) mu(7:)
-      write(*,*)
-      write(*,*) distro(7:,1)
-      write(*,*)
-      write(*,*) distro_ref(7:,1,2)
-      write(*,*)
-      write(*,*) distro(7:,2)
-      write(*,*)
-      write(*,*) distro_ref(7:,2,2)
-      if ((any(abs(distro(:,1) - distro_ref(:,1,2)) > 1.0E-3_8)) .or. &
-        (any(abs(distro(:,2) - distro_ref(:,2,2)) > 1.0E-3_8))) then
-        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1)'
-        write(*,*) maxval(abs(distro(:,1)-distro_ref(:,1,2))), &
-          mu(maxloc(abs(distro(:,1)-distro_ref(:,1,2))))
-        write(*,*) maxval(abs(distro(:,2)-distro_ref(:,2,2))), &
-          mu(maxloc(abs(distro(:,2)-distro_ref(:,2,2))))
+      ! To not subject all domains of the solution to the same error bounds
+      ! check the zero, first non-zero point, and remaining points separate.
+      ! Check the first zeros
+      if ((any(distro(:nz_loc,1) /= ZERO)) .or. &
+        (any(distro(:nz_loc,1) /= ZERO))) then
+        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1, Zeros)'
+        stop 10
+      end if
+      
+      if ((abs(distro(nz_loc+1,1) - distro_ref(nz_loc+1,1,2)) > 1E-1_8) .or. &
+        (abs(distro(nz_loc+1,2) - distro_ref(nz_loc+1,2,2)) > 1E-1_8)) then
+        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1, First Non-zero)'
+        stop 10
+      end if
+      
+      if ((any(abs(distro(nz_loc+2:,1) - &
+        distro_ref(nz_loc+2:,1,2)) > 1.0E-1_8)) .or. &
+        (any(abs(distro(nz_loc+2:,2) - &
+        distro_ref(nz_loc+2:,2,2)) > 1.0E-1_8))) then
+        write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R < 1, Non-Zeros)'
+        write(*,*) maxval(abs(distro(nz_loc+2:,1)-distro_ref(nz_loc+2:,1,2))), &
+          mu(maxloc(abs(distro(nz_loc+2:,1)-distro_ref(nz_loc+2:,1,2))))
+        write(*,*) maxval(abs(distro(nz_loc+2:,2)-distro_ref(nz_loc+2:,2,2))), &
+          mu(maxloc(abs(distro(nz_loc+2:,2)-distro_ref(nz_loc+2:,2,2))))
         stop 10
       end if
       
