@@ -37,6 +37,9 @@ program test_scattdata
   ! Test calc_E_bounds
   call test_calc_E_bounds()
   
+  ! Test integrate_energyangle_file4_leg
+  call test_integrate_file4_leg()
+  
   write(*,*)
   write(*,*) '***************************************************'
   write(*,*) 'Testing ScattData Passed!'
@@ -1232,7 +1235,6 @@ program test_scattdata
       
     end subroutine test_convert_distro
 
-
 !===============================================================================
 ! TEST_CM2LAB Tests the conversion of a CM distro to the lab frame
 !===============================================================================
@@ -1603,4 +1605,125 @@ program test_scattdata
 
     end subroutine test_calc_E_bounds
      
+!===============================================================================
+! TEST_INTEGRATE_FILE4_LEG Tests the ability to integrate a set of file 4 
+! distributions to produce Legendre moments.
+!===============================================================================
+
+    subroutine test_integrate_file4_leg()
+      real(8), allocatable :: fEmu(:)           ! Energy-angle distro to act on
+      real(8), allocatable :: mu(:)             ! fEmu angular grid
+      real(8), allocatable :: interp(:,:)       ! interpolants of mu values
+      real(8), allocatable :: vals(:,:)         ! mu values
+      integer, allocatable :: bins(:,:)         ! indices of fEmu corresponding to
+                                                ! the group boundaries
+      integer              :: order             ! Number of moments to find
+      real(8), allocatable :: distro(:,:)       ! Resultant integrated distribution
+      
+      real(8), allocatable :: distro_ref(:,:)   ! Reference solution
+      integer              :: g, imu            ! energy group and mu_val indices
+      integer              :: num_pts, num_G    ! Number of mu pts and energy grps
+      real(8)              :: dmu               ! mu spacing
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing integrate_energyangle_file4_leg'
+      write(*,*)
+      
+      ! This test will do find the legendre moments of two cases:
+      ! 1) Linear anisotropic distribution with only one energy group and 
+      !    no truncation
+      ! 2) Linear anisotropic distribution with 3 energy groups across the
+      !    angular domain.
+      
+      ! For both cases, we will use a mu with 5 grid pts. Set mu and fEmu now
+      ! Allocate/Set mu
+      num_pts = 5
+      allocate(mu(num_pts))
+      allocate(fEmu(num_pts))
+      dmu = TWO / real(num_pts - 1, 8)
+      do imu = 1, num_pts - 1
+        mu(imu) = -ONE + real(imu - 1, 8) * dmu
+        fEmu(imu) = 0.5_8 * (mu(imu) + ONE)
+      end do
+      ! Set the end point to exactly ONE
+      mu(num_pts) = ONE
+      fEmu(num_pts) = ONE
+      ! Set the number of orders
+      order = 6
+      
+      ! Start with case 1
+      ! Set variables and allocate as needed
+      num_G = 1
+      allocate(distro(order, num_G))
+      distro = ZERO
+      allocate(interp(2, num_G))
+      interp(:,1) = (/ZERO, ONE/)
+      allocate(vals(2, num_G))
+      vals(:,1) = (/-ONE, ONE/)
+      allocate(bins(2, num_G))
+      bins(:, 1) = (/1, num_pts-1/)
+      ! Set reference solution (analytical linear aniso moments)
+      allocate(distro_ref(order, num_G))
+      distro_ref(:,1) = (/ONE, ONE / 3.0_8, ZERO, ZERO, ZERO, ZERO/)
+      ! Run the function
+      call integrate_energyangle_file4_leg(fEmu, mu, interp, vals, bins, &
+        order - 1, distro)
+      ! Test the results
+      if (any(abs(distro - distro_ref) > TEST_TOL)) then
+        write(*,*) 'integrate_energy_angle_file4_leg FAILED! (Case 1)'
+        stop 10
+      end if
+      ! Clear results
+      deallocate(distro, distro_ref, interp, vals, bins)
+      
+      ! Case 2, three groups
+      ! Set variables and allocate as needed
+      num_G = 3
+      allocate(distro(order, num_G))
+      distro = ZERO
+      allocate(interp(2, num_G))
+      interp(:, 1) = (/ZERO, 0.5_8/)
+      interp(:, 2) = (/0.5_8, 0.5_8/)
+      interp(:, 3) = (/0.5_8, ONE/)
+      allocate(vals(2, num_G))
+      vals(:, 1) = (/-ONE, -0.75_8/)
+      vals(:, 2) = (/-0.75_8, 0.25_8/)
+      vals(:, 3) = (/0.25_8, ONE/)
+      allocate(bins(2, num_G))
+      bins(:, 1) = (/1, 1/) ! 
+      bins(:, 2) = (/1, 3/)
+      bins(:, 3) = (/3, num_pts-1/)
+      ! Set reference solution (analytical linear aniso moments w/ 3 groups
+      ! as defined above)
+      ! This reference solution is found in the Sage notebook:
+      ! integrate_file4_leg_reference.sws
+      allocate(distro_ref(order, num_G))
+      distro_ref(:, 1) = (/0.015625_8, -0.0130208333333_8, 0.008544921875_8, &
+        -0.00341796875_8, -0.0010503133138_8, 0.00387191772461_8/)
+      distro_ref(:, 2) = (/0.375_8, -0.0520833333333_8, -0.13671875_8, &
+        0.0400390625_8, 0.0531209309896_8, -0.00587463378906_8/)
+      distro_ref(:, 3) = (/0.609375_8, 0.3984375_8, 0.128173828125_8, &
+        -0.03662109375_8, -0.0520706176758_8, 0.00200271606445_8/)
+      ! Run the function
+      call integrate_energyangle_file4_leg(fEmu, mu, interp, vals, bins, &
+        order - 1, distro)
+      ! Test the results
+      if (any(abs(distro - distro_ref) > TEST_TOL)) then
+        write(*,*) 'integrate_energy_angle_file4_leg FAILED! (Case 2)'
+        write(*,*) abs(distro(:,1)-distro_ref(:,1))
+        write(*,*)
+        write(*,*) abs(distro(:,2)-distro_ref(:,2))
+        write(*,*)
+        write(*,*) abs(distro(:,3)-distro_ref(:,3))
+        stop 10
+      end if
+      
+      
+      write(*,*)
+      write(*,*) 'integrate_energyangle_file4_leg Passed!'
+      write(*,*) '---------------------------------------------------'
+      
+    end subroutine test_integrate_file4_leg
+
 end program test_scattdata

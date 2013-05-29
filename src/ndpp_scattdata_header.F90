@@ -919,7 +919,13 @@ module scattdata_header
             calc_int_pn_tablelin(order, mu(bins(MU_HI, g)), vals(MU_HI, g), &
             fEmu(bins(MU_HI, g)), fhi)
         else
-          distro(:, g) = ZERO
+          flo = fEmu(bins(MU_LO, g)) + interp(MU_LO, g) * & 
+            (fEmu(bins(MU_LO, g) + 1) - fEmu(bins(MU_LO, g)))
+          fhi = fEmu(bins(MU_HI, g)) + interp(MU_HI, g) * & 
+            (fEmu(bins(MU_HI, g) + 1) - fEmu(bins(MU_HI, g)))
+          distro(:, g) = distro(:, g) + &
+            calc_int_pn_tablelin(order, vals(MU_LO, g), vals(MU_HI, g), &
+            flo, fhi)
         end if
       end do
       
