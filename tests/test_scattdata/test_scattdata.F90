@@ -40,6 +40,9 @@ program test_scattdata
   ! Test integrate_energyangle_file4_leg
   call test_integrate_file4_leg()
   
+  ! Test integrate_energyangle_file6_leg
+  call test_integrate_file6_leg()
+  
   write(*,*)
   write(*,*) '***************************************************'
   write(*,*) 'Testing ScattData Passed!'
@@ -1566,8 +1569,10 @@ program test_scattdata
       write(*,*) 'Testing Linear Interpolation'
       INTT = LINEAR_LINEAR
       ! Set reference solution
-      bins_ref(MU_LO, :) = (/0, 0, 2, 2/)
-      bins_ref(MU_HI, :) = (/0, 2, 2, 0/)
+!~       bins_ref(MU_LO, :) = (/0, 0, 2, 2/)
+!~       bins_ref(MU_HI, :) = (/0, 2, 2, 0/)
+      bins_ref(MU_LO, :) = (/-1, -1, 2, 2/)
+      bins_ref(MU_HI, :) = (/-1, 2, 2, -3/)
       interp_ref(MU_LO, :) = (/ZERO, ZERO, ZERO, 0.5_8/)
       interp_ref(MU_HI, :) = (/ZERO, ZERO, 0.5_8, ZERO/)
       call calc_E_bounds(E_bins, Eout, INTT, interp, bins)
@@ -1585,8 +1590,10 @@ program test_scattdata
       write(*,*) 'Testing Histogram Interpolation'
       INTT = HISTOGRAM
       ! Set reference solution
-      bins_ref(MU_LO, :) = (/0, 0, 2, 2/)
-      bins_ref(MU_HI, :) = (/0, 2, 2, 0/)
+!~       bins_ref(MU_LO, :) = (/0, 0, 2, 2/)
+!~       bins_ref(MU_HI, :) = (/0, 2, 2, 0/)
+      bins_ref(MU_LO, :) = (/-1, -1, 2, 2/)
+      bins_ref(MU_HI, :) = (/-1, 2, 2, -3/)
       interp_ref = ZERO
       call calc_E_bounds(E_bins, Eout, INTT, interp, bins)
       ! Check results
@@ -1653,6 +1660,7 @@ program test_scattdata
       order = 6
       
       ! Start with case 1
+      write(*,*) 'Testing One Energy Group'
       ! Set variables and allocate as needed
       num_G = 1
       allocate(distro(order, num_G))
@@ -1678,6 +1686,7 @@ program test_scattdata
       deallocate(distro, distro_ref, interp, vals, bins)
       
       ! Case 2, three groups
+      write(*,*) 'Testing Three Energy Groups'
       ! Set variables and allocate as needed
       num_G = 3
       allocate(distro(order, num_G))
@@ -1719,11 +1728,192 @@ program test_scattdata
         stop 10
       end if
       
-      
       write(*,*)
       write(*,*) 'integrate_energyangle_file4_leg Passed!'
       write(*,*) '---------------------------------------------------'
       
     end subroutine test_integrate_file4_leg
+
+!===============================================================================
+! TEST_INTEGRATE_FILE6_LEG Tests the ability to integrate a set of file 6 
+! energy/angle distributions to produce Legendre moments.
+!===============================================================================
+
+    subroutine test_integrate_file6_leg()
+      real(8), allocatable :: fEmu(:,:)       ! Energy-angle distro to act on
+      real(8), allocatable :: mu(:)           ! fEmu angular grid
+      real(8), allocatable :: Eout(:)         ! Outgoing energies
+      real(8), allocatable :: E_bins(:)       ! Energy grp boundaries
+      real(8), allocatable :: interp(:,:)     ! interpolants of E values
+      integer, allocatable :: bins(:,:)       ! indices of fEmu corresponding to
+                                              ! the group boundaries
+      integer              :: order           ! Number of moments to find
+      real(8), allocatable :: distro(:,:)     ! Resultant integrated distribution
+      
+      real(8), allocatable :: distro_ref(:,:) ! Reference solution
+      integer              :: g, imu          ! energy group and mu_val indices
+      integer              :: num_pts, num_G  ! Number of mu pts and energy grps
+      integer              :: num_Eout, iE    ! Number of outgoing E pts, and index
+      real(8)              :: dmu             ! mu spacing
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing integrate_energyangle_file6_leg'
+      write(*,*)
+      
+      ! In this test, we will set up angular distributions which span the entire
+      ! angular space, and set an array of these up in energy. We then
+      ! will have energy groups to integrate the distribution over.
+      ! These groups will be such that we test all the portions of the 
+      ! file6 integration routine. This yields the following cases:
+      ! 1) only one Eout distribution
+      ! 2) all groups within two adjacent energy out points
+      ! 3) groups spanning multiple Eout points
+      
+      ! Set values constant for all cases
+      num_pts = 5
+      allocate(mu(num_pts))
+      dmu = TWO / real(num_pts - 1, 8)
+      do imu = 1, num_pts - 1
+        mu(imu) = -ONE + real(imu - 1, 8) * dmu
+      end do
+      ! Set the end point to exactly ONE
+      mu(num_pts) = ONE
+      ! Set the number of orders
+      order = 6
+      
+      ! Case 1 - only one Eout
+      write(*,*) 'Testing One Eout'
+      ! Set energy group structure
+      num_G = 1
+      num_Eout = 1
+      allocate(E_bins(num_G+1))
+      E_bins = (/ONE, TWO/)
+      ! Set angular distribution to linearly anisotropic
+      allocate(fEmu(num_pts, num_Eout))
+      do iE = 1, num_Eout
+        do imu = 1, num_pts
+          fEmu(imu, iE) = 0.5_8 * (mu(imu) + ONE)
+        end do
+      end do
+      ! Set Eout
+      allocate(Eout(num_Eout))
+      Eout = 1.5_8
+      ! Set the bins and interp vals
+      allocate(bins(2, num_G))
+      bins(:, 1) = (/1, 1/)
+      allocate(interp(2, num_G))
+      interp(:, 1) = (/0.5_8, ONE/)
+      ! Allocate and ready distro
+      allocate(distro(order, num_G))
+      distro = ZERO
+      ! Set the reference solution
+      allocate(distro_ref(order, num_G))
+      distro_ref(:,1) = (/ONE, ONE / 3.0_8, ZERO, ZERO, ZERO, ZERO/)
+      ! Run the calcs!
+      call integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
+        bins, order - 1, distro)
+      ! Test the results
+      if (any(abs(distro - distro_ref) > TEST_TOL)) then
+        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 1)'
+        write(*,*) abs(distro(:,1)-distro_ref(:,1))
+        stop 10
+      end if
+      ! Deallocs to get ready for case 2
+      deallocate(E_bins, fEmu, Eout, bins, interp, distro, distro_ref)
+      
+      ! Case 2, all groups within one set of Eouts
+      write(*,*) 'Testing Multiple Groups within two Eout points'
+      ! Set energy group structure
+      num_G = 2
+      num_Eout = 2
+      allocate(E_bins(num_G+1))
+      E_bins = (/ONE, TWO, 3.0_8/)
+      ! Set angular distribution to isotropic at the lower Eout, 
+      ! linearly anisotropic at the higher Eout
+      allocate(fEmu(num_pts, num_Eout))
+      fEmu(:, 1) = 0.5_8
+      do imu = 1, num_pts
+        fEmu(imu, 2) = 0.5_8 * (mu(imu) + ONE)
+      end do
+      ! Set Eout
+      allocate(Eout(num_Eout))
+      Eout = (/ONE, 3.0_8/)
+      ! Set the bins and interp vals
+      allocate(bins(2, num_G))
+      bins(:, 1) = (/1, 1/)
+      bins(:, 2) = (/1, 1/)
+      allocate(interp(2, num_G))
+      interp(:, 1) = (/ ZERO, 0.5_8/)
+      interp(:, 2) = (/0.5_8,   ONE/)
+      ! Allocate and ready distro
+      allocate(distro(order, num_G))
+      distro = ZERO
+      ! Set the reference solution
+      allocate(distro_ref(order, num_G))
+      ! These are calculated in the Sage worksheet associated with this test.
+      distro_ref(:, 1) = (/ONE, ONE / 12.0_8, ZERO, ZERO, ZERO, ZERO/)
+      distro_ref(:, 2) = (/ONE, ONE / 4.0_8, ZERO, ZERO, ZERO, ZERO/)
+      ! Run the calcs!
+      call integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
+        bins, order - 1, distro)
+      ! Test the results
+      if (any(abs(distro - distro_ref) > TEST_TOL)) then
+        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 1)'
+        write(*,*) abs(distro(:,1)-distro_ref(:,1))
+        write(*,*) abs(distro(:,2)-distro_ref(:,2))
+        stop 10
+      end if
+      ! Deallocs to get ready for case 3
+      deallocate(E_bins, fEmu, Eout, bins, interp, distro, distro_ref)
+      
+      ! Case 3, groups spanning multiple Eout points
+      ! Will do with 1 group that surrounds 3 Eouts
+      write(*,*) 'Testing Groups multiple Eout points'
+      ! Set energy structures
+      num_G = 1
+      allocate(E_bins(num_G+1))
+      ! Set Eout
+      num_Eout = 3
+      allocate(Eout(num_Eout))
+      Eout = (/ONE, TWO, 3.0_8/)
+      E_bins = (/ZERO, 4.0_8/)
+      ! Set angular distribution to isotropic at the lower Eout, 
+      ! increasing linearly anisotropic at the middle Eout
+      ! decreasing linearly anisotropic at the higher Eout
+      allocate(fEmu(num_pts, num_Eout))
+      fEmu(:, 1) = 0.5_8
+      do imu = 1, num_pts
+        fEmu(imu, 2) = 0.5_8 * (mu(imu) + ONE)
+        fEmu(imu, 3) = -0.5_8 * mu(imu) + 0.5_8
+      end do
+      ! Set the bins and interp vals
+      allocate(bins(2, num_G))
+      bins(:, 1) = (/0, 0/)
+      allocate(interp(2, num_G))
+      interp(:, 1) = (/  ZERO, ZERO/)
+      ! Allocate and ready distro
+      allocate(distro(order, num_G))
+      distro = ZERO
+      ! Set the reference solution
+      allocate(distro_ref(order, num_G))
+      ! These are calculated in the Sage worksheet associated with this test.
+      distro_ref(:, 1) = (/ONE, ONE / 15.0_8, ZERO, ZERO, ZERO, ZERO/)
+      ! Run the calcs!
+      call integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
+        bins, order - 1, distro)
+write(*,*) distro(:,1)
+      ! Test the results
+      if (any(abs(distro - distro_ref) > TEST_TOL)) then
+        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 1)'
+        write(*,*) abs(distro(:,1)-distro_ref(:,1))
+        stop 10
+      end if
+      
+      write(*,*)
+      write(*,*) 'integrate_energyangle_file6_leg Passed!'
+      write(*,*) '---------------------------------------------------'
+      
+    end subroutine test_integrate_file6_leg
 
 end program test_scattdata

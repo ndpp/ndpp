@@ -842,10 +842,10 @@ module scattdata_header
       
       do g = 1, size(E_bins) - 1
         if (E_bins(g) < Eout(1)) then
-          bins(MU_LO, g)   = 0
+          bins(MU_LO, g)   = -1
           interp(MU_LO, g) = ZERO
         else if (E_bins(g) > Eout(size(Eout))) then
-          bins(MU_LO, g)   = 0
+          bins(MU_LO, g)   = -size(Eout)
           interp(MU_LO, g) = ZERO
         else
           bins(MU_LO, g)   = binary_search(Eout, size(Eout), E_bins(g))
@@ -853,10 +853,10 @@ module scattdata_header
             (Eout(bins(MU_LO, g) + 1) - Eout(bins(MU_LO, g)))
         end if
         if (E_bins(g + 1) < Eout(1)) then
-          bins(MU_HI, g)   = 0
+          bins(MU_HI, g)   = -1
           interp(MU_HI, g) = ZERO
         else if (E_bins(g + 1) > Eout(size(Eout))) then
-          bins(MU_HI, g)   = 0
+          bins(MU_HI, g)   = -size(Eout)
           interp(MU_HI, g) = ZERO
         else
           bins(MU_HI, g)   = binary_search(Eout, size(Eout), E_bins(g + 1))
@@ -919,6 +919,7 @@ module scattdata_header
             calc_int_pn_tablelin(order, mu(bins(MU_HI, g)), vals(MU_HI, g), &
             fEmu(bins(MU_HI, g)), fhi)
         else
+          ! The points are all within the same bin, can get flo and fhi directly
           flo = fEmu(bins(MU_LO, g)) + interp(MU_LO, g) * & 
             (fEmu(bins(MU_LO, g) + 1) - fEmu(bins(MU_LO, g)))
           fhi = fEmu(bins(MU_HI, g)) + interp(MU_HI, g) * & 
@@ -952,54 +953,94 @@ module scattdata_header
       real(8) :: flo, fhi  ! interpolated value of fEmu(imu,Eout)
       
       allocate(fEmu_int(size(mu), size(bins, dim = 2)))
+      fEmu_int = ZERO
       
-      ! This routine will perform integration of the outgoing energy of fEmu
-      ! over each energy group in E_bins. This will be done with trapezoidal
-      ! integration !!!But can later be improved to something else, like what
-      ! NJOY does that I dont quite understand yet!!!.  
-      ! Trapezoidal integration = 1/2 * (b-a)*(f(b)+f(a))
-      do g = 1, size(E_bins ) - 1
-        ! Do the lower energyout distribution
-        if (bins(MU_LO, g) /= 0) then
-          Elo = E_bins(g)
-          Ehi = Eout(bins(MU_LO, g))
-          do imu = 1, size(mu)
-            flo = fEmu(imu, bins(MU_LO, g)) + interp(MU_LO, g) * &
-              (fEmu(imu, bins(MU_LO, g) + 1) - fEmu(imu, bins(MU_LO, g)))
-            fhi = fEmu(imu, bins(MU_LO, g) + 1)
-            fEmu_int(imu, g) = (Ehi - Elo) * (fhi + flo)
+      if (size(Eout) > 1) then
+        ! This branch will perform integration of the outgoing energy of fEmu
+        ! over each energy group in E_bins. This will be done with trapezoidal
+        ! integration  
+        ! Trapezoidal integration = 1/2 * (b-a)*(f(b)+f(a))
+        do g = 1, size(E_bins) - 1
+          if (bins(MU_LO, g) /= bins(MU_HI, g)) then
+            ! Do the lower energyout distribution
+            if (bins(MU_LO, g) /= 0) then
+              Elo = E_bins(g)
+              Ehi = Eout(bins(MU_LO, g))
+              do imu = 1, size(mu)
+                flo = fEmu(imu, bins(MU_LO, g)) + interp(MU_LO, g) * &
+                  (fEmu(imu, bins(MU_LO, g) + 1) - fEmu(imu, bins(MU_LO, g)))
+                fhi = fEmu(imu, bins(MU_LO, g) + 1)
+                fEmu_int(imu, g) = fEmu_int(imu, g) + (Ehi - Elo) * (fhi + flo)
+              end do
+            end if
+            ! Do the intermediate energyout distributions
+            do iE = bins(MU_LO, g) + 1, bins(MU_HI, g) - 1
+              Elo = Eout(iE)
+              Ehi = Eout(iE + 1)
+              do imu = 1, size(mu)
+                flo = fEmu(imu, iE)
+                fhi = fEmu(imu, iE + 1)
+                fEmu_int(imu, g) = fEmu_int(imu, g) + (Ehi - Elo) * (fhi + flo)
+              end do
+            end do
+            ! Do the upper energyout distribution
+            if (bins(MU_HI, g) /= 0) then
+              Elo = Eout(bins(MU_HI, g))
+              Ehi = E_bins(g + 1)
+              do imu = 1, size(mu)
+                flo = fEmu(imu, bins(MU_HI, g))
+                fhi = fEmu(imu, bins(MU_HI, g)) + interp(MU_HI, g) * &
+                  (fEmu(imu, bins(MU_HI, g) + 1) - fEmu(imu, bins(MU_HI, g)))
+                fEmu_int(imu, g) = fEmu_int(imu, g) + (Ehi - Elo) * (fhi + flo)
+              end do
+            end if
+            ! Apply the 1/2 term from trapezoidal integration
+            fEmu_int(:, g) = 0.5_8 * fEmu_int(:, g)
+            
+          else
+            ! The points are all w/in the same bin, can get flo and fhi directly
+            Elo = Eout(bins(MU_LO, g)) + interp(MU_LO, g) * &
+              (Eout(bins(MU_LO, g) + 1) - Eout(bins(MU_LO, g)))
+            Ehi = Eout(bins(MU_HI, g)) + interp(MU_HI, g) * &
+              (Eout(bins(MU_HI, g) + 1) - Eout(bins(MU_HI, g)))
+            
+            do imu = 1, size(mu)
+              flo = fEmu(imu, bins(MU_LO, g)) + interp(MU_LO, g) * &
+                (fEmu(imu, bins(MU_LO, g) + 1) - fEmu(imu, bins(MU_LO, g)))
+              fhi = fEmu(imu, bins(MU_HI, g)) + interp(MU_HI, g) * &
+                (fEmu(imu, bins(MU_HI, g) + 1) - fEmu(imu, bins(MU_HI, g)))
+              fEmu_int(imu, g) = (Ehi - Elo) * (fhi + flo) * 0.5_8
+            end do
+          end if
+          
+          ! Perform the legendre expansion
+          do imu = 1, size(mu) - 1
+            distro(:, g) = distro(:, g) + &
+              calc_int_pn_tablelin(order, mu(imu), &
+              mu(imu + 1), fEmu_int(imu, g), fEmu_int(imu + 1, g))
           end do
-        end if
-        ! Do the intermediate energyout distributions
-        do iE = bins(MU_LO, g) + 1, bins(MU_HI, g) - 1
-          Elo = Eout(iE)
-          Ehi = Eout(iE + 1)
-          do imu = 1, size(mu)
-            flo = fEmu(imu, iE)
-            fhi = fEmu(imu, iE + 1)
-            fEmu_int(imu, g) = (Ehi - Elo) * (fhi + flo)
-          end do
+          
         end do
-        ! Do the upper energyout distribution
-        if (bins(MU_HI, g) /= 0) then
-          Elo = Eout(bins(MU_HI, g))
-          Ehi = E_bins(g + 1)
-          do imu = 1, size(mu)
-            flo = fEmu(imu, bins(MU_HI, g))
-            fhi = fEmu(imu, bins(MU_HI, g)) + interp(MU_HI, g) * &
-              (fEmu(imu, bins(MU_HI, g) + 1) - fEmu(imu, bins(MU_HI, g)))
-            fEmu_int(imu, g) = (Ehi - Elo) * (fhi + flo)
-          end do
-        end if
-        ! Apply the 1/2 term from trapezoidal integration
-        fEmu_int(:, g) = 0.5_8 * fEmu_int(:, g)
-        
-        ! Perform the legendre expansion
-        do imu = 1, size(mu)
-          distro(:, g) = distro(:, g) + &
-            calc_int_pn_tablelin(order, mu(imu), &
-            mu(imu + 1), fEmu_int(imu, g), fEmu_int(imu + 1, g))
+      else
+        ! We do not need to integrate at all, just set distro = fEmu if its'
+        ! Eout is in that group (where each group is (Emin, Emax])
+        do g = 1, size(E_bins) - 1
+          if ((Eout(1) > E_bins(g)) .and. (Eout(1) <= E_bins(g + 1))) then
+            ! Perform the legendre expansion
+            do imu = 1, size(mu) - 1
+              distro(:, g) = distro(:, g) + &
+                calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
+                  fEmu(imu, g), fEmu(imu + 1, g))
+            end do
+          else
+            distro(:, g) = ZERO
+          end if
         end do
+      end if
+      
+      ! Normalize the distribution
+      do g = 1, size(E_bins) - 1
+        distro(:, g) = distro(:, g) / distro(1, g)
       end do
       
     end subroutine integrate_energyangle_file6_leg
