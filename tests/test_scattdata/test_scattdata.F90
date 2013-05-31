@@ -1569,10 +1569,8 @@ program test_scattdata
       write(*,*) 'Testing Linear Interpolation'
       INTT = LINEAR_LINEAR
       ! Set reference solution
-!~       bins_ref(MU_LO, :) = (/0, 0, 2, 2/)
-!~       bins_ref(MU_HI, :) = (/0, 2, 2, 0/)
       bins_ref(MU_LO, :) = (/-1, -1, 2, 2/)
-      bins_ref(MU_HI, :) = (/-1, 2, 2, -3/)
+      bins_ref(MU_HI, :) = (/-1, 2, 2, -2/)
       interp_ref(MU_LO, :) = (/ZERO, ZERO, ZERO, 0.5_8/)
       interp_ref(MU_HI, :) = (/ZERO, ZERO, 0.5_8, ZERO/)
       call calc_E_bounds(E_bins, Eout, INTT, interp, bins)
@@ -1590,10 +1588,8 @@ program test_scattdata
       write(*,*) 'Testing Histogram Interpolation'
       INTT = HISTOGRAM
       ! Set reference solution
-!~       bins_ref(MU_LO, :) = (/0, 0, 2, 2/)
-!~       bins_ref(MU_HI, :) = (/0, 2, 2, 0/)
       bins_ref(MU_LO, :) = (/-1, -1, 2, 2/)
-      bins_ref(MU_HI, :) = (/-1, 2, 2, -3/)
+      bins_ref(MU_HI, :) = (/-1, 2, 2, -2/)
       interp_ref = ZERO
       call calc_E_bounds(E_bins, Eout, INTT, interp, bins)
       ! Check results
@@ -1859,7 +1855,7 @@ program test_scattdata
         bins, order - 1, distro)
       ! Test the results
       if (any(abs(distro - distro_ref) > TEST_TOL)) then
-        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 1)'
+        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 2)'
         write(*,*) abs(distro(:,1)-distro_ref(:,1))
         write(*,*) abs(distro(:,2)-distro_ref(:,2))
         stop 10
@@ -1869,7 +1865,7 @@ program test_scattdata
       
       ! Case 3, groups spanning multiple Eout points
       ! Will do with 1 group that surrounds 3 Eouts
-      write(*,*) 'Testing Groups multiple Eout points'
+      write(*,*) 'Testing Groups spanning multiple Eout points'
       ! Set energy structures
       num_G = 1
       allocate(E_bins(num_G+1))
@@ -1889,23 +1885,22 @@ program test_scattdata
       end do
       ! Set the bins and interp vals
       allocate(bins(2, num_G))
-      bins(:, 1) = (/0, 0/)
+      bins(:, 1) = (/-1, -(num_Eout-1)/)
       allocate(interp(2, num_G))
-      interp(:, 1) = (/  ZERO, ZERO/)
+      interp(:, 1) = (/ZERO, ZERO/)
       ! Allocate and ready distro
       allocate(distro(order, num_G))
       distro = ZERO
       ! Set the reference solution
       allocate(distro_ref(order, num_G))
       ! These are calculated in the Sage worksheet associated with this test.
-      distro_ref(:, 1) = (/ONE, ONE / 15.0_8, ZERO, ZERO, ZERO, ZERO/)
+      distro_ref(:, 1) = (/ONE, ONE / 12.0_8, ZERO, ZERO, ZERO, ZERO/)
       ! Run the calcs!
       call integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
         bins, order - 1, distro)
-write(*,*) distro(:,1)
       ! Test the results
       if (any(abs(distro - distro_ref) > TEST_TOL)) then
-        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 1)'
+        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 3)'
         write(*,*) abs(distro(:,1)-distro_ref(:,1))
         stop 10
       end if

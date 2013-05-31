@@ -845,7 +845,7 @@ module scattdata_header
           bins(MU_LO, g)   = -1
           interp(MU_LO, g) = ZERO
         else if (E_bins(g) > Eout(size(Eout))) then
-          bins(MU_LO, g)   = -size(Eout)
+          bins(MU_LO, g)   = -size(Eout)+1
           interp(MU_LO, g) = ZERO
         else
           bins(MU_LO, g)   = binary_search(Eout, size(Eout), E_bins(g))
@@ -856,7 +856,7 @@ module scattdata_header
           bins(MU_HI, g)   = -1
           interp(MU_HI, g) = ZERO
         else if (E_bins(g + 1) > Eout(size(Eout))) then
-          bins(MU_HI, g)   = -size(Eout)
+          bins(MU_HI, g)   = -size(Eout)+1
           interp(MU_HI, g) = ZERO
         else
           bins(MU_HI, g)   = binary_search(Eout, size(Eout), E_bins(g + 1))
@@ -935,22 +935,24 @@ module scattdata_header
     subroutine integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
       bins, order, distro)
       
-      real(8), intent(in)  :: fEmu(:,:)      ! Energy-angle distro to act on
-      real(8), intent(in)  :: mu(:)          ! fEmu angular grid
-      real(8), intent(in)  :: Eout(:)        ! Outgoing energies
-      real(8), intent(in)  :: E_bins(:)      ! Energy group boundaries
-      real(8), intent(in)  :: interp(:,:)    ! interpolants of E values
-      integer, intent(in)  :: bins(:,:)      ! indices of fEmu corresponding to
-                                             ! the group boundaries
-      integer, intent(in)  :: order          ! Number of moments to find
-      real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
-      
-      real(8), allocatable :: fEmu_int(:,:)  ! Integrated (over E) fEmu
-      integer :: g         ! Energy group index
-      integer :: imu       ! angular grid index
-      integer :: iE        ! outgoing energy grid index
-      real(8) :: Elo, Ehi  ! interpolated value of the energy
-      real(8) :: flo, fhi  ! interpolated value of fEmu(imu,Eout)
+      real(8), intent(in)  :: fEmu(:,:)     ! Energy-angle distro to act on
+      real(8), intent(in)  :: mu(:)         ! fEmu angular grid
+      real(8), intent(in)  :: Eout(:)       ! Outgoing energies
+      real(8), intent(in)  :: E_bins(:)     ! Energy group boundaries
+      real(8), intent(in)  :: interp(:,:)   ! interpolants of E values
+      integer, intent(in)  :: bins(:,:)     ! indices of fEmu corr. to
+                                            ! the group boundaries
+      integer, intent(in)  :: order         ! Number of moments to find
+      real(8), intent(out) :: distro(:,:)   ! Resultant integrated distro
+                           
+      real(8), allocatable :: fEmu_int(:,:) ! Integrated (over E) fEmu
+      integer :: g           ! Energy group index
+      integer :: imu         ! angular grid index
+      integer :: iE          ! outgoing energy grid index
+      real(8) :: Elo, Ehi    ! interpolated value of the energy
+      real(8) :: flo, fhi    ! interpolated value of fEmu(imu,Eout)
+      integer :: bins_lo_tmp ! tmp val of bins(MU_LO, g)
+      integer :: bins_hi_tmp ! tmp val of bins(MU_HI, g)
       
       allocate(fEmu_int(size(mu), size(bins, dim = 2)))
       fEmu_int = ZERO
@@ -963,7 +965,7 @@ module scattdata_header
         do g = 1, size(E_bins) - 1
           if (bins(MU_LO, g) /= bins(MU_HI, g)) then
             ! Do the lower energyout distribution
-            if (bins(MU_LO, g) /= 0) then
+            if (bins(MU_LO, g) > 0) then
               Elo = E_bins(g)
               Ehi = Eout(bins(MU_LO, g))
               do imu = 1, size(mu)
@@ -972,9 +974,17 @@ module scattdata_header
                 fhi = fEmu(imu, bins(MU_LO, g) + 1)
                 fEmu_int(imu, g) = fEmu_int(imu, g) + (Ehi - Elo) * (fhi + flo)
               end do
+              bins_lo_tmp = bins(MU_LO, g) + 1
+            else
+              bins_lo_tmp = abs(bins(MU_LO, g))
+            end if
+            if (bins(MU_HI, g) < 0) then
+              bins_hi_tmp = abs(bins(MU_HI, g))
+            else
+              bins_hi_tmp = bins(MU_HI, g) - 1
             end if
             ! Do the intermediate energyout distributions
-            do iE = bins(MU_LO, g) + 1, bins(MU_HI, g) - 1
+            do iE = bins_lo_tmp, bins_hi_tmp
               Elo = Eout(iE)
               Ehi = Eout(iE + 1)
               do imu = 1, size(mu)
@@ -984,7 +994,7 @@ module scattdata_header
               end do
             end do
             ! Do the upper energyout distribution
-            if (bins(MU_HI, g) /= 0) then
+            if (bins(MU_HI, g) > 0) then
               Elo = Eout(bins(MU_HI, g))
               Ehi = E_bins(g + 1)
               do imu = 1, size(mu)
@@ -1040,7 +1050,7 @@ module scattdata_header
       
       ! Normalize the distribution
       do g = 1, size(E_bins) - 1
-        distro(:, g) = distro(:, g) / distro(1, g)
+        if (distro(1, g) > ZERO) distro(:, g) = distro(:, g) / distro(1, g)
       end do
       
     end subroutine integrate_energyangle_file6_leg
