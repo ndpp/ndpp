@@ -288,7 +288,7 @@ module scattdata_header
       integer :: iE                        ! incoming energy index (searched)
                                            ! (lower bound if Ein is provided)
       integer :: nuc_iE                    ! Energy index on the nuclide's x/s
-      real(8), pointer :: sigS_array(:) => null()   ! sigS pointer
+      real(8), pointer :: sigS_array(:)   => null() ! sigS pointer
       real(8), pointer :: my_distro(:, :) => null() ! the distribution chosen
                                                     ! by the binary search on Ein
                                                     
@@ -296,7 +296,7 @@ module scattdata_header
       real(8) :: vals(2, this % groups)   ! values on start/end energy/angle
       real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       
-      ! Set up the result memory 
+      ! Set up the results memory 
       if (this % scatt_type == SCATT_TYPE_LEGENDRE) then
         allocate(distro(this % order + 1, this % groups))
       else
@@ -322,7 +322,7 @@ module scattdata_header
         return
       else if (Ein <= nuc % energy(1)) then
         ! We are below the lowest global energy value so take the first entry
-        sigS = sigS_array(rxn % threshold)
+        sigS = sigS_array(1)
       else if (Ein >= nuc % energy(nuc % n_grid)) then
         ! We are above the global energy grid, so take the highest value
         sigS = sigS_array(nuc % n_grid)
@@ -333,7 +333,7 @@ module scattdata_header
         if (nuc % energy(nuc_iE) == nuc % energy(nuc_iE + 1)) &
           nuc_iE = nuc_iE + 1
         ! calculate interpolation factor
-        f = (Ein - nuc % energy(nuc_iE))/ &
+        f = (Ein - nuc % energy(nuc_iE)) / &
           (nuc % energy(nuc_iE + 1) - nuc % energy(nuc_iE))
         ! Adjust nuc_iE to point to the sigS_array array
         nuc_iE = nuc_iE - rxn % threshold + 1
@@ -373,8 +373,8 @@ module scattdata_header
         case (SCATT_TYPE_LEGENDRE)
           if (associated(this % adist)) then
             ! 2) calculate the angular boundaries for integration
-            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, this % E_bins, &
-              this % mu, interp, vals, bins)
+            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
+              this % E_bins, this % mu, interp, vals, bins)
             ! 4) integrate according to scatt_type
             call integrate_energyangle_file4_leg(my_distro(:, 1), this % mu, &
               interp, vals, bins, this % order, distro)
@@ -390,8 +390,8 @@ module scattdata_header
         case (SCATT_TYPE_TABULAR)
           if (associated(this % adist)) then
             ! 2) calculate the angular boundaries for integration
-            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, this % E_bins, &
-              this % mu, interp, vals, bins)
+            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
+              this % E_bins, this % mu, interp, vals, bins)
             ! 4) integrate according to scatt_type
 !~             call integrate_energyangle_file4_tab(my_distro(:, 1), this % mu, &
 !~               interp, vals, bins, this % order, distro)
@@ -400,12 +400,14 @@ module scattdata_header
             call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
               this % INTT(iE), interp, bins)
             ! 4) integrate according to scatt_type
-            
+!~             call integrate_energyangle_file6_tab(my_distro, this % mu, &
+!~               this % Eouts(iE) % data, this % E_bins, interp, bins, &
+!~               this % order, distro)
           end if
       end select
       
       ! Combine the results
-      distro = sigS * p_valid * distro * rxn % multiplicity
+      distro = sigS * p_valid * distro * real(rxn % multiplicity, 8)
       
     end function scatt_interp_distro
 
@@ -1062,6 +1064,5 @@ module scattdata_header
 ! distribution while the FILE6 version does the same for a combined energy-angle
 ! distribution
 !===============================================================================
- 
 
 end module scattdata_header

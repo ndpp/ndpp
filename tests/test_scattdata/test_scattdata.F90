@@ -43,6 +43,9 @@ program test_scattdata
   ! Test integrate_energyangle_file6_leg
   call test_integrate_file6_leg()
   
+  ! Test interp_distro
+  call test_interp_distro()
+  
   write(*,*)
   write(*,*) '***************************************************'
   write(*,*) 'Testing ScattData Passed!'
@@ -1910,5 +1913,119 @@ program test_scattdata
       write(*,*) '---------------------------------------------------'
       
     end subroutine test_integrate_file6_leg
+
+!===============================================================================
+! TEST_INTERP_DISTRO Tests the functionality of scatt_interp_distro.
+!===============================================================================
+
+    subroutine test_interp_distro()
+      type(ScattData)           :: mySD    ! Testing object
+      type(Nuclide), target     :: nuc     ! Testing nuclide
+      type(Reaction), allocatable, target :: rxn(:) ! Elastic and inelastic rxn
+      type(DistEnergy), target  :: myedist ! My energy dist
+      real(8), allocatable      :: mu_out(:)
+      real(8), allocatable      :: distro_out(:,:)
+      integer                   :: num_pts ! Number of angular pts in mu
+      real(8)                   :: dmu     ! delta-mu
+      real(8)                   :: Ein
+      integer                   :: NE      ! # incoming energy pts
+      integer                   :: imu     ! Loop counter
+      
+      ! interp_distro takes an array of distributions in this % distro,
+      ! and an incoming energy, stores the result in the result(distro).
+      ! The major parts of my testing will be, with legendre results requested,
+      ! to pass in elastic and inelastic reactions, an incoming energy below
+      ! the threshold energy, above and below the minimum energy in the 
+      ! nuc % energy grid and one w/in the energy range.  
+      ! We then have to test something with nested distributions 
+      ! (and thus edist % p_valid exists),
+      ! CM and Lab, and a file 4 and file 6 distribution.
+      ! Our distributions for this will be an isotropic and linear distro.
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing interp_distro'
+      write(*,*)
+      
+      ! Set up the reactions I need (elastic and inelastic)
+      allocate(rxn(2))
+      ! The first: elastic
+      rxn(1) % MT = ELASTIC
+      rxn(1) % Q_value = ZERO
+      rxn(1) % multiplicity = 1
+      rxn(1) % has_angle_dist = .true.
+      rxn(1) % has_energy_dist = .false.
+      rxn(1) % scatter_in_cm = .true.
+      rxn(1) % threshold = 1
+      ! Second, inelastic
+      rxn(2) % MT = N_LEVEL
+      rxn(2) % Q_value = ZERO
+      rxn(2) % multiplicity = 2
+      rxn(2) % has_angle_dist = .false.
+      rxn(2) % has_energy_dist = .true.
+      rxn(2) % scatter_in_cm = .false.
+      rxn(2) % threshold = 2
+      rxn(2) % edist => myedist
+      myedist % law = 44
+      myedist % p_valid % n_pairs = 3
+      allocate(myedist % p_valid % x(3))
+      myedist % p_valid % x = (/ONE, TWO, 3.0_8/) 
+      allocate(myedist % p_valid % y(3))
+      myedist % p_valid % y = (/ZERO, 0.5_8, TWO/)
+      
+      ! Set nuc
+      nuc % awr = TWO
+      nuc % n_grid = 3
+      allocate(nuc % energy(3))
+      allocate(nuc % elastic(3))
+      nuc % energy =  (/ONE, TWO, 3.0_8/)
+      nuc % elastic = (/0.25_8, 0.5_8, ONE/)
+      
+      ! Build up mySD
+      mySD % scatt_type = SCATT_TYPE_LEGENDRE
+      mySD % order = 5
+      mySD % groups = 1
+      mySD % awr = nuc % awr
+      num_pts = 5
+      allocate(mySD % mu(num_pts))
+      dmu = TWO / real(num_pts - 1, 8)
+      do imu = 1, num_pts - 1
+        mySD % mu(imu) = -ONE + real(imu - 1, 8) * dmu
+      end do
+      ! Set the end point to exactly ONE
+      mySD % mu(num_pts) = ONE
+      allocate(mySD % E_bins(mySD % groups + 1))
+      mySD % E_bins = (/ZERO, 20.0_8/)
+      
+      ! Now lets do an elastic distribution
+      mySD % rxn => rxn(1)
+      mySD % adist => rxn(1) % adist
+      mySD % NE = 2
+      allocate(mySD % E_grid(mySD % NE))
+      mySD % E_grid = (/ONE, TWO/)
+      allocate(mySD % distro(mySD % NE))
+      allocate(mySD % distro(1) % data(num_pts, mySD % groups))
+      mySD % distro(1) % data(:,1) = 0.5_8
+      allocate(mySD % distro(2) % data(num_pts, mySD % groups))
+      mySD % distro(2) % data(:,1) = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
+      Ein = 1.5_8
+      ! Calculate the resultant distro
+      allocate(distro_out(mySD % order + 1, mySD % groups))
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      write(*,*) distro_out
+      
+      ! Lets do the inelastic distribution
+      mySD % rxn => rxn(2)
+      nullify(mySD % adist)
+      mySD % edist => myedist
+      distro_out = ZERO
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      write(*,*) distro_out
+      
+      write(*,*)
+      write(*,*) 'interp_distro Test Passed!'
+      write(*,*) '---------------------------------------------------'
+      
+    end subroutine test_interp_distro
 
 end program test_scattdata
