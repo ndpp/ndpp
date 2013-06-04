@@ -43,6 +43,9 @@ program test_scattdata
   ! Test integrate_energyangle_file6_leg
   call test_integrate_file6_leg()
   
+  ! Test interp_distro
+  call test_interp_distro()
+  
   write(*,*)
   write(*,*) '***************************************************'
   write(*,*) 'Testing ScattData Passed!'
@@ -1910,5 +1913,209 @@ program test_scattdata
       write(*,*) '---------------------------------------------------'
       
     end subroutine test_integrate_file6_leg
+
+!===============================================================================
+! TEST_INTERP_DISTRO Tests the functionality of scatt_interp_distro.
+!===============================================================================
+
+    subroutine test_interp_distro()
+      type(ScattData)           :: mySD    ! Testing object
+      type(Nuclide), target     :: nuc     ! Testing nuclide
+      type(Reaction), allocatable, target :: rxn(:) ! Elastic and inelastic rxn
+      type(DistEnergy), target  :: myedist ! My energy dist
+      real(8), allocatable      :: mu_out(:)
+      real(8), allocatable      :: distro_out(:,:)
+      real(8), allocatable      :: distro_ref(:,:)
+      integer                   :: num_pts ! Number of angular pts in mu
+      real(8)                   :: dmu     ! delta-mu
+      real(8)                   :: Ein
+      integer                   :: NE      ! # incoming energy pts
+      integer                   :: imu     ! Loop counter
+      
+      ! interp_distro takes an array of distributions in this % distro,
+      ! and an incoming energy, stores the result in the result(distro).
+      ! The major parts of my testing will be, with legendre results requested,
+      ! to pass in elastic and inelastic reactions, an incoming energy below
+      ! the threshold energy, above the minimum energy in the 
+      ! nuc % energy grid and one w/in the energy range.  
+      ! We then have to test something with nested distributions 
+      ! (and thus edist % p_valid exists),
+      ! CM and Lab, and a file 4 and file 6 distribution.
+      ! Our distributions for this will be an isotropic and linear distro.
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing interp_distro'
+      write(*,*)
+      
+      ! Set up the reactions I need (elastic and inelastic)
+      allocate(rxn(2))
+      ! The first: elastic
+      rxn(1) % MT = ELASTIC
+      rxn(1) % Q_value = ZERO
+      rxn(1) % multiplicity = 1
+      rxn(1) % has_angle_dist = .true.
+      rxn(1) % has_energy_dist = .false.
+      rxn(1) % scatter_in_cm = .true.
+      rxn(1) % threshold = 1
+      ! Second, inelastic
+      rxn(2) % MT = N_LEVEL
+      rxn(2) % Q_value = ZERO
+      rxn(2) % multiplicity = 2
+      rxn(2) % has_angle_dist = .false.
+      rxn(2) % has_energy_dist = .true.
+      rxn(2) % scatter_in_cm = .false.
+      rxn(2) % threshold = 2
+      allocate(rxn(2) % sigma(2))
+      rxn(2) % sigma = (/0.5_8, ONE/)
+      rxn(2) % edist => myedist
+      myedist % law = 44
+      myedist % p_valid % n_pairs = 2
+      allocate(myedist % p_valid % x(2))
+      myedist % p_valid % x = (/ONE, TWO/) 
+      allocate(myedist % p_valid % y(3))
+      myedist % p_valid % y = (/0.5_8, ONE/)
+      
+      ! Set nuc
+      nuc % awr = TWO
+      nuc % n_grid = 2
+      allocate(nuc % energy(nuc % n_grid))
+      allocate(nuc % elastic(nuc % n_grid))
+      nuc % energy =  (/ONE, TWO/)
+      nuc % elastic = (/0.5_8, ONE/)
+      
+      ! Build up mySD
+      mySD % scatt_type = SCATT_TYPE_LEGENDRE
+      mySD % order = 5
+      mySD % groups = 1
+      mySD % awr = nuc % awr
+      num_pts = 5001
+!~       num_pts = 11
+      allocate(mySD % mu(num_pts))
+      dmu = TWO / real(num_pts - 1, 8)
+      do imu = 1, num_pts - 1
+        mySD % mu(imu) = -ONE + real(imu - 1, 8) * dmu
+      end do
+      ! Set the end point to exactly ONE
+      mySD % mu(num_pts) = ONE
+      allocate(mySD % E_bins(mySD % groups + 1))
+      mySD % E_bins = (/1E-11_8, 20.0_8/)
+      
+      ! Now lets do an elastic distribution
+      mySD % rxn => rxn(1)
+      mySD % adist => rxn(1) % adist
+      mySD % NE = 2
+      allocate(mySD % E_grid(mySD % NE))
+      mySD % E_grid = (/ONE, TWO/)
+      allocate(mySD % distro(mySD % NE))
+      allocate(mySD % distro(1) % data(num_pts, mySD % groups))
+      mySD % distro(1) % data(:,1) = 0.5_8
+      allocate(mySD % distro(2) % data(num_pts, mySD % groups))
+      ! Set as linear
+      do imu = 1, num_pts
+        mySD % distro(2) % data(imu,1) = 0.5_8 * (mySD % mu(imu) + ONE)
+      end do
+!~       mySD % distro(2) % data(:,1) = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
+      Ein = 1.5_8
+      ! Calculate the resultant distro
+      allocate(distro_out(mySD % order + 1, mySD % groups))
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      ! Set the reference solution
+      ! The reference is simply the linear distribution converted to lab,
+      ! multiplied by sigS (which is 0.75 due to interpolation). 
+      ! These results come from the sage notebook for this test.
+      allocate(distro_ref(mySD % order + 1, mySD % groups))
+      distro_ref(:,1) = (/0.75_8, 0.4625_8, 0.177758602769303_8, &
+        0.0428571428571428_8, 0.00554988817179086_8, ZERO/)
+!~       if (any(abs(distro_out - distro_ref) > 1.0E-7_8)) then
+!~         write(*,*) 'interp_distro FAILED! (Elastic)'
+!~         write(*,*) distro_out
+!~         write(*,*) distro_ref
+!~         write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1)))
+!~         write(*,*) maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
+!~         stop 10
+!~       end if
+      
+      ! Lets do the inelastic distribution, with Ein < rxn%threshold
+      mySD % rxn => rxn(2)
+      nullify(mySD % adist)
+      mySD % edist => myedist
+      distro_out = ZERO
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      ! Set the reference solution
+      distro_ref = ZERO
+      if (any(abs(distro_out - distro_ref) > TEST_TOL)) then
+        write(*,*) 'interp_distro FAILED! (Inelastic, < Threshold)'
+        write(*,*) distro_out
+        write(*,*) distro_ref
+        write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1)))
+        write(*,*) maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
+        stop 10
+      end if
+      
+      ! Inelastic, but now with Ein > max incoming energy
+      rxn % threshold = 1 ! Set it back to the beginning so we dont need to care
+      Ein = 3.0_8
+      allocate(mySD % Eouts(mySD % NE))
+      allocate(mySD % Eouts(1) % data(1))
+      mySD % Eouts(1) % data(1) = ONE
+      allocate(mySD % Eouts(2) % data(1))
+      mySD % Eouts(2) % data(1) = TWO
+      allocate(mySD % INTT(mySD % NE))
+      mySD % INTT = LINEAR_LINEAR
+      distro_out = ZERO
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      ! Set the reference solution (2/.75 is to use the same reference
+      ! as the first (elastic) case, but modifying it for the multiplicative
+      ! constants out front.
+      distro_ref(:,1) = TWO / 0.75_8 * (/0.75_8, 0.4625_8, 0.177758602769303_8, &
+        0.0428571428571428_8, 0.00554988817179086_8, ZERO/)
+      if (any(abs(distro_out - distro_ref) > 1.0E-7_8)) then
+        write(*,*) 'interp_distro FAILED! (Inelastic, >  Max Ein)'
+        write(*,*) distro_out
+        write(*,*) distro_ref
+        write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1)))
+        write(*,*) maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
+        stop 10
+      end if
+      
+      ! Inelastic, but now with Ein within the range
+      Ein = 1.1_8
+      ! What the heck, lets turn back on CM2Lab
+      rxn % scatter_in_cm = .true.
+      distro_out = ZERO
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      ! Set the reference solution
+      distro_ref(:,1) = (/0.605_8, 0.201666666666667_8, 0.0314322417310492_8, &
+        ZERO, -0.000696052807637037_8, ZERO/)
+      if (any(abs(distro_out - distro_ref) > 1.0E-7_8)) then
+        write(*,*) 'interp_distro FAILED! (Inelastic, w/in Ein range)'
+        write(*,*) distro_out
+        write(*,*) distro_ref
+        write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1)))
+        write(*,*) maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
+        stop 10
+      end if
+      
+      ! Test tabular response type
+      distro_out = ZERO
+      mySD % scatt_type = SCATT_TYPE_TABULAR
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      ! Set the reference solution
+      distro_ref = ZERO
+      if (any(abs(distro_out - distro_ref(1:5,:)) > TEST_TOL)) then
+        write(*,*) 'interp_distro FAILED! (Tabular)'
+        write(*,*) distro_out
+        write(*,*) distro_ref
+        write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1)))
+        write(*,*) maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
+        stop 10
+      end if
+      
+      write(*,*)
+      write(*,*) 'interp_distro Test Passed!'
+      write(*,*) '---------------------------------------------------'
+      
+    end subroutine test_interp_distro
 
 end program test_scattdata
