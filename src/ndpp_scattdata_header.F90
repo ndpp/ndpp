@@ -320,12 +320,11 @@ module scattdata_header
         ! should be set to zero and we shall just exit this function
         distro = ZERO
         return
-      else if (Ein <= nuc % energy(1)) then
-        ! We are below the lowest global energy value so take the first entry
-        sigS = sigS_array(1)
       else if (Ein >= nuc % energy(nuc % n_grid)) then
         ! We are above the global energy grid, so take the highest value
         sigS = sigS_array(nuc % n_grid)
+        
+        iE = this % NE
       else
         nuc_iE = binary_search(nuc % energy, nuc % n_grid, &
           Ein)
@@ -338,6 +337,16 @@ module scattdata_header
         ! Adjust nuc_iE to point to the sigS_array array
         nuc_iE = nuc_iE - rxn % threshold + 1
         sigS = (ONE - f) * sigS_array(nuc_iE) + f * sigS_array(nuc_iE + 1)
+        
+        ! Search on the angular distribution's energy grid to find what energy
+        ! index Ein is at.
+        iE = binary_search(this % E_grid, this % NE, Ein)
+        ! Interpolate the distribution
+        !!! For now we will just `interpolate' based on whichever
+        !!! distribution is the closest to the requested energy
+        f = (Ein - this % E_grid(iE))/ &
+          (this % E_grid(iE + 1) - this % E_grid(iE))
+        if (f >= 0.5_8) iE = iE + 1
       end if
       
       ! Get the probability value
@@ -347,16 +356,6 @@ module scattdata_header
         p_valid = ONE
       end if
       
-      ! Search on the angular distribution's energy grid to find what energy
-      ! index Ein is at.
-      iE = binary_search(this % E_grid, this % NE, Ein)
-      
-      ! Interpolate the distribution
-      !!! For now we will just `interpolate' based on whichever
-      !!! distribution is the closest to the requested energy
-      f = (Ein - this % E_grid(iE))/ &
-        (this % E_grid(iE + 1) - this % E_grid(iE))
-      if (f >= 0.5_8) iE = iE + 1
       my_distro => this % distro(iE) % data
       
       ! We know which distribution to work with, now it is time to:
