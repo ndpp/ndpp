@@ -89,7 +89,7 @@ endif
 
 ifeq ($(COMPILER),intel)
   F90 = ifort
-  F90FLAGS := -cpp -warn -assume byterecl -traceback
+  F90FLAGS := -fpp -warn -assume byterecl -traceback
   LDFLAGS =
 
   # Debugging
