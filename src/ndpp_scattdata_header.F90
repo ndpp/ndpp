@@ -302,6 +302,7 @@ module scattdata_header
       else
         allocate(distro(this % order, this % groups))
       end if
+      distro = ZERO
       
       ! Set rxn, so we can save some characters throughout this function.
       rxn => this % rxn
