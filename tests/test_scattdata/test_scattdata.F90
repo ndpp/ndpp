@@ -2097,6 +2097,21 @@ program test_scattdata
         stop 10
       end if
       
+      ! Test tabular response type
+      distro_out = ZERO
+      mySD % scatt_type = SCATT_TYPE_TABULAR
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      ! Set the reference solution
+      distro_ref = ZERO
+      if (any(abs(distro_out - distro_ref(1:5,:)) > TEST_TOL)) then
+        write(*,*) 'interp_distro FAILED! (Tabular)'
+        write(*,*) distro_out
+        write(*,*) distro_ref
+        write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1)))
+        write(*,*) maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
+        stop 10
+      end if
+      
       write(*,*)
       write(*,*) 'interp_distro Test Passed!'
       write(*,*) '---------------------------------------------------'
