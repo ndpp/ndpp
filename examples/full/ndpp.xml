@@ -9,4 +9,5 @@
   <energy_bins>1.0E-11 0.625E-6 102.0</energy_bins>
   <mu_bins>21</mu_bins>
   <integrate_chi>false</integrate_chi>
+  <output_format>BINARY</output_format>
 </ndpp>

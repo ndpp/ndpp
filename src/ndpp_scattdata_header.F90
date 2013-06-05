@@ -138,6 +138,7 @@ module scattdata_header
         allocate(rxn % adist % data(2))
         rxn % adist % data = ZERO
         this % adist => rxn % adist
+        rxn % scatter_in_cm = .true.
         this % edist => null()
       end if
       
@@ -289,14 +290,14 @@ module scattdata_header
       
       type(Reaction), pointer   :: rxn     ! The reaction of interest
       real(8), allocatable :: distro(:,:)  ! the output distribution
+      real(8), allocatable :: my_distro(:,:) ! the distribution chosen
+                                              ! by the binary search on Ein
       real(8) :: f, p_valid, sigS          ! interpolation, probability of this
                                            ! (nested) reaction, and \sigma_s(E)
       integer :: iE                        ! incoming energy index (searched)
                                            ! (lower bound if Ein is provided)
       integer :: nuc_iE                    ! Energy index on the nuclide's x/s
       real(8), pointer :: sigS_array(:)   => null() ! sigS pointer
-      real(8), pointer :: my_distro(:, :) => null() ! the distribution chosen
-                                                    ! by the binary search on Ein
                                                     
       integer :: bins(2, this % groups)   ! Start/end energy/angle bin indices
       real(8) :: vals(2, this % groups)   ! values on start/end energy/angle
@@ -363,8 +364,6 @@ module scattdata_header
         p_valid = ONE
       end if
       
-      my_distro => this % distro(iE) % data
-      
       ! We know which distribution to work with, now it is time to:
       ! 1) convert from CM to Lab, if necessary
       ! 2) calculate the angular boundaries for integration
@@ -372,8 +371,14 @@ module scattdata_header
       ! 4) integrate according to scatt_type
       
       ! 1) convert from CM to Lab, if necessary
-      if (rxn % scatter_in_cm) &
-        call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, my_distro)
+      allocate(my_distro(size(this % distro(iE) % data, dim=1), &
+        size(this % distro(iE) % data, dim=2)))
+      if (rxn % scatter_in_cm) then
+        call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, &
+          this % distro(iE) % data, my_distro)
+      else
+        my_distro = this % distro(iE) % data
+      end if
       
       select case (this % scatt_type)
         case (SCATT_TYPE_LEGENDRE)
@@ -642,12 +647,13 @@ module scattdata_header
 ! of reference tabular distribution.
 !===============================================================================
 
-    subroutine cm2lab(awr, Q, Ein, mu, data)
+    subroutine cm2lab(awr, Q, Ein, mu, data, distro_out)
       real(8), intent(in) :: awr   ! Atomic Weight Ratio for this nuclide
       real(8), intent(in) :: Q     ! Binding Energy of reaction, for finding R
       real(8), intent(in) :: Ein   ! Incoming energy
       real(8), intent(in) :: mu(:) ! Angular grid
-      real(8), intent(inout) :: data(:,:) ! The distribution to convert
+      real(8), intent(in) :: data(:,:) ! The distribution to convert
+      real(8), intent(out) :: distro_out(:,:) ! The distribution to convert
       
       real(8) :: R, Rinv, R2       ! Reduced Effective Mass, 1/R, and R^2
       real(8) :: mu_l(size(data, dim = 1))  ! CM angular points corresponding to 
@@ -704,18 +710,18 @@ module scattdata_header
           ! with linear interpolation
           do imu = 1 , mu_bins - 1
             if (mu(imu) <= mu_l(1)) then
-              data(imu, iEout) = ZERO
+              distro_out(imu, iEout) = ZERO
             else
               imu_l = binary_search(mu_l, mu_bins, mu(imu))
               ! Get the interpolation parameter
               interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
-              data(imu, iEout) = tempdistro(imu_l) + interp * &
+              distro_out(imu, iEout) = tempdistro(imu_l) + interp * &
                 (tempdistro(imu_l + 1) - tempdistro(imu_l))
             end if
           end do
           ! Set the last point explicitly since mu_l(last) and mu(last) will
           ! always be the same
-          data(mu_bins, iEout) = tempdistro(mu_bins)
+          distro_out(mu_bins, iEout) = tempdistro(mu_bins)
         end do
       else
         ! Calculate the lab (mu) and CM (mu_l) mu grid points.
@@ -732,8 +738,8 @@ module scattdata_header
           ! Convert the CM distro to the laboratory system
           do imu = 1, mu_bins
             tempsqrt = sqrt(mu_l(imu) * mu_l(imu) + R2 - ONE)
-            tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + tempsqrt + &
-              mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
+            tempdistro(imu) = data(imu, iEout) * (TWO * mu_l(imu) + &
+              tempsqrt + mu_l(imu) * mu_l(imu) / tempsqrt) * Rinv
           end do
           
           ! Now we put this tempdistro, which is on the mu_l grid, back on to the
@@ -743,12 +749,12 @@ module scattdata_header
             imu_l = binary_search(mu_l, mu_bins, mu(imu))
             ! Get the interpolation parameter
             interp = (mu(imu) -  mu_l(imu_l)) / (mu_l(imu_l + 1) - mu_l(imu_l))
-            data(imu, iEout) = tempdistro(imu_l) + interp * &
+            distro_out(imu, iEout) = tempdistro(imu_l) + interp * &
               (tempdistro(imu_l + 1) - tempdistro(imu_l))
           end do
           ! Set the last point explicitly since mu_l(last) and mu(last) will
           ! always be the same
-          data(mu_bins, iEout) = tempdistro(mu_bins)
+          distro_out(mu_bins, iEout) = tempdistro(mu_bins)
         end do
       end if
             

@@ -158,8 +158,8 @@ program test_scattdata
       ! First test a situation with a rxn % MT which will cause an automatic
       ! return of init
       ! This includes all of:
-      ! (n,fiss), (n,f), (n,nf), (n,2nf), (n,3nf), MT>=200, (n,level)
-      do i = 1, 7
+      ! (n,fiss), (n,f), (n,nf), (n,2nf), (n,3nf), MT>=200
+      do i = 1, 6
         select case (i)
           case (1) 
             rxn % MT = N_FISSION
@@ -173,8 +173,6 @@ program test_scattdata
             rxn % MT = N_3NF
           case (6) 
             rxn % MT = 200
-          case (7) 
-            rxn % MT = N_LEVEL
         end select
         call mySD % init(nuc, rxn, edist, E_bins, scatt_type, order, mu_bins)
         if (mySD % is_init) then
@@ -271,6 +269,7 @@ program test_scattdata
       NR = 0
       NE = 2
       NP = 2
+      myedist%law = 44
       allocate(myedist % data(5+2*NR+NE + 1+5*NP + 1 + 2+5*NP - 1))
       myedist % data(1:2+2*NR+NE) = (/ZERO, TWO, 2.0E-11_8, 20.0_8/)  ! NR, NE, Ein(:) 
       myedist % data(3+2*NR+NE : 4+2*NR+NE) = (/4+2*NR+NE, 5+2*NR+NE + 1+5*NP/) ! lc(Ein)
@@ -293,6 +292,8 @@ program test_scattdata
         mySD % scatt_type /= SCATT_TYPE_LEGENDRE .or. &
         mySD % order /= 5 .or. mySD % awr /= ONE .or. mySD % NE /= 2) then
         write(*,*) 'ScattData % init FAILED! (Scalars)'
+        write(*,*) mySD % is_init, mySD % scatt_type, mySD % order
+        write(*,*) mySD % awr, mySD % NE
         stop 10
       end if
       ! Allocatables, one at a time
@@ -428,7 +429,7 @@ program test_scattdata
       end if
       ! Pointers
       if ((.not. associated(mySD % rxn, rxn)) .or. &
-        associated(mySD % edist) .or. associated(mySD % adist) .or. &
+        associated(mySD % edist) .or. &
         (.not. associated(mySD % E_bins, E_bins))) then
         write(*,*) 'ScattData % init FAILED! (Associated)'
         stop 10
@@ -438,7 +439,9 @@ program test_scattdata
       ! Finally, repeat the isotropic case, but set a threshold energy
       ! above E_bins(1) so that the E_grid(1) == rxn % threshold
       write(*,*) 'Testing Isotropic Distribution w/ Threshold'
+      call rxn % adist % clear()
       rxn % threshold = 2
+      ! Clear the adist that was written in the previous init
       call mySD % init(nuc, rxn, edist, E_bins, scatt_type, order, mu_bins)      
       ! To reduce the scope of each if-block, we will check the scalars,
       ! then the allocatables, then the pointers
@@ -1163,6 +1166,7 @@ program test_scattdata
       ! that role.
       
       ! Begin by setting up mySD
+      mySD % is_init = .true.
       NE = 2
       mySD % NE = NE
       ! Allocate/Set mu and distro
@@ -1329,7 +1333,7 @@ program test_scattdata
       awr = 235.0_8
       Q = ZERO
       distro = distro_in
-      call cm2lab(awr, Q, Ein, mu, distro)
+      call cm2lab(awr, Q, Ein, mu, distro_in, distro)
       ! Check results
       if ((any(abs(distro(:,1) - distro_ref(:,1,1)) > 1.0E-6_8)) .or. &
         (any(abs(distro(:,2) - distro_ref(:,2,1)) > 1.0E-3_8))) then
@@ -1344,7 +1348,7 @@ program test_scattdata
       awr = 0.999167_8
       Q = ZERO
       distro = distro_in
-      call cm2lab(awr, Q, Ein, mu, distro)
+      call cm2lab(awr, Q, Ein, mu, distro_in, distro)
       ! Check results
       ! To not subject all domains of the solution to the same error bounds
       ! check the zero, first non-zero point, and remaining points separate.
@@ -1965,7 +1969,7 @@ program test_scattdata
       rxn(2) % multiplicity = 2
       rxn(2) % has_angle_dist = .false.
       rxn(2) % has_energy_dist = .true.
-      rxn(2) % scatter_in_cm = .false.
+      rxn(2) % scatter_in_cm = .true.
       rxn(2) % threshold = 2
       allocate(rxn(2) % sigma(2))
       rxn(2) % sigma = (/0.5_8, ONE/)
@@ -2017,7 +2021,6 @@ program test_scattdata
       do imu = 1, num_pts
         mySD % distro(2) % data(imu,1) = 0.5_8 * (mySD % mu(imu) + ONE)
       end do
-!~       mySD % distro(2) % data(:,1) = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
       Ein = 1.5_8
       ! Calculate the resultant distro
       allocate(distro_out(mySD % order + 1, mySD % groups))
