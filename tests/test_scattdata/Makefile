@@ -26,16 +26,12 @@ test_scattdata.o
 # User Options
 #===============================================================================
 
-# First check to ensure that these haven't been defined by an upstream Makefile
-#ifndef COMPILER
 COMPILER = gnu
 DEBUG    = no
 PROFILE  = no
-CODECOV  = no
 OPTIMIZE = no
 MPI      = no
 HDF5     = no
-#endif
 
 #===============================================================================
 # External Library Paths
@@ -118,74 +114,6 @@ ifeq ($(COMPILER),intel)
 endif
 
 #===============================================================================
-# PGI compiler options
-#===============================================================================
-
-ifeq ($(COMPILER),pgi)
-  F90 = pgf90
-  F90FLAGS := -Mpreprocess -DNO_F2008 -Minform=inform -traceback
-  LDFLAGS =
-
-  # Debugging
-  ifeq ($(DEBUG),yes)
-    F90FLAGS += -g -Mbounds -Mchkptr -Mchkstk
-    LDFLAGS  += -g
-  endif
-
-  # Profiling
-  ifeq ($(PROFILE),yes)
-    F90FLAGS += -pg
-    LDFLAGS  += -pg
-  endif
-
-  # Optimization
-  ifeq ($(OPTIMIZE),yes)
-    F90FLAGS += -fast -Mipa
-  endif
-endif
-
-#===============================================================================
-# IBM XL compiler options
-#===============================================================================
-
-ifeq ($(COMPILER),ibm)
-  F90 = xlf2003
-  F90FLAGS := -WF,-DNO_F2008 -O2
-
-  # Debugging
-  ifeq ($(DEBUG),yes)
-    F90FLAGS += -g -C -qflag=i:i -u
-    LDFLAGS  += -g
-  endif
-
-  # Profiling
-  ifeq ($(PROFILE),yes)
-    F90FLAGS += -p
-    LDFLAGS  += -p
-  endif
-
-  # Optimization
-  ifeq ($(OPTIMIZE),yes)
-    F90FLAGS += -O3
-  endif
-endif
-
-#===============================================================================
-# Cray compiler options
-#===============================================================================
-
-ifeq ($(COMPILER),cray)
-  F90 = ftn
-  F90FLAGS := -e Z -m 0
-
-  # Debugging
-  ifeq ($(DEBUG),yes)
-    F90FLAGS += -g -R abcnsp -O0
-    LDFLAGS  += -g
-  endif
-endif
-
-#===============================================================================
 # Setup External Libraries
 #===============================================================================
 
@@ -206,42 +134,13 @@ endif
 #~ endif
 
 #===============================================================================
-# Machine-specific setup
-#===============================================================================
-
-# IBM Blue Gene/P ANL supercomputer
-
-ifeq ($(MACHINE),bluegene)
-  F90 = /bgsys/drivers/ppcfloor/comm/xl/bin/mpixlf2003
-  F90FLAGS = -WF,-DNO_F2008,-DMPI -O3
-  LDFLAGS = -lmpich.cnkf90
-endif
-
-# Cray XK6 ORNL Titan supercomputer
-
-ifeq ($(MACHINE),crayxk6)
-  F90 = ftn
-  F90FLAGS += -DMPI
-endif
-
-# IBM Blue Gene/Q ANL supercomputer
-
-ifeq ($(MACHINE),bluegeneq)
-  F90 = mpixlf2003
-  F90FLAGS = -WF,-DNO_F2008,-DMPI -O5
-endif
-
-#===============================================================================
 # Targets
 #===============================================================================
 
 all: $(program)
 $(program): $(objects)
 	$(F90) $(objects) $(LDFLAGS) -o $@
-distclean: covclean
-covclean:
-	@rm -rf CodeCoverage *.dyn gmon.out pgopti* *.HTML
-	@rm -f *.o *.mod $(program)
+distclean: clean
 clean:
 	@rm -f *.o *.mod $(program)
 neat:
@@ -252,7 +151,7 @@ neat:
 #===============================================================================
 
 .SUFFIXES: .F90 .o
-.PHONY: all covclean clean neat distclean 
+.PHONY: all clean neat distclean 
 
 %.o: %.F90
 	$(F90) $(F90FLAGS) -DGIT_SHA1="\"$(GIT_SHA1)\"" -I$(SRC_DIR) -c $<

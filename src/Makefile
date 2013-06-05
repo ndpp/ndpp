@@ -121,6 +121,10 @@ xml-fortran:
 	cd templates; make F90=$(F90) F90FLAGS="$(F90FLAGS)"
 $(program): $(objects)
 	$(F90) $(objects) $(templates) $(xml_fort) $(LDFLAGS) -o $@
+tests:
+	make all
+	cd ../tests/test_scattdata; make COMPILER=$(COMPILER) DEBUG=$(DEBUG) \
+			OPTIMIZE=$(OPTIMIZE) PROFILE=$(PROFILE) MPI=$(MPI) HDF5=$(HDF5)
 install:
 	@install -D $(program) $(DESTDIR)$(prefix)/bin/$(program)
 	@install -D ../man/man1/ndpp.1 $(DESTDIR)$(prefix)/share/man/man1/ndpp.1
@@ -132,6 +136,7 @@ uninstall:
 distclean: clean
 	cd xml-fortran; make clean
 	cd templates; make clean
+	cd ../tests/test_scattdata; make clean
 clean:
 	@rm -f *.o *.mod $(program)
 neat:
@@ -142,7 +147,7 @@ neat:
 #===============================================================================
 
 .SUFFIXES: .F90 .o
-.PHONY: all xml-fortran install uninstall covclean clean neat distclean 
+.PHONY: all xml-fortran tests install uninstall clean neat distclean 
 
 %.o: %.F90
 	$(F90) $(F90FLAGS) -DGIT_SHA1="\"$(GIT_SHA1)\"" -Ixml-fortran -Itemplates -c $<
