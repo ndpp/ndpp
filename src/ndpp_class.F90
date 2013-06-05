@@ -393,7 +393,7 @@ module ndpp_class
           
           call timer_stop(self % time_chi_preproc)
         else
-          message = "Invalid Entry in cross_sections listings." // &
+          message = "Invalid Entry in cross_sections listings.  " // &
             "NDPP does not support S(A,B) tables and Dosimetry Tables!"
           call warning()
         end if
