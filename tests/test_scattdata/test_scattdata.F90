@@ -1920,7 +1920,8 @@ program test_scattdata
 
     subroutine test_interp_distro()
       type(ScattData)           :: mySD    ! Testing object
-      type(Nuclide), target     :: nuc     ! Testing nuclide
+      type(Nuclide), target     :: mynuc   ! Testing nuclide
+      type(Nuclide), pointer    :: nuc     ! Testing nuclide
       type(Reaction), allocatable, target :: rxn(:) ! Elastic and inelastic rxn
       type(DistEnergy), target  :: myedist ! My energy dist
       real(8), allocatable      :: mu_out(:)
@@ -1977,6 +1978,7 @@ program test_scattdata
       myedist % p_valid % y = (/0.5_8, ONE/)
       
       ! Set nuc
+      nuc => mynuc
       nuc % awr = TWO
       nuc % n_grid = 2
       allocate(nuc % energy(nuc % n_grid))

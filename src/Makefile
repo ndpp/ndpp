@@ -96,7 +96,7 @@ ifeq ($(COMPILER),intel)
 
   # Optimization
   ifeq ($(OPTIMIZE),yes)
-    F90FLAGS += -O3 -ipo
+    F90FLAGS += -O3
   endif
 endif
 
