@@ -19,11 +19,9 @@ include OBJECTS
 COMPILER = gnu
 DEBUG    = no
 PROFILE  = no
-CODECOV  = no
 OPTIMIZE = no
 MPI      = no
 HDF5     = no
-PETSC    = no
 
 #===============================================================================
 # External Library Paths
@@ -31,7 +29,6 @@ PETSC    = no
 
 MPI_DIR   = /opt/mpich/3.0.2-$(COMPILER)
 HDF5_DIR  = /opt/hdf5/1.8.10-patch1-$(COMPILER)
-PETSC_DIR = /opt/petsc/3.3-p6-$(COMPILER)
 
 #===============================================================================
 # Add git SHA-1 hash
@@ -87,84 +84,10 @@ ifeq ($(COMPILER),intel)
     F90FLAGS += -pg -prof-gen:srcpos
     LDFLAGS  += -pg -prof-gen:srcpos
   endif
-  
-  # Code-Coverage
-  ifeq ($(CODECOV),yes)
-    F90FLAGS += -pg -prof-gen=srcpos
-    LDFLAGS  += -pg -prof-gen=srcpos
-  endif
 
   # Optimization
   ifeq ($(OPTIMIZE),yes)
     F90FLAGS += -O3
-  endif
-endif
-
-#===============================================================================
-# PGI compiler options
-#===============================================================================
-
-ifeq ($(COMPILER),pgi)
-  F90 = pgf90
-  F90FLAGS := -Mpreprocess -DNO_F2008 -Minform=inform -traceback
-  LDFLAGS =
-
-  # Debugging
-  ifeq ($(DEBUG),yes)
-    F90FLAGS += -g -Mbounds -Mchkptr -Mchkstk
-    LDFLAGS  += -g
-  endif
-
-  # Profiling
-  ifeq ($(PROFILE),yes)
-    F90FLAGS += -pg
-    LDFLAGS  += -pg
-  endif
-
-  # Optimization
-  ifeq ($(OPTIMIZE),yes)
-    F90FLAGS += -fast -Mipa
-  endif
-endif
-
-#===============================================================================
-# IBM XL compiler options
-#===============================================================================
-
-ifeq ($(COMPILER),ibm)
-  F90 = xlf2003
-  F90FLAGS := -WF,-DNO_F2008 -O2
-
-  # Debugging
-  ifeq ($(DEBUG),yes)
-    F90FLAGS += -g -C -qflag=i:i -u
-    LDFLAGS  += -g
-  endif
-
-  # Profiling
-  ifeq ($(PROFILE),yes)
-    F90FLAGS += -p
-    LDFLAGS  += -p
-  endif
-
-  # Optimization
-  ifeq ($(OPTIMIZE),yes)
-    F90FLAGS += -O3
-  endif
-endif
-
-#===============================================================================
-# Cray compiler options
-#===============================================================================
-
-ifeq ($(COMPILER),cray)
-  F90 = ftn
-  F90FLAGS := -e Z -m 0
-
-  # Debugging
-  ifeq ($(DEBUG),yes)
-    F90FLAGS += -g -R abcnsp -O0
-    LDFLAGS  += -g
   endif
 endif
 
@@ -188,46 +111,6 @@ ifeq ($(HDF5),yes)
              $(HDF5_DIR)/lib64/libhdf5.a -lz -lrt -lm -Wl,-rpath -Wl,$(HDF5_DIR)/lib64
 endif
 
-# PETSC for CMFD functionality
-
-ifeq ($(PETSC),yes)
-  # Check to make sure MPI is set
-  ifneq ($(MPI),yes)
-    $(error MPI must be enabled to compile with PETSC!)
-  endif
-
-  # Set up PETSc environment
-  include $(PETSC_DIR)/conf/petscvariables
-  F90FLAGS += -I$(PETSC_DIR)/include -DPETSC
-  LDFLAGS += $(PETSC_LIB)
-endif
-
-#===============================================================================
-# Machine-specific setup
-#===============================================================================
-
-# IBM Blue Gene/P ANL supercomputer
-
-ifeq ($(MACHINE),bluegene)
-  F90 = /bgsys/drivers/ppcfloor/comm/xl/bin/mpixlf2003
-  F90FLAGS = -WF,-DNO_F2008,-DMPI -O3
-  LDFLAGS = -lmpich.cnkf90
-endif
-
-# Cray XK6 ORNL Titan supercomputer
-
-ifeq ($(MACHINE),crayxk6)
-  F90 = ftn
-  F90FLAGS += -DMPI
-endif
-
-# IBM Blue Gene/Q ANL supercomputer
-
-ifeq ($(MACHINE),bluegeneq)
-  F90 = mpixlf2003
-  F90FLAGS = -WF,-DNO_F2008,-DMPI -O5
-endif
-
 #===============================================================================
 # Targets
 #===============================================================================
@@ -246,12 +129,9 @@ uninstall:
 	@rm $(DESTDIR)$(prefix)/bin/$(program)
 	@rm $(DESTDIR)$(prefix)/share/man/man1/ndpp.1
 	@rm $(DESTDIR)$(prefix)/share/doc/$(program)/copyright
-distclean: covclean
+distclean: clean
 	cd xml-fortran; make clean
 	cd templates; make clean
-covclean:
-	@rm -rf CodeCoverage *.dyn gmon.out pgopti* *.HTML
-	@rm -f *.o *.mod $(program)
 clean:
 	@rm -f *.o *.mod $(program)
 neat:

@@ -103,6 +103,7 @@ ndpp_scatt.o: string.o
 ndpp_scattdata_header.o: ace_header.o
 ndpp_scattdata_header.o: ndpp_constants.o
 ndpp_scattdata_header.o: dict_header.o
+ndpp_scattdata_header.o: endf.o
 ndpp_scattdata_header.o: ndpp_error.o
 ndpp_scattdata_header.o: ndpp_global.o
 ndpp_scattdata_header.o: interpolation.o

@@ -92,6 +92,7 @@ module ndpp_scatt
         mySD => rxn_data(i_rxn)
         ! Convert the angular distributions from the ACE data to Tabular format
         call mySD % convert_distro()
+        nullify(mySD)
       end do
       
       ! Create the energy grid in which the distributions will be calculated on
@@ -108,7 +109,12 @@ module ndpp_scatt
       
       ! Now combine the results on to the nuc % energy grid.
       call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
-
+      
+      ! Now clear rxn_datas members
+      do i_rxn = 1, num_tot_rxn
+        call rxn_data(i_rxn) % clear()
+      end do
+      
     end subroutine calc_scatt
  
 !===============================================================================
@@ -119,7 +125,7 @@ module ndpp_scatt
     subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
-      type(ScattData), intent(in), target  :: rxn_data(:) ! The converted distros
+      type(ScattData), intent(inout), target  :: rxn_data(:) ! The converted distros
       real(8), pointer, intent(out)        :: E_grid(:) ! Ein grid
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
       
@@ -139,10 +145,11 @@ module ndpp_scatt
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
       do iE = 1, NE
         scatt_mat(:, :, iE) = ZERO
-        do irxn = 1, NRXN
+        do irxn = 1, Nrxn
           mySD => rxn_data(irxn)
-          ! If the iE energy point is outside the range of this reaction,
-          ! don't score it
+          if (.not. mySD % is_init) cycle
+          ! If the incoming energy point is outside the range of this reaction,
+          ! dont score it
           if (E_grid(iE) < mySD % E_grid(1)) cycle
           ! Add the scattering distribution to the union scattering grid
           scatt_mat(:,:,iE) = scatt_mat(:,:,iE) + &

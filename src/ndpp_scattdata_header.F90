@@ -3,6 +3,7 @@ module scattdata_header
   use ace_header
   use constants
   use dict_header
+  use endf,             only: is_scatter
   use error,            only: fatal_error, warning
   use global,           only: nuclides, message
   use interpolation,    only: interpolate_tab1
@@ -70,12 +71,12 @@ module scattdata_header
     subroutine scatt_init(this, nuc, rxn, edist, E_bins, scatt_type, order, &
       mu_bins)
       class(ScattData), intent(inout)       :: this  ! The object to initialize
-      type(Nuclide), intent(in)    :: nuc   ! Nuclide we are working on
-      type(Reaction), target, intent(in)   :: rxn   ! The reaction of interest
+      type(Nuclide), intent(in)             :: nuc   ! Nuclide we are working on
+      type(Reaction), target, intent(inout) :: rxn   ! The reaction of interest
       type(Distenergy), pointer, intent(in) :: edist ! The energy distribution to use
       ! Edist is intended to specify which of the nested distros we are 
       ! actually using. t can be null.
-      real(8), target, intent(in) :: E_bins(:)  ! Energy group boundaries
+      real(8), target, intent(in)           :: E_bins(:)  ! Energy group bounds
       integer, intent(in) :: scatt_type ! Type of format to store the data
       integer, intent(in) :: order      ! Order of the data storage format
       integer, intent(in) :: mu_bins    ! Number of angular pts in tabular rep.
@@ -85,16 +86,16 @@ module scattdata_header
       integer :: NP, NR     ! Number of outgoing energy values and number of interp regions
       integer :: lc         ! Location of outgoing energy data in edist % data
       
-      ! Test reactions to ensure we have a scattering reaction.
-      ! These tests will leave this as uninitialized (and is_init == .false.),
+      ! This test will leave this as uninitialized (and is_init == .false.),
       ! which will be used as a flag when the reactions are combined.
-      if (rxn % MT == N_FISSION .or. rxn % MT == N_F .or. rxn % MT == N_NF &
-        .or. rxn % MT == N_2NF .or. rxn % MT == N_3NF) return
-
-      ! some materials have gas production cross sections with MT > 200 that
-      ! are duplicates. Also MT=4 is total level inelastic scattering which
-      ! should be skipped.
-      if (rxn % MT >= 200 .or. rxn % MT == N_LEVEL) return
+      ! Test reactions to ensure we have a scattering reaction.
+      if (.not. is_scatter(rxn % MT)) return
+      
+      ! Now, check edist, if passed, and ensure it is of the right law type
+      ! before proceeding
+      if (associated(edist)) then
+        if ((edist % law  /= 44) .and. (edist % law  /= 61)) return
+      end if
       
       ! We survived the above check and thus have a scattering reaction.
       
@@ -115,7 +116,28 @@ module scattdata_header
         this % edist => edist ! We dont use rxn % edist because this allows 
                               ! ScattData type to be used for nested distros.
       else
-        this % adist => null()
+        ! This is an isotropic distribution, to reduce the amount of code later,
+        ! lets set up rxn % adist to reflect that and point to it.
+        ! This is isotropic. Force rxn % adist to be one that we can read later
+        rxn % adist % n_energy = 2
+        allocate(rxn % adist % energy(2))
+        ! Set the upper value to that in E_bins(max)
+        rxn % adist % energy(2) = E_bins(size(E_bins))
+        ! Set the lower value; but, if the threshold of this reaction is above 
+        ! the lower bound, use that instead
+        if (rxn % threshold > E_bins(1)) then
+          rxn % adist % energy(1) = nuc % energy(rxn % threshold)
+        else
+          rxn % adist % energy(1) = E_bins(1)
+        end if
+        ! Set the type to Isotropic
+        allocate(rxn % adist % type(2))
+        rxn % adist % type = ANGLE_ISOTROPIC
+        allocate(rxn % adist % location(2))
+        rxn % adist % location = 0
+        allocate(rxn % adist % data(2))
+        rxn % adist % data = ZERO
+        this % adist => rxn % adist
         this % edist => null()
       end if
       
@@ -144,27 +166,6 @@ module scattdata_header
           ! Find the number of outgoing energy points
           lc = int(edist % data(2+2*NR+this%NE+i))
           NP = int(edist % data(lc + 2))
-          allocate(this % distro(i) % data(mu_bins, NP))
-          this % distro(i) % data = ZERO
-        end do
-      else
-        ! Must be isotropic. Just use the top and bottom of the energy bins
-        this % NE = 2
-        allocate(this % E_grid(this % NE))
-        ! Set the upper value
-        this % E_grid(this % NE) = E_bins(size(E_bins))
-        ! Set the lower value; but, if the threshold of this reaction is above 
-        ! the lower bound, use that instead
-        if (rxn % threshold > E_bins(1)) then
-          this % E_grid(1) = nuc % energy(rxn % threshold)
-        else
-          this % E_grid(1) = E_bins(1)
-        end if
-        allocate(this % distro(this % NE))
-        NP = 1
-        do i = 1, this % NE
-          ! There is no Energy-out dependence to the distribution, so we only
-          ! need a 1 in the Eout dimension.
           allocate(this % distro(i) % data(mu_bins, NP))
           this % distro(i) % data = ZERO
         end do
@@ -239,6 +240,10 @@ module scattdata_header
       
       integer :: iE ! incoming energy grid index
       
+      ! Check to see if this SD is initialized (if it is not, then it is not
+      ! a scattering reaction, or is an invalid law type)
+      if (.not. this % is_init) return
+      
       if ((associated(this % edist)) .and. (associated(this % adist))) then
         message = "Multiple distributions associated with this ScattData &
           &object."
@@ -252,6 +257,7 @@ module scattdata_header
       
       ! Step through each incoming energy value to do these calculations
       do iE = 1, this % NE
+        this % distro(iE) % data = ZERO
         if (associated(this % edist)) then
           ! combined energy/angle distribution - have to integrate over
           ! the energy part of the data, AND the angle part.
@@ -323,7 +329,7 @@ module scattdata_header
         return
       else if (Ein >= nuc % energy(nuc % n_grid)) then
         ! We are above the global energy grid, so take the highest value
-        sigS = sigS_array(nuc % n_grid)
+        sigS = sigS_array(size(sigS_array))
         
         iE = this % NE
       else
@@ -439,8 +445,9 @@ module scattdata_header
       
       data => adist % data
       
-      ! Check what type of distribution we have
       lc   = adist % location(iE)
+      
+      ! Check what type of distribution we have
       
       select case(adist % type(iE))
         case (ANGLE_ISOTROPIC)
@@ -664,16 +671,16 @@ module scattdata_header
         
       if (R2 < ONE) then
         ! Calculate the lab (mu) and CM (mu_l) mu grid points.
-        do imu = 1, mu_bins
+        do imu = 1, mu_bins - 1
           if (mu(imu) < -R) then
             ! Try and get a reference value that is close to the critical point
             ! Of course, we can't get too close, b/c it blows up, but we'll try
             ! anyways.
             ! Since I want to pick an intelligent point which doesnt overlap the
-            ! next mu_l point, lets calculate the next mu_l, then take 10% of 
+            ! next mu_l point, lets calculate the next mu_l, then take 20% of 
             ! the difference and add that on to the critical point
             do imu_tmp = imu + 1, mu_bins
-              if (mu_l(imu_tmp) > -R) exit
+              if (mu(imu_tmp) > -R) exit
             end do
             mu_tmp = (ONE + R * mu(imu_tmp)) / &
               sqrt(ONE + R2 + TWO * R * mu(imu_tmp))
@@ -683,6 +690,7 @@ module scattdata_header
             mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
           end if
         end do
+        mu_l(mu_bins) = ONE
         
         do iEout = 1, size(data, dim = 2)
           ! Convert the CM distro to the laboratory system
@@ -711,9 +719,14 @@ module scattdata_header
         end do
       else
         ! Calculate the lab (mu) and CM (mu_l) mu grid points.
-        do imu = 1, mu_bins
+        ! the beginning and end points are treated separately since we know the
+        ! analytical solution, for all R>=1, before starting the calculation
+        ! and thus can avoid FP precision issues with the imu_l binary search
+        do imu = 2, mu_bins - 1
           mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
         end do
+        mu_l(1)       = -ONE
+        mu_l(mu_bins) =  ONE
         
         do iEout = 1, size(data, dim = 2)
           ! Convert the CM distro to the laboratory system
@@ -1006,10 +1019,18 @@ module scattdata_header
                 fEmu_int(imu, g) = fEmu_int(imu, g) + (Ehi - Elo) * (fhi + flo)
               end do
             end if
-            ! Apply the 1/2 term from trapezoidal integration
-            fEmu_int(:, g) = 0.5_8 * fEmu_int(:, g)
             
-          else
+            ! Perform the legendre expansion
+            do imu = 1, size(mu) - 1
+              distro(:, g) = distro(:, g) + &
+                calc_int_pn_tablelin(order, mu(imu), &
+                mu(imu + 1), fEmu_int(imu, g), fEmu_int(imu + 1, g))
+            end do
+            
+            ! Apply the 1/2 term from trapezoidal integration
+            distro(:, g) = 0.5_8 * distro(:, g)
+            
+          else if (bins(MU_LO, g) > 0) then
             ! The points are all w/in the same bin, can get flo and fhi directly
             Elo = Eout(bins(MU_LO, g)) + interp(MU_LO, g) * &
               (Eout(bins(MU_LO, g) + 1) - Eout(bins(MU_LO, g)))
@@ -1023,14 +1044,16 @@ module scattdata_header
                 (fEmu(imu, bins(MU_HI, g) + 1) - fEmu(imu, bins(MU_HI, g)))
               fEmu_int(imu, g) = (Ehi - Elo) * (fhi + flo) * 0.5_8
             end do
+            
+            ! Perform the legendre expansion
+            do imu = 1, size(mu) - 1
+              distro(:, g) = distro(:, g) + &
+                calc_int_pn_tablelin(order, mu(imu), &
+                mu(imu + 1), fEmu_int(imu, g), fEmu_int(imu + 1, g))
+            end do
+          else ! Then we are completely below the threshold energy
+            distro(:, g) = ZERO
           end if
-          
-          ! Perform the legendre expansion
-          do imu = 1, size(mu) - 1
-            distro(:, g) = distro(:, g) + &
-              calc_int_pn_tablelin(order, mu(imu), &
-              mu(imu + 1), fEmu_int(imu, g), fEmu_int(imu + 1, g))
-          end do
           
         end do
       else

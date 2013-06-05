@@ -34,9 +34,16 @@ module legendre
       integer :: l     ! Index of the Legendre order
       real(8) :: values
       
-      ! The values below for integrals(l+1) are the integral of (f(x)*P_l(x)) where
-      ! f(x) is a straight line connecting flow and fhigh at xlow and xhigh.
+      ! The values below for integrals(l+1) are the integral of (f(x)*P_l(x)) 
+      ! where f(x) is a straight line between flow and fhigh at xlow and xhigh
       integrals = ZERO
+      ! Sometimes xlow and xhigh can be very near each other (on the order of
+      ! machine precision) and this is a perfectly valid situation, however, 
+      ! these cases lead to division by zero errors when the actual result should
+      ! approach zero. In that case, just return zero (which integrals has
+      ! alrady been set to.
+      if (xhigh-xlow < FP_PRECISION) return
+      
       do l = 0, n
         select case (l)
           case (0)
