@@ -44,6 +44,8 @@ module ndpp_class
     integer              :: mu_bins = 2001
     ! Flag to integrate chi or not
     logical              :: integrate_chi = .true.
+    ! Minimum group to group transfer to bother printing
+    real(8)              :: print_tol = 1.0E-8_8
     ! Tolerance on the union energy grid thinning
     real(8)              :: thin_tol
     ! Total Time
@@ -237,6 +239,14 @@ module ndpp_class
         call warning()
       end if
       
+      ! Get printing tolerance information
+      if (print_tol_ > ZERO) then
+        self % print_tol = print_tol_ 
+      else 
+        message = "Invalid printing tolerance provided, setting to default."
+        call warning()
+      end if
+      
       self % is_init = .true.
       
       ! Stop initialization timer
@@ -351,7 +361,7 @@ module ndpp_class
           ! Print the results to file
           call timer_start(self % time_print)
           call print_scatt(self % lib_format, scatt_mat, nuc % energy, &
-            self % scatt_order)
+            self % print_tol)
           call timer_stop(self % time_print)
           
           if (allocated(scatt_mat)) then
@@ -390,8 +400,10 @@ module ndpp_class
         ! Close the file/HDF5 object
         !!!call finalize_output()
         ! Deallocate the nuclide and its member data.
-        call nuclides(1) % clear()
-        deallocate(nuclides)
+        if (allocated(nuclides)) then
+          call nuclides(1) % clear()
+          deallocate(nuclides)
+        end if
         close(UNIT_NUC)
       end do
       

@@ -192,7 +192,7 @@ program test_scattdata
       ! First check the scalars
       if ((.not. mySD % is_init) .or. &
         mySD % scatt_type /= SCATT_TYPE_LEGENDRE .or. &
-        mySD % order /= 5 .or. mySD % awr /= ONE .or. mySD % NE /= 2) then
+        mySD % order /= 6 .or. mySD % awr /= ONE .or. mySD % NE /= 2) then
         write(*,*) 'ScattData % init FAILED! (Scalars)'
         stop 10
       end if
@@ -290,7 +290,7 @@ program test_scattdata
       ! First check the scalars
       if ((.not. mySD % is_init) .or. &
         mySD % scatt_type /= SCATT_TYPE_LEGENDRE .or. &
-        mySD % order /= 5 .or. mySD % awr /= ONE .or. mySD % NE /= 2) then
+        mySD % order /= 6 .or. mySD % awr /= ONE .or. mySD % NE /= 2) then
         write(*,*) 'ScattData % init FAILED! (Scalars)'
         write(*,*) mySD % is_init, mySD % scatt_type, mySD % order
         write(*,*) mySD % awr, mySD % NE
@@ -369,7 +369,7 @@ program test_scattdata
       ! First check the scalars
       if ((.not. mySD % is_init) .or. &
         mySD % scatt_type /= SCATT_TYPE_LEGENDRE .or. &
-        mySD % order /= 5 .or. mySD % awr /= ONE .or. mySD % NE /= 2) then
+        mySD % order /= 6 .or. mySD % awr /= ONE .or. mySD % NE /= 2) then
         write(*,*) 'ScattData % init FAILED! (Scalars)'
         stop 10
       end if

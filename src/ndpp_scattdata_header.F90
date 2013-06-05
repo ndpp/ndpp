@@ -101,7 +101,11 @@ module scattdata_header
       
       ! Save the order and scattering type
       this % scatt_type = scatt_type
-      this % order = order
+      if (scatt_type == SCATT_TYPE_LEGENDRE) then
+        this % order = order + 1
+      else
+        this % order = order
+      end if
       ! Store the reaction type
       this % rxn => rxn
       ! Store the atomic weight ratio
@@ -304,11 +308,7 @@ module scattdata_header
       real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       
       ! Set up the results memory 
-      if (this % scatt_type == SCATT_TYPE_LEGENDRE) then
-        allocate(distro(this % order + 1, this % groups))
-      else
-        allocate(distro(this % order, this % groups))
-      end if
+      allocate(distro(this % order, this % groups))
       distro = ZERO
       
       ! Set rxn, so we can save some characters throughout this function.

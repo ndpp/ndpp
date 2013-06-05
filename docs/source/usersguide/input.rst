@@ -110,6 +110,17 @@ resultant data, but the larger the inaccuracy introduced is.
 
   *Default*: 0.2%
   
+``<print_tol>`` Element
+------------------
+
+The ``<print_tol>`` element has no attributes and accepts a single
+floating-point number.  This element is used to set the minimum value for 
+group-to-group transfer that will be printed.  Increasing this value 
+decreases the output file size but can reduce accuracy when the libraries are
+used in a Monte Carlo code.
+
+  *Default*: 1.0E-8
+  
 ``<output_format>`` Element
 --------------------
 

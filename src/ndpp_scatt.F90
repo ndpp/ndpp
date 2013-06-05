@@ -140,6 +140,7 @@ module ndpp_scatt
       Nrxn = size(rxn_data)
       
       ! Allocate the scatt_mat according to the groups, order and number of E pts
+      
       allocate(scatt_mat(order, groups, NE))
       
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
@@ -199,17 +200,18 @@ module ndpp_scatt
 ! in the specified format.
 !===============================================================================  
   
-  subroutine print_scatt(lib_format, data, E_grid, order)
+  subroutine print_scatt(lib_format, data, E_grid, tol)
     integer,              intent(in) :: lib_format  ! Library output type
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
-    integer,              intent(in) :: order       ! Order of scattering data
+    real(8),              intent(in) :: tol         ! Minimum grp-to-grp prob'y
+                                                    ! to keep
     
     if (lib_format == ASCII) then
-      call print_scatt_ascii(data, E_grid, order)
+      call print_scatt_ascii(data, E_grid, tol)
     else if (lib_format == BINARY) then
-      call print_scatt_bin(data, E_grid, order)
+      call print_scatt_bin(data, E_grid, tol)
     else if (lib_format == HDF5) then
       ! TBI
     end if
@@ -221,11 +223,13 @@ module ndpp_scatt
 ! in an ASCII format.
 !===============================================================================
      
-  subroutine print_scatt_ascii(data, E_grid, order)
+  subroutine print_scatt_ascii(data, E_grid, tol)
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
-    integer,              intent(in) :: order       ! Order of scattering data
+    real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
+                                                    ! to keep
+    integer :: gmin, gmax, iE
     
     character(MAX_LINE_LEN) :: line
   
@@ -234,7 +238,8 @@ module ndpp_scatt
     ! Will follow this format with at max 4 entries per line: 
     ! <size of incoming energy array, size(E_grid)>
     ! <incoming energy array>
-    ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, size(E_grid)>
+    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
     
     ! Begin writing:
     
@@ -246,8 +251,30 @@ module ndpp_scatt
     ! <incoming energy array>
     call print_ascii_array(E_grid, UNIT_NUC)
     
-    ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, Ein>
-    call print_ascii_array(pack(data, .true.), UNIT_NUC)
+!~     ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, Ein>
+!~     call print_ascii_array(pack(data, .true.), UNIT_NUC)
+    
+    
+    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
+    do iE = 1, size(E_grid)
+      ! find gmin by checking the P0 moment
+      do gmin = 1, size(data, dim = 2)
+        if (data(1, gmin, iE) > tol) exit
+      end do
+      ! find gmax by checking the P0 moment
+      do gmax = size(data, dim = 2), 1, -1
+        if (data(1, gmax, iE) > tol) exit
+      end do
+      if (gmin > gmax) then ! we have effectively all zeros
+        call print_ascii_array((/ZERO, ZERO/), UNIT_NUC)
+      else
+        call print_ascii_array((/real(gmin,8), real(gmax,8), &
+          reshape(data(:, gmin : gmax, iE), (/ &
+          size(data, dim=1) * (gmax - gmin + 1)/))/), UNIT_NUC)
+      end if
+    end do
+  
     
   end subroutine print_scatt_ascii
   
@@ -256,18 +283,21 @@ module ndpp_scatt
 ! in in native Fortran stream format.
 !===============================================================================
      
-  subroutine print_scatt_bin(data, E_grid, order)
+  subroutine print_scatt_bin(data, E_grid, tol)
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
-    integer,              intent(in) :: order       ! Order of scattering data
+    real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
+                                                    ! to keep
+    integer :: gmin, gmax, iE
     
     ! Assumes that the file and header information is already printed 
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format: 
     ! <size of incoming energy array, size(E_grid)>
     ! <incoming energy array>
-    ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, size(E_grid)>
+    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
     
     ! Begin writing:
     
@@ -277,8 +307,29 @@ module ndpp_scatt
     ! <incoming energy array>
     write(UNIT_NUC) E_grid
     
-    ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, Ein>
-    write(UNIT_NUC) data
+!~     ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, Ein>
+!~     write(UNIT_NUC) data
+
+    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
+    do iE = 1, size(E_grid)
+      ! find gmin by checking the P0 moment
+      do gmin = 1, size(data, dim = 2)
+        if (data(1, gmin, iE) > tol) exit
+      end do
+      ! find gmax by checking the P0 moment
+      do gmax = size(data, dim = 2), 1, -1
+        if (data(1, gmax, iE) > tol) exit
+      end do
+      if (gmin > gmax) then ! we have effectively all zeros
+        write(UNIT_NUC) (/ZERO, ZERO/)
+      else
+        write(UNIT_NUC) (/real(gmin,8), real(gmax,8), &
+          reshape(data(:, gmin : gmax, iE), (/ &
+          size(data, dim=1) * (gmax - gmin + 1)/))/)
+      end if
+      
+    end do
     
   end subroutine print_scatt_bin
     
