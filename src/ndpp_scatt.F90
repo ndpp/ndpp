@@ -7,7 +7,7 @@ module ndpp_scatt
   use global,           only: nuclides, message
   use interpolation,    only: interpolate_tab1
   use output,           only: write_message, header, print_ascii_array
-  use scattdata_header, only: scattdata
+  use scattdata_class,  only: scattdata
   use search,           only: binary_search
   use string,           only: to_str
 

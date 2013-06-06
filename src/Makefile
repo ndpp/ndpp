@@ -123,7 +123,7 @@ $(program): $(objects)
 	$(F90) $(objects) $(templates) $(xml_fort) $(LDFLAGS) -o $@
 tests:
 	make all
-	cd ../tests/test_scattdata; make COMPILER=$(COMPILER) DEBUG=$(DEBUG) \
+	cd ../tests/test_scatt; make COMPILER=$(COMPILER) DEBUG=$(DEBUG) \
 			OPTIMIZE=$(OPTIMIZE) PROFILE=$(PROFILE) MPI=$(MPI) HDF5=$(HDF5)
 install:
 	@install -D $(program) $(DESTDIR)$(prefix)/bin/$(program)
@@ -136,7 +136,7 @@ uninstall:
 distclean: clean
 	cd xml-fortran; make clean
 	cd templates; make clean
-	cd ../tests/test_scattdata; make clean
+	cd ../tests/test_scatt; make clean
 clean:
 	@rm -f *.o *.mod $(program)
 neat:

@@ -1,7 +1,7 @@
-program test_scattdata
+program test_scatt
   use ace_header
   use constants
-  use scattdata_header
+  use scattdata_class
   use ndpp_scatt
   
   implicit none
@@ -11,7 +11,7 @@ program test_scattdata
 !===============================================================================
   
   write(*,*) '***************************************************'
-  write(*,*) 'Testing ScattData'
+  write(*,*) 'Testing Scattering Capabilities'
   write(*,*) '***************************************************'
   
   ! Test clear routine
@@ -48,11 +48,11 @@ program test_scattdata
   call test_interp_distro()
   
   ! Perform integral test of scattering capability
-  call test_scatt()
+  call test_calc_scatt()
   
   write(*,*)
   write(*,*) '***************************************************'
-  write(*,*) 'Testing ScattData Passed!'
+  write(*,*) 'Test of Scattering Capabilities Passed!'
   write(*,*) '***************************************************'
 
 !===============================================================================  
@@ -2131,7 +2131,7 @@ program test_scattdata
 ! ndpp_scatt%calc_scatt()
 !===============================================================================
 
-    subroutine test_scatt()
+    subroutine test_calc_scatt()
       type(Nuclide), target     :: mynuc            ! Nuclide to work with 
       type(Nuclide), pointer    :: nuc => null()    ! Nuclide passed to calc_scatt
       type(Reaction), pointer   :: rxn => null()    ! Temporary pointer to use
@@ -2276,6 +2276,6 @@ program test_scattdata
       write(*,*) 'calc_scatt Test Passed!'
       write(*,*) '---------------------------------------------------'
       
-    end subroutine test_scatt
+    end subroutine test_calc_scatt
 
-end program test_scattdata
+end program test_scatt

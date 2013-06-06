@@ -19,7 +19,7 @@ ndpp_init.o \
 ndpp_legendre.o \
 ndpp_output.o \
 ndpp_scatt.o \
-ndpp_scattdata_header.o \
+ndpp_scattdata.o \
 search.o \
 set_header.o \
 string.o \

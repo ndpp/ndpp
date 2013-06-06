@@ -1,4 +1,4 @@
-module scattdata_header
+module scattdata_class
   
   use ace_header
   use constants
@@ -1099,4 +1099,4 @@ module scattdata_header
 ! distribution
 !===============================================================================
 
-end module scattdata_header
+end module scattdata_class

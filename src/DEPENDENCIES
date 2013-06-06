@@ -96,21 +96,21 @@ ndpp_scatt.o: ndpp_error.o
 ndpp_scatt.o: ndpp_global.o
 ndpp_scatt.o: interpolation.o
 ndpp_scatt.o: ndpp_output.o
-ndpp_scatt.o: ndpp_scattdata_header.o
+ndpp_scatt.o: ndpp_scattdata.o
 ndpp_scatt.o: search.o
 ndpp_scatt.o: string.o
 
-ndpp_scattdata_header.o: ace_header.o
-ndpp_scattdata_header.o: ndpp_constants.o
-ndpp_scattdata_header.o: dict_header.o
-ndpp_scattdata_header.o: endf.o
-ndpp_scattdata_header.o: ndpp_error.o
-ndpp_scattdata_header.o: ndpp_global.o
-ndpp_scattdata_header.o: interpolation.o
-ndpp_scattdata_header.o: ndpp_legendre.o
-ndpp_scattdata_header.o: ndpp_output.o
-ndpp_scattdata_header.o: search.o
-ndpp_scattdata_header.o: string.o
+ndpp_scattdata.o: ace_header.o
+ndpp_scattdata.o: ndpp_constants.o
+ndpp_scattdata.o: dict_header.o
+ndpp_scattdata.o: endf.o
+ndpp_scattdata.o: ndpp_error.o
+ndpp_scattdata.o: ndpp_global.o
+ndpp_scattdata.o: interpolation.o
+ndpp_scattdata.o: ndpp_legendre.o
+ndpp_scattdata.o: ndpp_output.o
+ndpp_scattdata.o: search.o
+ndpp_scattdata.o: string.o
 
 search.o: ndpp_error.o
 search.o: ndpp_global.o

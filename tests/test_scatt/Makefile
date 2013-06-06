@@ -7,7 +7,7 @@ SRC_DIR = ../../src
 #===============================================================================
 
 objects = \
-$(SRC_DIR)/ndpp_scattdata_header.o \
+$(SRC_DIR)/ndpp_scattdata.o \
 $(SRC_DIR)/ace_header.o \
 $(SRC_DIR)/endf.o \
 $(SRC_DIR)/endf_header.o \
@@ -165,4 +165,4 @@ include $(SRC_DIR)/DEPENDENCIES
 test_scattdata.o: $(SRC_DIR)/ace_header.o
 test_scattdata.o: $(SRC_DIR)/ndpp_constants.o
 test_scattdata.o: $(SRC_DIR)/ndpp_scatt.o
-test_scattdata.o: $(SRC_DIR)/ndpp_scattdata_header.o
+test_scattdata.o: $(SRC_DIR)/ndpp_scattdata.o
