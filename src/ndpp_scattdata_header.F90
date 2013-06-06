@@ -787,7 +787,9 @@ module scattdata_header
       
       ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
       R = sqrt(awr * awr  * (ONE + Q * (awr + ONE) / (awr * Ein)))
-      
+      alpha = (R - 1) / (R + 1)
+      alpha = alpha * alpha
+
       do g = 1, size(E_bins) - 1
         ! Calculate the values of mu corresponding to this energy group
         ! These come from eqs. 232-233 in Methods for Processing ENDF/B-VII, 
@@ -796,8 +798,7 @@ module scattdata_header
         ! First check to see if the energy transfer is possible
         ! (the pg 2798 eqns dont work if R<1)
         ! If it isnt, then we set the boundary to -1
-        alpha = (R - 1) / (R + 1)
-        alpha = alpha * alpha
+        
         if (E_bins(g) < alpha * Ein) then
           mu_low = -ONE
         else
@@ -812,7 +813,7 @@ module scattdata_header
         end if
         
         ! Find the index in mu corresponding to mu_low
-        if (mu_low < -ONE) then
+        if (mu_low <= -ONE) then
           bins(MU_LO, g) = 1
           vals(MU_LO, g) = -ONE
           interp(MU_LO, g) = ZERO
@@ -989,12 +990,14 @@ module scattdata_header
             if (bins(MU_LO, g) > 0) then
               Elo = E_bins(g)
               Ehi = Eout(bins(MU_LO, g))
-              do imu = 1, size(mu)
-                flo = fEmu(imu, bins(MU_LO, g)) + interp(MU_LO, g) * &
-                  (fEmu(imu, bins(MU_LO, g) + 1) - fEmu(imu, bins(MU_LO, g)))
-                fhi = fEmu(imu, bins(MU_LO, g) + 1)
-                fEmu_int(imu, g) = fEmu_int(imu, g) + (Ehi - Elo) * (fhi + flo)
-              end do
+              if (Elo < Ehi)  then
+                do imu = 1, size(mu)
+                  flo = fEmu(imu, bins(MU_LO, g)) + interp(MU_LO, g) * &
+                    (fEmu(imu, bins(MU_LO, g) + 1) - fEmu(imu, bins(MU_LO, g)))
+                  fhi = fEmu(imu, bins(MU_LO, g) + 1)
+                  fEmu_int(imu, g) = fEmu_int(imu, g) + (Ehi - Elo) * (fhi + flo)
+                end do
+              end if
               bins_lo_tmp = bins(MU_LO, g) + 1
             else
               bins_lo_tmp = abs(bins(MU_LO, g))
@@ -1018,12 +1021,14 @@ module scattdata_header
             if (bins(MU_HI, g) > 0) then
               Elo = Eout(bins(MU_HI, g))
               Ehi = E_bins(g + 1)
-              do imu = 1, size(mu)
-                flo = fEmu(imu, bins(MU_HI, g))
-                fhi = fEmu(imu, bins(MU_HI, g)) + interp(MU_HI, g) * &
-                  (fEmu(imu, bins(MU_HI, g) + 1) - fEmu(imu, bins(MU_HI, g)))
-                fEmu_int(imu, g) = fEmu_int(imu, g) + (Ehi - Elo) * (fhi + flo)
-              end do
+              if (Elo < Ehi)  then
+                do imu = 1, size(mu)
+                  flo = fEmu(imu, bins(MU_HI, g))
+                  fhi = fEmu(imu, bins(MU_HI, g)) + interp(MU_HI, g) * &
+                    (fEmu(imu, bins(MU_HI, g) + 1) - fEmu(imu, bins(MU_HI, g)))
+                  fEmu_int(imu, g) = fEmu_int(imu, g) + (Ehi - Elo) * (fhi + flo)
+                end do
+              end if
             end if
             
             ! Perform the legendre expansion

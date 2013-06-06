@@ -17,6 +17,7 @@ $(SRC_DIR)/ndpp_error.o \
 $(SRC_DIR)/ndpp_global.o \
 $(SRC_DIR)/interpolation.o \
 $(SRC_DIR)/ndpp_legendre.o \
+$(SRC_DIR)/ndpp_scatt.o \
 $(SRC_DIR)/ndpp_output.o \
 $(SRC_DIR)/search.o \
 $(SRC_DIR)/string.o \
@@ -163,4 +164,5 @@ neat:
 include $(SRC_DIR)/DEPENDENCIES
 test_scattdata.o: $(SRC_DIR)/ace_header.o
 test_scattdata.o: $(SRC_DIR)/ndpp_constants.o
+test_scattdata.o: $(SRC_DIR)/ndpp_scatt.o
 test_scattdata.o: $(SRC_DIR)/ndpp_scattdata_header.o

@@ -2,6 +2,7 @@ program test_scattdata
   use ace_header
   use constants
   use scattdata_header
+  use ndpp_scatt
   
   implicit none
   
@@ -45,6 +46,9 @@ program test_scattdata
   
   ! Test interp_distro
   call test_interp_distro()
+  
+  ! Perform integral test of scattering capability
+  call test_scatt()
   
   write(*,*)
   write(*,*) '***************************************************'
@@ -1395,7 +1399,7 @@ program test_scattdata
       write(*,*) '---------------------------------------------------'
       
     end subroutine test_cm2lab
-
+    
 !===============================================================================
 ! TEST_CALC_MU_BOUNDS Tests the calculation of the angular boundary 
 !===============================================================================    
@@ -1631,7 +1635,7 @@ program test_scattdata
       real(8), allocatable :: distro(:,:)       ! Resultant integrated distribution
       
       real(8), allocatable :: distro_ref(:,:)   ! Reference solution
-      integer              :: g, imu            ! energy group and mu_val indices
+      integer              :: imu               ! mu_val indices
       integer              :: num_pts, num_G    ! Number of mu pts and energy grps
       real(8)              :: dmu               ! mu spacing
       
@@ -1754,7 +1758,7 @@ program test_scattdata
       real(8), allocatable :: distro(:,:)     ! Resultant integrated distribution
       
       real(8), allocatable :: distro_ref(:,:) ! Reference solution
-      integer              :: g, imu          ! energy group and mu_val indices
+      integer              :: imu             ! mu_val indices
       integer              :: num_pts, num_G  ! Number of mu pts and energy grps
       integer              :: num_Eout, iE    ! Number of outgoing E pts, and index
       real(8)              :: dmu             ! mu spacing
@@ -1934,7 +1938,6 @@ program test_scattdata
       integer                   :: num_pts ! Number of angular pts in mu
       real(8)                   :: dmu     ! delta-mu
       real(8)                   :: Ein
-      integer                   :: NE      ! # incoming energy pts
       integer                   :: imu     ! Loop counter
       
       ! interp_distro takes an array of distributions in this % distro,
@@ -1978,7 +1981,7 @@ program test_scattdata
       myedist % p_valid % n_pairs = 2
       allocate(myedist % p_valid % x(2))
       myedist % p_valid % x = (/ONE, TWO/) 
-      allocate(myedist % p_valid % y(3))
+      allocate(myedist % p_valid % y(2))
       myedist % p_valid % y = (/0.5_8, ONE/)
       
       ! Set nuc
@@ -2122,5 +2125,157 @@ program test_scattdata
       write(*,*) '---------------------------------------------------'
       
     end subroutine test_interp_distro
+
+!===============================================================================
+! TEST_SCATT Performs an integral test of the scattdata module and 
+! ndpp_scatt%calc_scatt()
+!===============================================================================
+
+    subroutine test_scatt()
+      type(Nuclide), target     :: mynuc            ! Nuclide to work with 
+      type(Nuclide), pointer    :: nuc => null()    ! Nuclide passed to calc_scatt
+      type(Reaction), pointer   :: rxn => null()    ! Temporary pointer to use
+      type(DistAngle), pointer  :: adist => null()  ! temporary ptr
+      type(DistEnergy), pointer :: edist => null()  ! temporary ptr
+      real(8), allocatable      :: energy_bins(:)   ! Energy group boundaries
+      integer                   :: scatt_type       ! Type of data to obtain
+      integer                   :: order            ! Order of data to obtain
+      integer                   :: mu_bins          ! # of angular bins to use
+      real(8), allocatable      :: results(:,:,:)   ! Output of calc_scatt
+      real(8)                   :: thin_tol         ! Thinning tolerance (NYI)
+      integer                   :: NE_Ein, NEsig    ! # of Eins and sigS
+      type(DistEnergy), allocatable, target :: myedist(:)   ! Edists to point to
+      
+      write(*,*)
+      write(*,*) '---------------------------------------------------'
+      write(*,*) 'Testing calc_scatt'
+      write(*,*)
+      
+      ! In this test we will set up a nuclide with four reactions:
+      ! 1) no distribution (ISO), 2) an adist, and 
+      ! 3) an edist with 2 nested edists (first being valid, second not being
+      ! a valid law). 4) one that is not scattering.
+      ! We will use 2 groups, 2 Eins per reaction, and a nuc%energy array with 
+      ! 3 energy entries. We will do this once for legendre and tabular
+      ! (But for now, only legendre since tabular is NYI)
+      
+      ! This test is intended as an integral test of calc_scatt and scattdata to
+      ! increase confidence at NDPPs ability to handle the many complicated 
+      ! nuclides in ENDF data.
+      
+      ! Set some problem constants
+      NE_Ein = 2
+      NEsig = 3
+      
+      ! Lets set up our nuclide (Only set values we will need)
+      nuc => mynuc
+      nuc % awr = 100.0_8 ! The larger it is the fewer mu pts we need to
+                          ! adequately match the reference
+      nuc % n_grid = NEsig
+      allocate(nuc % energy(NEsig))
+      nuc % energy = (/ONE, TWO, 3.0_8/)
+      allocate(nuc % elastic(NEsig))
+      nuc % elastic = (/0.25_8, 0.5_8, ONE/)
+      nuc % n_reaction = 4
+      allocate(nuc % reactions(nuc % n_reaction))
+      
+      ! Set up reactions
+      ! 1) No distribution (isotropic)
+      rxn => nuc % reactions(1)
+      rxn % MT = ELASTIC
+      rxn % Q_value = ZERO
+      rxn % multiplicity = 1
+      rxn % threshold = 1
+      rxn % scatter_in_cm = .true.
+      allocate(rxn % sigma(NEsig))
+      rxn % has_angle_dist  = .false.
+      rxn % has_energy_dist = .false.
+      
+      ! 2) an adist
+      rxn => nuc % reactions(2)
+      rxn % MT = N_LEVEL
+      rxn % Q_value = ZERO
+      rxn % multiplicity = 1
+      rxn % threshold = 1
+      rxn % scatter_in_cm = .true.
+      allocate(rxn % sigma(NEsig))
+      rxn % sigma = (/ONE, 0.5_8, 0.25_8/)
+      rxn % has_angle_dist  = .true.
+      rxn % has_energy_dist = .false.
+      adist => rxn % adist
+      adist % n_energy = NE_Ein
+      allocate(adist % energy(NE_Ein))
+      adist % energy = (/1.5_8, 2.5_8/)
+      allocate(adist % type(NE_Ein))
+      adist % type = ANGLE_TABULAR
+      allocate(adist % location(NE_Ein))
+      adist % location(1) = 1
+      adist % location(2) = 7
+      allocate(adist % data(14))
+      adist % data(1:7)  = (/ZERO, real(LINEAR_LINEAR,8), TWO, -ONE, ONE, &
+        0.5_8, 0.5_8/)
+      adist % data(8:13) = (/real(LINEAR_LINEAR,8), TWO, -ONE, ONE, &
+        0.5_8, 0.5_8/)
+      nullify(adist)
+        
+      ! 3) an edist with 2 nested edists (first being valid, second not being
+      ! a valid law)
+      rxn => nuc % reactions(3)
+      rxn % MT = N_LEVEL
+      rxn % Q_value = -0.02_8
+      rxn % multiplicity = 2
+      rxn % threshold = 2
+      rxn % scatter_in_cm = .false.
+      allocate(rxn % sigma(NEsig - rxn % threshold + 1))
+      rxn % sigma = (/ONE, TWO/)
+      rxn % has_angle_dist  = .false.
+      rxn % has_energy_dist = .true.
+      allocate(myedist(2))
+      rxn % edist => myedist(1)
+      edist => rxn % edist
+      edist % law = 44
+      edist % p_valid % n_pairs = 2
+      allocate(edist % p_valid % x(2))
+      edist % p_valid % x = (/ONE, TWO/) 
+      allocate(edist % p_valid % y(2))
+      edist % p_valid % y = (/0.5_8, ONE/)
+      allocate(edist % data(31))
+      edist % data = (/ZERO, TWO, ONE, TWO, 6.0_8, 18.0_8, ONE, TWO, 0.5_8, &    
+        ONE, 0.5_8, 0.5_8, ZERO, ONE, TWO, ZERO, TWO, ONE, ONE, TWO, 0.5_8, &
+        ONE, 0.5_8, 0.5_8, ZERO, ONE, ONE, ZERO, ONE, 0.5_8/)
+      edist % next => myedist(2)
+      edist % next % law = 66 ! Invalid so we shouldn't need any other info
+      edist % next % next => null()
+      nullify(edist)
+      
+      ! 4) Not scattering
+      rxn => nuc % reactions(4)
+      rxn % MT = N_FISSION
+      rxn % has_energy_dist = .false.
+      
+      ! Set problem parameters for Legendre case
+      allocate(energy_bins(3))
+      energy_bins = (/ONE, TWO, 3.0_8/)
+      scatt_type = SCATT_TYPE_LEGENDRE
+      order = 5
+      mu_bins = 5
+      thin_tol = 1.0E-8_8
+      
+      ! Lets run the test
+      write(*,*) 'Testing Legendre Case'
+      call calc_scatt(nuc, energy_bins, scatt_type, order, results, mu_bins, &
+        thin_tol)
+      write(*,*) 'results, grp 1, Ein1', results(:,1,1)
+      write(*,*) 'results, grp 2, Ein1', results(:,2,1)
+      write(*,*) 'results, grp 1, Ein2', results(:,1,2)
+      write(*,*) 'results, grp 2, Ein2', results(:,2,2)
+      write(*,*) 'results, grp 1, Ein3', results(:,1,3)
+      write(*,*) 'results, grp 2, Ein3', results(:,2,3)
+      
+      write(*,*)
+      write(*,*) 'calc_scatt Test Passed!'
+      write(*,*) '---------------------------------------------------'
+      
+    end subroutine test_scatt
 
 end program test_scattdata
