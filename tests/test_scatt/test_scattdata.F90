@@ -2279,14 +2279,13 @@ program test_scatt
       write(*,*) 'Testing Legendre Case'
       call calc_scatt(nuc, energy_bins, scatt_type, order, results, mu_bins, &
         thin_tol)
-      write(*,*) 'results, grp 1, Ein1', results(:,1,1)
-      write(*,*) 'results, grp 2, Ein1', results(:,2,1)
-      write(*,*) 'results, grp 1, Ein2', results(:,1,2)
-      write(*,*) 'results, grp 2, Ein2', results(:,2,2)
-      write(*,*) 'results, grp 1, Ein3', results(:,1,3)
-      write(*,*) 'results, grp 2, Ein3', results(:,2,3)
-      write(*,*) maxval(results(:, 1, 2) - reference(:, 1, 2))
-      write(*,*) maxval(results(:, 2, 3) - reference(:, 2, 3))
+      if (any(abs(results - reference) > 1E-7_8)) then
+        write(*,*) 'calc_scatt FAILED! (Legendre)'
+        write(*,*) maxval(results(:, 1, 2) - reference(:, 1, 2))
+        write(*,*) maxval(results(:, 2, 3) - reference(:, 2, 3))
+        stop 10
+      end if
+      
       write(*,*)
       write(*,*) 'calc_scatt Test Passed!'
       write(*,*) '---------------------------------------------------'
