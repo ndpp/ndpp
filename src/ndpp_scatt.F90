@@ -153,7 +153,7 @@ module ndpp_scatt
           ! dont score it
           if (E_grid(iE) < mySD % E_grid(1)) cycle
           ! Add the scattering distribution to the union scattering grid
-          scatt_mat(:,:,iE) = scatt_mat(:,:,iE) + &
+          scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + &
             mySD % interp_distro(mu_out, nuc, E_grid(iE))
         end do
       end do

@@ -147,6 +147,7 @@ program test_scatt
       rxn % MT = ELASTIC
       rxn % has_angle_dist = .true.
       rxn % adist % n_energy = 2
+      rxn % threshold = 1
       allocate(rxn % adist % energy(2))
       rxn % adist % energy = (/2.0E-11_8, 20.0_8/)
       edist => null()
@@ -905,10 +906,10 @@ program test_scatt
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, TWO * R, TWO * A, &
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, R, A/)
       ! Set the reference solution
-      distro_ref(:, 1) = (/0.1565176427_8, 0.2580539668_8, 0.4254590641_8, &
-        0.7014634088_8, 1.1565176427_8/)
-      distro_ref(:, 2) = (/0.5409883534_8, 0.4948293954_8, 0.4797586878_8, &
-        0.4948293954_8, 0.5409883534_8/)
+      distro_ref(:, 1) = 0.5_8 * (/0.1565176427_8, 0.2580539668_8, &
+        0.4254590641_8, 0.7014634088_8, 1.1565176427_8/)
+      distro_ref(:, 2) = 0.5_8 * (/0.5409883534_8, 0.4948293954_8, &
+        0.4797586878_8, 0.4948293954_8, 0.5409883534_8/)
       call convert_file6(iE, mu, edist, Eouts, INTT, distro)
       ! Check results
       if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
@@ -981,8 +982,8 @@ program test_scatt
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, LC(:, 1), &
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, LC(:, 2)/)
       ! Set the reference solution
-      distro_ref(:, 1) = 0.5_8
-      distro_ref(:, 2) = 0.5_8
+      distro_ref(:, 1) = 0.25_8
+      distro_ref(:, 2) = 0.25_8
       call convert_file6(iE, mu, edist, Eouts, INTT, distro)
       ! Check results
       if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
@@ -1050,7 +1051,7 @@ program test_scatt
       iE = 1
       call convert_file6(iE, mu, edist, Eouts, INTT, distro)
       ! Check results
-      if ((any(distro(:,1) /= 0.5_8)) .or. (any(distro(:,2) /= 0.5_8))) then
+      if ((any(distro(:,1) /= 0.25_8)) .or. (any(distro(:,2) /= 0.25_8))) then
         write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Law 61 Iso)'
         write(*,*) distro
         stop 10
@@ -1073,8 +1074,8 @@ program test_scatt
       
       ! Test the linear values
       iE = 2
-      distro_ref(:, 1) = (/ZERO, 0.2_8, 0.5_8, 0.7_8, ONE/)
-      distro_ref(:, 2) = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
+      distro_ref(:, 1) = 0.5_8 * (/ZERO, 0.2_8, 0.5_8, 0.7_8, ONE/)
+      distro_ref(:, 2) = 0.5_8 * (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
       call convert_file6(iE, mu, edist, Eouts, INTT, distro)
       ! Check results
       if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
@@ -1601,7 +1602,7 @@ program test_scatt
       ! Set reference solution
       bins_ref(MU_LO, :) = (/-1, -1, 2, 2/)
       bins_ref(MU_HI, :) = (/-1, 2, 2, -2/)
-      interp_ref = ZERO
+      interp_ref = -interp_ref
       call calc_E_bounds(E_bins, Eout, INTT, interp, bins)
       ! Check results
       if (any(bins /= bins_ref)) then
@@ -2142,6 +2143,7 @@ program test_scatt
       integer                   :: order            ! Order of data to obtain
       integer                   :: mu_bins          ! # of angular bins to use
       real(8), allocatable      :: results(:,:,:)   ! Output of calc_scatt
+      real(8), allocatable      :: reference(:,:,:) ! Reference solution
       real(8)                   :: thin_tol         ! Thinning tolerance (NYI)
       integer                   :: NE_Ein, NEsig    ! # of Eins and sigS
       type(DistEnergy), allocatable, target :: myedist(:)   ! Edists to point to
@@ -2240,9 +2242,9 @@ program test_scatt
       allocate(edist % p_valid % y(2))
       edist % p_valid % y = (/0.5_8, ONE/)
       allocate(edist % data(31))
-      edist % data = (/ZERO, TWO, ONE, TWO, 6.0_8, 18.0_8, ONE, TWO, 0.5_8, &    
-        ONE, 0.5_8, 0.5_8, ZERO, ONE, TWO, ZERO, TWO, ONE, ONE, TWO, 0.5_8, &
-        ONE, 0.5_8, 0.5_8, ZERO, ONE, ONE, ZERO, ONE, 0.5_8/)
+      edist % data = (/ZERO, TWO, TWO, 3.0_8, 6.0_8, 18.0_8, TWO, TWO, ONE, &    
+        TWO, 0.5_8, 0.5_8, ZERO, ONE, 0.5_8, ZERO, 0.5_8, 0.5_8, TWO, TWO, &
+        TWO, 3.0_8, 0.5_8, 0.5_8, ZERO, ONE, ONE, ZERO, ONE, 0.5_8/)
       edist % next => myedist(2)
       edist % next % law = 66 ! Invalid so we shouldn't need any other info
       edist % next % next => null()
@@ -2258,8 +2260,20 @@ program test_scatt
       energy_bins = (/ONE, TWO, 3.0_8/)
       scatt_type = SCATT_TYPE_LEGENDRE
       order = 5
-      mu_bins = 5
+      mu_bins = 3001
       thin_tol = 1.0E-8_8
+      
+      ! Create the reference solution
+      allocate(reference(order + 1, size(energy_bins) - 1, NEsig))
+      reference(:, :, 1) = ZERO ! Ein == lower bound, therefore no distribution
+      reference(:, 1, 2) = (/3.0_8, 0.08864337353812592746_8, &
+        0.03257903545734936728_8, 0.00057911919634860452_8, &
+        0.00012837354419521826_8, 1.39180690734675999921E-6_8/)
+      reference(:, 2, 2) = ZERO ! No upscattering (Ein==lower bound of grp 2)
+      reference(:, 1, 3) = ZERO ! No scattering from Ein=3 to group 1
+      reference(:, 2, 3) = (/5.25_8, 0.63440390433224552687_8, &
+        0.1543723225381074322_8, 0.01712913596389337176_8, &
+        0.00201270147011421999_8, 0.00017011895592263393_8/)
       
       ! Lets run the test
       write(*,*) 'Testing Legendre Case'
@@ -2271,7 +2285,8 @@ program test_scatt
       write(*,*) 'results, grp 2, Ein2', results(:,2,2)
       write(*,*) 'results, grp 1, Ein3', results(:,1,3)
       write(*,*) 'results, grp 2, Ein3', results(:,2,3)
-      
+      write(*,*) maxval(results(:, 1, 2) - reference(:, 1, 2))
+      write(*,*) maxval(results(:, 2, 3) - reference(:, 2, 3))
       write(*,*)
       write(*,*) 'calc_scatt Test Passed!'
       write(*,*) '---------------------------------------------------'
