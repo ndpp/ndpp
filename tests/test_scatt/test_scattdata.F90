@@ -2264,6 +2264,7 @@ program test_scatt
       thin_tol = 1.0E-8_8
       
       ! Create the reference solution
+      ! These were calculated by the test_scatt_reference.sws sage worksheet.
       allocate(reference(order + 1, size(energy_bins) - 1, NEsig))
       reference(:, :, 1) = ZERO ! Ein == lower bound, therefore no distribution
       reference(:, 1, 2) = (/3.0_8, 0.08864337353812592746_8, &
