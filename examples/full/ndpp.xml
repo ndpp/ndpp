@@ -3,11 +3,8 @@
 <ndpp>
   <scatt_type>legendre</scatt_type>
   <scatt_order>5</scatt_order>
-<!--
-  <cross_sections>./cross_sections.xml</cross_sections>
--->
-  <energy_biooons>1.0E-11 0.625E-6 102.0</energy_bins>
+  <energy_bins>1.0E-11 0.625E-6 102.0</energy_bins>
   <mu_bins>21</mu_bins>
   <integrate_chi>false</integrate_chi>
-  <output_format>BINARY</output_format>
+  <output_format>NONE</output_format>
 </ndpp>

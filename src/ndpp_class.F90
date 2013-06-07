@@ -188,6 +188,8 @@ module ndpp_class
           self % lib_format = BINARY
         elseif (output_format_ == 'hdf5') then
           self % lib_format = HDF5
+        elseif (output_format_ == 'none') then
+          self % lib_format = NO_OUT
         else ! incorrect value, print warning, but use default.
           message = "Value for <output_format> provided, but does not match " // &
                     "ASCII, BINARY, or HDF5. Using default of ASCII."
