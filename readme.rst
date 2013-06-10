@@ -4,10 +4,11 @@ Nuclear Data PreProcessor (NDPP) Code
 
 The NDPP program is a code which extracts nuclear data from ACE format 
 data files (used by the Monte Carlo neutron transport codes MCNP_, Serpent_, and 
-OpenMC_, among others), and pre-processes the data to a new data library
-which has outgoing particle angle and energy probability distributions from both scattering and 
-fission reactions in a form that is more readily tallied by the Monte Carlo 
-codes with a significantly increased convergence rate.  The project started 
+OpenMC_, among others), to a form more readily tallied by the Monte Carlo codes.
+Specifically, NDPP integrates outgoing particle angle and energy probability 
+distributions from both scattering and fission reactions over outgoing energy
+and/or angle to produce a quantity which only depends on incoming neutron
+energy, significantly increasing the convergence rate.  The project started 
 under the Fission Systems and Radiation Transport group at the University of
 Michigan.
 
