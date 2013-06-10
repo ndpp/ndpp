@@ -126,12 +126,12 @@ used in a Monte Carlo code.
 
 The ``<output_format>`` element determines what type of output library/libraries
 should be written to disk during the run. This element has no attributes and is
-simply a string.  Valid options are "ascii", "binary", and "hdf5".  If "ascii" is 
-specified, an output library will be written for each entry in the 
+simply a string.  Valid options are "ascii", "binary", "hdf5", and "none".  
+If "ascii" is specified, an output library will be written for each entry in the 
 cross_sections.xml file which contains the requested data in human-readable 
 ASCII code. If "binary" is specified, the same will be written, but in a 
 machine-readable binary format.  If "hdf5" is specified, a single binary HDF5 
 library will be created which contains the data for all the cross_sections.xml
-file entries.
+file entries. Finally, if "none" is specified, then no library will be written.
 
   *Default*: "ascii"

@@ -1,0 +1,25 @@
+element ndpp {
+  
+  element scatt_type { ( "LEGENDRE" | "TABULAR" | "legendre" | "tabular" ) }? &
+
+  element scatt_order { xsd:positiveInteger }? &
+
+  element mu_bins { xsd:positiveInteger }? &
+
+  element cross_sections { xsd:string { maxLength = "255" } }? &
+
+  element integrate_chi { ( "TRUE" | "FALSE" | "true" | "false" ) }? &
+
+  element energy_bins { list { xsd:double+ } }? &
+
+  element library_name { xsd:string { maxLength = "255" } }? &
+
+  element output_format { 
+    ( "ASCII" | "BINARY" | "HDF5" | "NONE" |
+      "ascii" | "binary" | "hdf5" | "none" ) }? &
+
+  element thinning_tol { xsd:double }? &
+
+  element print_tol { xsd:double }? &
+  
+}
