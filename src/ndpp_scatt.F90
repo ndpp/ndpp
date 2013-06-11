@@ -269,9 +269,9 @@ module ndpp_scatt
       if (gmin > gmax) then ! we have effectively all zeros
         call print_ascii_array((/ZERO, ZERO/), UNIT_NUC)
       else
-        call print_ascii_array((/real(gmin,8), real(gmax,8), &
-          reshape(data(:, gmin : gmax, iE), (/ &
-          size(data, dim=1) * (gmax - gmin + 1)/))/), UNIT_NUC)
+        call print_ascii_array((/real(gmin,8), real(gmax,8)/), UNIT_NUC)
+        call print_ascii_array(reshape(data(:, gmin : gmax, iE), (/ &
+          size(data, dim=1) * (gmax - gmin + 1)/)), UNIT_NUC)
       end if
     end do
   
