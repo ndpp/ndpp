@@ -735,7 +735,7 @@ module ndpp_class
         ! Nuclide Name, Temperature, Run Date
         line = ''
         write(line,'(A20,1PE20.12,I20,A20)') nuc % name, nuc % kT, &
-          this_ndpp % energy_groups, time_stamp()
+          this_ndpp % energy_groups
         write(UNIT_NUC,'(A)') trim(line)
         ! Energy Bin Structure
         call print_ascii_array(this_ndpp % energy_bins, UNIT_NUC)
@@ -770,7 +770,6 @@ module ndpp_class
         write(UNIT_NUC) nuc % name
         write(UNIT_NUC) nuc % kT
         write(UNIT_NUC) this_ndpp % energy_groups
-        write(UNIT_NUC) time_stamp()
         
         ! Energy Bin Structure
         write(UNIT_NUC) this_ndpp % energy_bins

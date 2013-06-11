@@ -244,16 +244,10 @@ module ndpp_scatt
     ! Begin writing:
     
     ! <size(E_grid)>
-    line = ''
-    write(line,'(I20)') size(E_grid)
-    write(UNIT_NUC,'(A)') trim(line)
+    write(UNIT_NUC,'(I20)') size(E_grid)
     
     ! <incoming energy array>
-    call print_ascii_array(E_grid, UNIT_NUC)
-    
-!~     ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, Ein>
-!~     call print_ascii_array(pack(data, .true.), UNIT_NUC)
-    
+    call print_ascii_array(E_grid, UNIT_NUC)    
     
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
@@ -267,9 +261,9 @@ module ndpp_scatt
         if (data(1, gmax, iE) > tol) exit
       end do
       if (gmin > gmax) then ! we have effectively all zeros
-        call print_ascii_array((/ZERO, ZERO/), UNIT_NUC)
+        write(UNIT_NUC, '(I20,I20)') 0,0
       else
-        call print_ascii_array((/real(gmin,8), real(gmax,8)/), UNIT_NUC)
+        write(UNIT_NUC, '(I20,I20)') gmin,gmax
         call print_ascii_array(reshape(data(:, gmin : gmax, iE), (/ &
           size(data, dim=1) * (gmax - gmin + 1)/)), UNIT_NUC)
       end if
@@ -306,9 +300,6 @@ module ndpp_scatt
     
     ! <incoming energy array>
     write(UNIT_NUC) E_grid
-    
-!~     ! < \Sigma_{s,g',l}(Ein) ordered by: order, groups, Ein>
-!~     write(UNIT_NUC) data
 
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
@@ -322,11 +313,10 @@ module ndpp_scatt
         if (data(1, gmax, iE) > tol) exit
       end do
       if (gmin > gmax) then ! we have effectively all zeros
-        write(UNIT_NUC) (/ZERO, ZERO/)
+        write(UNIT_NUC) 0, 0
       else
-        write(UNIT_NUC) (/real(gmin,8), real(gmax,8), &
-          reshape(data(:, gmin : gmax, iE), (/ &
-          size(data, dim=1) * (gmax - gmin + 1)/))/)
+        write(UNIT_NUC) gmin, gmax
+        write(UNIT_NUC) data(:, gmin : gmax, iE)
       end if
       
     end do
