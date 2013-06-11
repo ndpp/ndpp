@@ -313,6 +313,20 @@ module ndpp_class
       real(8), allocatable   :: chi_d(:,:)  ! grp x E_in chi delayed values on a union grid
       real(8), allocatable   :: e_d_grid(:) ! List of energy points for chi delayed
       
+      ! Before we begin, write the metadata for the ndpp_lib.xml file.
+      ! The ndpp_lib.xml file is NDPPs version of an 
+      ! xsdata/xsdir/cross_sections.xml file, which describes the nuclear datas
+      ! location in a set of files.
+      ! We will write the header and metadata here and then, after each nuclide 
+      ! is complete, print that nuclide's entry. 
+      ! Finally, we will close the xml file
+
+      call timer_start(self % time_print)
+      call print_ndpp_lib_xml_header(self % n_listings, self % energy_bins, &
+        self % lib_format, self % scatt_type, self % scatt_order, &
+        self % mu_bins, self % integrate_chi, self % print_tol, self % thin_tol)
+      call timer_stop(self % time_print)
+      
       ! For each xs library requested, this routine will:
       ! 1) Read the ACE file
       ! 2) Calculate the scattering information as follows:
@@ -341,7 +355,6 @@ module ndpp_class
       ! Start PreProcessor Timer
       call timer_start(self % time_preproc)
       
-      
       do i_listing = 1, self % n_listings
         if (xs_listings(i_listing) % type == ACE_NEUTRON) then
           allocate(nuclides(1))
@@ -352,7 +365,7 @@ module ndpp_class
           nuc => nuclides(1)
           call timer_stop(self % time_read_xs)
           
-          ! Setup output library
+          ! Setup output nuclear data library
           call init_library(self, nuc)
           
           ! Integrate Scattering Distributions
@@ -401,6 +414,13 @@ module ndpp_class
         end if
         ! Close the file/HDF5 object
         !!!call finalize_output()
+        
+        ! Write this nuclide to the ndpp_lib.xml file
+        call timer_start(self % time_print)
+        call print_ndpp_lib_xml_nuclide(xs_listings(i_listing), &
+          self % lib_format, self % lib_name)
+        call timer_stop(self % time_print)
+        
         ! Deallocate the nuclide and its member data.
         if (allocated(nuclides)) then
           call nuclides(1) % clear()
@@ -410,6 +430,11 @@ module ndpp_class
       end do
       
       call timer_stop(self % time_preproc)
+      
+      ! Close the ndpp_lib.xml file
+      call timer_start(self % time_print)
+      call print_ndpp_lib_xml_closer(self % lib_format)
+      call timer_stop(self % time_print)
       
     end subroutine preprocess_ndpp
 
@@ -449,6 +474,122 @@ module ndpp_class
 ! SUBROUTINES/FUNCTIONS TO SUPPORT nuclearDataPreProc CLASS
 !===============================================================================
 !===============================================================================
+ 
+!===============================================================================
+! PRINT_NDPP_LIB_XML_HEADER prints the metadata for this run of ndpp to
+! ndpp_lib.xml in the path of the output libraries.
+!===============================================================================
+
+    subroutine print_ndpp_lib_xml_header(n_listings, energy_bins, lib_format, &
+      scatt_type, scatt_order, mu_bins, integrate_chi, print_tol, thin_tol)
+      
+      integer, intent(in)              :: n_listings     ! Number of entries
+      real(8), allocatable, intent(in) :: energy_bins(:) ! Energy group structure
+      integer, intent(in)              :: lib_format     ! Library type
+      integer, intent(in)              :: scatt_type     ! Representation of scattering data
+      integer, intent(in)              :: scatt_order    ! Order of scattering data
+      integer, intent(in)              :: mu_bins        ! Number of angular bins to use
+      logical, intent(in)              :: integrate_chi  ! Flag on if chi data is included
+      real(8), intent(in)              :: print_tol      ! Minimum g'->g transfer to bother printing
+      real(8), intent(in)              :: thin_tol       ! Tolerance on the union energy grid thinning
+      
+      character(2) :: indent = '  '
+      
+      ! This file is unnecessary if no output is chosen, therefore, exit if that
+      ! is the case
+      if (lib_format == NO_OUT) return
+      
+      ! Open file for writing
+      open(FILE="ndpp_lib.xml", UNIT=UNIT_NDPP, STATUS='replace', ACTION='write')
+      ! Write xml version header
+      write(UNIT_NDPP, '(A)') '<?xml version="1.0"?>'
+      ! Create ndpp_lib xml object (open tag)
+      write(UNIT_NDPP, '(A)') '<ndpp_lib>'
+      ! Write metadata
+      write(UNIT_NDPP, '(A)') indent // '<directory> ' // trim(path_input) // &
+        '  </directory>'
+      if (lib_format == ASCII) then
+        write(UNIT_NDPP, '(A)') indent // '<filetype> ascii </filetype>'
+      else if (lib_format == BINARY) then 
+        write(UNIT_NDPP, '(A)') indent // '<filetype> binary </filetype>'
+      else if (lib_format == HDF5) then 
+        write(UNIT_NDPP, '(A)') indent // '<filetype> hdf5 </filetype>'
+      end if
+      write(UNIT_NDPP, '(A)') indent // '<entries> ' // trim(to_str(n_listings))// &
+        '  </entries>'
+      !!! Skipping over record length for now, not sure I need it.
+      if (integrate_chi) then
+        write(UNIT_NDPP, '(A)') indent // '<chi_present> true </chi_present>'
+      else
+        write(UNIT_NDPP, '(A)') indent // '<chi_present> false </chi_present>'
+      end if
+      write(UNIT_NDPP, '(A)') indent // '<scatt_type> ' // &
+        trim(to_str(scatt_type)) // ' </scatt_type>'
+      write(UNIT_NDPP, '(A)') indent // '<scatt_order> ' // &
+        trim(to_str(scatt_order)) // ' </scatt_order>'
+      write(UNIT_NDPP, '(A)') indent // '<print_tol> ' // &
+        trim(to_str(print_tol)) // ' </print_tol>'
+      write(UNIT_NDPP, '(A)') indent // '<thin_tol> ' // &
+        trim(to_str(thin_tol)) // ' </thin_tol>'
+      write(UNIT_NDPP, '(A)') indent // '<mu_bins> ' // &
+        trim(to_str(mu_bins)) // ' </mu_bins>'
+      write(UNIT_NDPP, '(A)') indent // '<energy_bins>'
+      call print_ascii_array(energy_bins, UNIT_NDPP)
+      write(UNIT_NDPP, '(A)') indent // '</energy_bins>'
+      write(UNIT_NDPP, '(A)') ! blank line
+      
+    end subroutine print_ndpp_lib_xml_header
+
+!===============================================================================
+! PRINT_NDPP_LIB_XML_NUCLIDE prints the entry for each nuclide
+!===============================================================================
+    
+    subroutine print_ndpp_lib_xml_nuclide(nuc, lib_format, lib_name)
+      type(XsListing), intent(inout)         :: nuc        ! The nuclide to print
+      integer, intent(in)                    :: lib_format ! Library type
+      character(MAX_FILE_LEN), intent(inout) :: lib_name   ! library extension
+      
+      character(2)            :: indent = '  '
+      character(MAX_FILE_LEN) :: filename
+      
+      ! This file is unnecessary if no output is chosen, therefore, exit if that
+      ! is the case
+      if (lib_format == NO_OUT) return
+
+      ! Create filename for output library
+      filename = trim(adjustl(nuc % name)) // trim(adjustl(lib_name))
+      if (nuc % metastable) then ! include metastable attribute
+        write(UNIT_NDPP, '(A)') indent // '<ndpp_table alias="' // &
+          trim(nuc % alias) // '" awr="' // trim(to_str(nuc % awr)) // &
+          '" location="1" name="' // trim(nuc % name) // '" path="' // &
+          trim(filename) // '" temperature="' // trim(to_str(nuc % kT)) // &
+          '" zaid="' // trim(to_str(nuc % zaid)) // '" metastable= "1" />'
+      else
+        write(UNIT_NDPP, '(A)') indent // '<ndpp_table alias="' // &
+          trim(nuc % alias) // '" awr="' // trim(to_str(nuc % awr)) // &
+          '" location="1" name="' // trim(nuc % name) // '" path="' // &
+          trim(filename) // '" temperature="' // trim(to_str(nuc % kT)) // &
+          '" zaid="' // trim(to_str(nuc % zaid)) // '" />'
+      end if
+      
+      
+    end subroutine print_ndpp_lib_xml_nuclide
+    
+!===============================================================================
+! PRINT_NDPP_LIB_XML_CLOSER prints the final tag of ndpp_lib.xml and closes the
+! file.
+!===============================================================================
+    
+    subroutine print_ndpp_lib_xml_closer(lib_format)
+      integer, intent(in) :: lib_format     ! Library type
+      ! This file is unnecessary if no output is chosen, therefore, exit if that
+      ! is the case
+      if (lib_format == NO_OUT) return
+      
+      write(UNIT_NDPP, '(A)') '</ndpp_lib>'
+      close(UNIT_NDPP)
+      
+    end subroutine print_ndpp_lib_xml_closer
   
 !===============================================================================
 ! READ_CROSS_SECTIONS_XML reads information from a cross_sections.xml file. This

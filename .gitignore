@@ -30,3 +30,8 @@ jacobian*.py
 
 # Example output files
 examples/basic/1002.82c.g1
+
+examples/basic/ndpp_lib.xml
+
+examples/full/*.g2
+examples/full/ndpp_lib.xml

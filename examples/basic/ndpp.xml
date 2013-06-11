@@ -6,5 +6,5 @@
   <cross_sections>./cross_sections.xml</cross_sections>
   <energy_bins>1.0E-11 102.0</energy_bins>+
   <integrate_chi>false</integrate_chi>
-  <output_format>none</output_format>
+  <output_format>binary</output_format>
 </ndpp>

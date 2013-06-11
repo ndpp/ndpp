@@ -209,13 +209,9 @@ module constants
   ! input file!
   integer, parameter :: ERROR_INT  = -huge(0)
   real(8), parameter :: ERROR_REAL = -huge(0.0_8) * 0.917826354_8
-
-  ! Running modes
-  !!! Left here b/c I may have modes
-!   integer, parameter ::        &
-!        MODE_FIXEDSOURCE = 1 ! Fixed source mode
-
+  
   ! Unit numbers
-  integer, parameter :: UNIT_NUC   = 21 ! unit # for writing nuclide file
+  integer, parameter :: UNIT_NDPP  = 20 ! unit # for writing ndpp_lib.xml file
+  integer, parameter :: UNIT_NUC   = 21 ! unit # for writing nuclide library  
 
 end module constants
