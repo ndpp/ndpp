@@ -734,7 +734,8 @@ module ndpp_class
         ! Write header information:
         ! Nuclide Name, Temperature, Run Date
         line = ''
-        write(line,'(A20,1PE20.12,A20,A20)') nuc % name, nuc % kT, ' ', time_stamp()
+        write(line,'(A20,1PE20.12,I20,A20)') nuc % name, nuc % kT, &
+          this_ndpp % energy_groups, time_stamp()
         write(UNIT_NUC,'(A)') trim(line)
         ! Energy Bin Structure
         call print_ascii_array(this_ndpp % energy_bins, UNIT_NUC)
@@ -755,6 +756,7 @@ module ndpp_class
         line= ''
         write(line,'(I20)') this_ndpp % mu_bins
         write(UNIT_NUC,'(A)') trim(line)
+        
       else if (this_ndpp % lib_format == BINARY) then
         ! Create filename for output library
         filename = trim(adjustl(nuc % name)) // trim(adjustl(this_ndpp % lib_name))
@@ -767,6 +769,7 @@ module ndpp_class
         ! Nuclide Name, Temperature, Run Date
         write(UNIT_NUC) nuc % name
         write(UNIT_NUC) nuc % kT
+        write(UNIT_NUC) this_ndpp % energy_groups
         write(UNIT_NUC) time_stamp()
         
         ! Energy Bin Structure
