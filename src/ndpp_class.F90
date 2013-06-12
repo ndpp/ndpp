@@ -456,11 +456,11 @@ module ndpp_class
 
       ! display time elapsed for various sections
       write(ou,100) "Total time for initialization", self % time_initialize % elapsed
-      write(ou,100) "  Reading cross sections", self % time_read_xs % elapsed
       write(ou,100) "Total time for data pre-processing", self % time_preproc % elapsed
-      write(ou,100) "  Time performing scattering calculations", &
+      write(ou,100) "  Reading cross sections", self % time_read_xs % elapsed
+      write(ou,100) "  Time for scattering integration", &
         self % time_scatt_preproc % elapsed
-      write(ou,100) "  Time performing chi integration calculations", &
+      write(ou,100) "  Time for chi integration", &
         self % time_chi_preproc % elapsed
       write(ou,100) "Total time elapsed", self % time_total % elapsed
       
