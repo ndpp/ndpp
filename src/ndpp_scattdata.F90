@@ -294,8 +294,8 @@ module scattdata_class
       
       type(Reaction), pointer   :: rxn     ! The reaction of interest
       real(8), allocatable :: distro(:,:)  ! the output distribution
-      real(8), allocatable :: my_distro(:,:) ! the distribution chosen
-                                              ! by the binary search on Ein
+      real(8), allocatable :: distro_lab(:,:) ! the distribution in after cm2lab
+      real(8), allocatable :: distro_int(:,:) ! the distribution at Ein before cm2lab
       real(8) :: f, p_valid, sigS          ! interpolation, probability of this
                                            ! (nested) reaction, and \sigma_s(E)
       integer :: iE                        ! incoming energy index (searched)
@@ -306,6 +306,8 @@ module scattdata_class
       integer :: bins(2, this % groups)   ! Start/end energy/angle bin indices
       real(8) :: vals(2, this % groups)   ! values on start/end energy/angle
       real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
+      integer :: iEout, minEout, maxEout  ! Eout index, and max/min # of Eouts 
+                                          ! in two interpolants
       
       ! Set up the results memory 
       allocate(distro(this % order, this % groups))
@@ -333,6 +335,10 @@ module scattdata_class
         sigS = sigS_array(size(sigS_array))
         
         iE = this % NE
+        
+        allocate(distro_int(size(this % distro(iE) % data, dim=1), &
+          size(this % distro(iE) % data, dim=2)))
+        distro_int = this % distro(iE) % data
       else
         nuc_iE = binary_search(nuc % energy, nuc % n_grid, &
           Ein)
@@ -349,12 +355,38 @@ module scattdata_class
         ! Search on the angular distribution's energy grid to find what energy
         ! index Ein is at.
         iE = binary_search(this % E_grid, this % NE, Ein)
+        
         ! Interpolate the distribution
-        !!! For now we will just `interpolate' based on whichever
-        !!! distribution is the closest to the requested energy
+!~         !!! For now we will just `interpolate' based on whichever
+!~         !!! distribution is the closest to the requested energy
+!~         f = (Ein - this % E_grid(iE))/ &
+!~           (this % E_grid(iE + 1) - this % E_grid(iE))
+!~         if (f >= 0.5_8) iE = iE + 1
         f = (Ein - this % E_grid(iE))/ &
           (this % E_grid(iE + 1) - this % E_grid(iE))
-        if (f >= 0.5_8) iE = iE + 1
+        ! Now interpolate on the distributions at iE and iE+1 to 
+        ! generate the distribution to use at Ein. Store in distro_int
+        ! First we need to find the maximum number of Eouts in the distribution
+        maxEout = max(size(this % distro(iE) % data, dim = 2), &
+          size(this % distro(iE + 1) % data, dim = 2))
+        minEout = max(size(this % distro(iE) % data, dim = 2), &
+          size(this % distro(iE + 1) % data, dim = 2))
+        
+        allocate(distro_int(size(this % distro(iE) % data, dim=1), maxEout))
+        do iEout = 1, minEout
+          distro_int(:, iEout) = (ONE - f) * this % distro(iE) % data(:, iEout) + &
+            f * this % distro(iE + 1) % data(:, iEout)
+        end do
+        if (maxEout == size(this % distro(iE + 1) % data, dim = 2)) then
+          do iEout = minEout + 1, maxEout
+            distro_int(:, iEout) = f * this % distro(iE + 1) % data(:, iEout)
+          end do
+        else
+          do iEout = minEout + 1, maxEout
+            distro_int(:, iEout) = (ONE - f) * this % distro(iE) % data(:, iEout)
+          end do
+        end if
+        
       end if
       
       ! Get the probability value
@@ -371,14 +403,11 @@ module scattdata_class
       ! 4) integrate according to scatt_type
       
       ! 1) convert from CM to Lab, if necessary
-      allocate(my_distro(size(this % distro(iE) % data, dim=1), &
+      allocate(distro_lab(size(this % distro(iE) % data, dim=1), &
         size(this % distro(iE) % data, dim=2)))
-      if (rxn % scatter_in_cm) then
+      if (rxn % scatter_in_cm) &
         call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, &
-          this % distro(iE) % data, my_distro)
-      else
-        my_distro = this % distro(iE) % data
-      end if
+          distro_int, distro_lab)
       
       select case (this % scatt_type)
         case (SCATT_TYPE_LEGENDRE)
@@ -387,14 +416,14 @@ module scattdata_class
             call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
               this % E_bins, this % mu, interp, vals, bins)
             ! 4) integrate according to scatt_type
-            call integrate_energyangle_file4_leg(my_distro(:, 1), this % mu, &
+            call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
               interp, vals, bins, this % order, distro)
           else if (associated(this % edist)) then
             ! 3) calculate the energy boundaries for integration
             call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
               this % INTT(iE), interp, bins)
             ! 4) integrate according to scatt_type
-            call integrate_energyangle_file6_leg(my_distro, this % mu, &
+            call integrate_energyangle_file6_leg(distro_lab, this % mu, &
               this % Eouts(iE) % data, this % E_bins, interp, bins, &
               this % order, distro)
           end if
@@ -404,14 +433,14 @@ module scattdata_class
             call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
               this % E_bins, this % mu, interp, vals, bins)
             ! 4) integrate according to scatt_type
-!~             call integrate_energyangle_file4_tab(my_distro(:, 1), this % mu, &
+!~             call integrate_energyangle_file4_tab(distro_lab(:, 1), this % mu, &
 !~               interp, vals, bins, this % order, distro)
           else if (associated(this % edist)) then
             ! 3) calculate the energy boundaries for integration
             call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
               this % INTT(iE), interp, bins)
             ! 4) integrate according to scatt_type
-!~             call integrate_energyangle_file6_tab(my_distro, this % mu, &
+!~             call integrate_energyangle_file6_tab(distro_lab, this % mu, &
 !~               this % Eouts(iE) % data, this % E_bins, interp, bins, &
 !~               this % order, distro)
           end if
