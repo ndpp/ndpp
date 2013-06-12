@@ -268,7 +268,6 @@ module ndpp_scatt
           size(data, dim=1) * (gmax - gmin + 1)/)), UNIT_NUC)
       end if
     end do
-  
     
   end subroutine print_scatt_ascii
   

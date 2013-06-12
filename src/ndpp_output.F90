@@ -224,7 +224,7 @@ contains
       if ((size(array) - i_array) >= 3) then
         write(line, '(1PE20.12,1PE20.12,1PE20.12,1PE20.12)') &
           array(i_array), array(i_array + 1), array(i_array + 2), &
-          array(i_array+ 3)
+          array(i_array + 3)
         i_array = i_array + 4
         write(ou, '(A)') trim(line)
       else
@@ -238,6 +238,7 @@ contains
         case (2)
           write(line, '(1PE20.12,1PE20.12,1PE20.12)') array(i_array), &
             array(i_array + 1), array(i_array + 2)
+          write(ou, '(A)') trim(line)
         end select
         exit
       end if
