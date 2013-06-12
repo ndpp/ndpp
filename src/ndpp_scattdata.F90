@@ -369,7 +369,7 @@ module scattdata_class
         ! First we need to find the maximum number of Eouts in the distribution
         maxEout = max(size(this % distro(iE) % data, dim = 2), &
           size(this % distro(iE + 1) % data, dim = 2))
-        minEout = max(size(this % distro(iE) % data, dim = 2), &
+        minEout = min(size(this % distro(iE) % data, dim = 2), &
           size(this % distro(iE + 1) % data, dim = 2))
         
         allocate(distro_int(size(this % distro(iE) % data, dim=1), maxEout))
@@ -404,7 +404,7 @@ module scattdata_class
       
       ! 1) convert from CM to Lab, if necessary
       allocate(distro_lab(size(this % distro(iE) % data, dim=1), &
-        size(this % distro(iE) % data, dim=2)))
+        size(distro_int, dim=2)))
       if (rxn % scatter_in_cm) &
         call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, &
           distro_int, distro_lab)
