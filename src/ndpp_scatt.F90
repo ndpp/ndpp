@@ -133,6 +133,7 @@ module ndpp_scatt
       integer :: irxn, Nrxn
       integer :: groups, order
       type(ScattData), pointer :: mySD => NULL()
+      real(8) :: sigS
       
       groups = rxn_data(1) % groups
       order = rxn_data(1) % order
@@ -146,6 +147,7 @@ module ndpp_scatt
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
       do iE = 1, NE
         scatt_mat(:, :, iE) = ZERO
+        sigS = ZERO
         do irxn = 1, Nrxn
           mySD => rxn_data(irxn)
           if (.not. mySD % is_init) cycle
@@ -154,8 +156,11 @@ module ndpp_scatt
           if (E_grid(iE) < mySD % E_grid(1)) cycle
           ! Add the scattering distribution to the union scattering grid
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + &
-            mySD % interp_distro(mu_out, nuc, E_grid(iE))
+            mySD % interp_distro(mu_out, nuc, E_grid(iE), sigS)
         end do
+        
+        ! Normalize by sigS for later multiplication in the MC code
+        scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / sigS
       end do
     end subroutine calc_scatt_grid
     

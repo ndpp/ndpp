@@ -285,10 +285,13 @@ module scattdata_class
 ! data directly from the given index (iE)
 !===============================================================================
 
-    function scatt_interp_distro(this, mu_out, nuc, Ein) result(distro)
+    function scatt_interp_distro(this, mu_out, nuc, Ein, sigS_tot) &
+      result(distro)
+      
       class(ScattData), target, intent(in) :: this ! Working ScattData object
       real(8), intent(in)                  :: mu_out(:) ! The tabular output mu grid
       type(Nuclide), intent(in), pointer   :: nuc  ! Working nuclide
+      real(8), intent(inout)               :: sigS_tot ! Running total of the micro scattering x/s
       
       real(8), intent(in)       :: Ein     ! Incoming energy to interpolate on
       
@@ -448,6 +451,7 @@ module scattdata_class
       
       ! Combine the results
       distro = sigS * p_valid * distro * real(rxn % multiplicity, 8)
+      sigS_tot = sigS_tot + sigS
       
     end function scatt_interp_distro
 
