@@ -129,11 +129,11 @@ module ndpp_scatt
       real(8), pointer, intent(out)        :: E_grid(:) ! Ein grid
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
       
-      integer :: iE, NE
-      integer :: irxn, Nrxn
-      integer :: groups, order
-      type(ScattData), pointer :: mySD => NULL()
-      real(8) :: sigS
+      integer :: iE, NE                          ! Ein counter, # Ein
+      integer :: irxn, Nrxn                      ! reaction counter, # Reactions
+      integer :: groups, order                   ! # Groups, # Orders
+      type(ScattData), pointer :: mySD => NULL() ! Current working ScattData object
+      real(8) :: norm_tot                        ! Sum of all normalization consts
       
       groups = rxn_data(1) % groups
       order = rxn_data(1) % order
@@ -147,7 +147,7 @@ module ndpp_scatt
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
       do iE = 1, NE
         scatt_mat(:, :, iE) = ZERO
-        sigS = ZERO
+        norm_tot = ZERO
         do irxn = 1, Nrxn
           mySD => rxn_data(irxn)
           if (.not. mySD % is_init) cycle
@@ -156,11 +156,12 @@ module ndpp_scatt
           if (E_grid(iE) < mySD % E_grid(1)) cycle
           ! Add the scattering distribution to the union scattering grid
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + &
-            mySD % interp_distro(mu_out, nuc, E_grid(iE), sigS)
+            mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
         end do
         
         ! Normalize by sigS for later multiplication in the MC code
-        scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / sigS
+        scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
+        
       end do
     end subroutine calc_scatt_grid
     

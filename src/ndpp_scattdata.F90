@@ -70,6 +70,7 @@ module scattdata_class
     
     subroutine scatt_init(this, nuc, rxn, edist, E_bins, scatt_type, order, &
       mu_bins)
+      
       class(ScattData), intent(inout)       :: this  ! The object to initialize
       type(Nuclide), intent(in)             :: nuc   ! Nuclide we are working on
       type(Reaction), target, intent(inout) :: rxn   ! The reaction of interest
@@ -285,13 +286,13 @@ module scattdata_class
 ! data directly from the given index (iE)
 !===============================================================================
 
-    function scatt_interp_distro(this, mu_out, nuc, Ein, sigS_tot) &
+    function scatt_interp_distro(this, mu_out, nuc, Ein, norm_tot) &
       result(distro)
       
       class(ScattData), target, intent(in) :: this ! Working ScattData object
       real(8), intent(in)                  :: mu_out(:) ! The tabular output mu grid
       type(Nuclide), intent(in), pointer   :: nuc  ! Working nuclide
-      real(8), intent(inout)               :: sigS_tot ! Running total of the micro scattering x/s
+      real(8), intent(inout)               :: norm_tot ! Running total of the micro scattering x/s
       
       real(8), intent(in)       :: Ein     ! Incoming energy to interpolate on
       
@@ -360,41 +361,48 @@ module scattdata_class
         iE = binary_search(this % E_grid, this % NE, Ein)
         
         ! Interpolate the distribution
-!~         !!! For now we will just `interpolate' based on whichever
-!~         !!! distribution is the closest to the requested energy
-!~         f = (Ein - this % E_grid(iE))/ &
-!~           (this % E_grid(iE + 1) - this % E_grid(iE))
-!~         if (f >= 0.5_8) iE = iE + 1
         f = (Ein - this % E_grid(iE))/ &
           (this % E_grid(iE + 1) - this % E_grid(iE))
-        ! Now interpolate on the distributions at iE and iE+1 to 
-        ! generate the distribution to use at Ein. Store in distro_int
-        ! First we need to find the maximum number of Eouts in the distribution
-        maxEout = max(size(this % distro(iE) % data, dim = 2), &
-          size(this % distro(iE + 1) % data, dim = 2))
-        minEout = min(size(this % distro(iE) % data, dim = 2), &
-          size(this % distro(iE + 1) % data, dim = 2))
-        
-        allocate(distro_int(size(this % distro(iE) % data, dim=1), maxEout))
-        do iEout = 1, minEout
-          distro_int(:, iEout) = (ONE - f) * this % distro(iE) % data(:, iEout) + &
-            f * this % distro(iE + 1) % data(:, iEout)
-        end do
-        if (maxEout == size(this % distro(iE + 1) % data, dim = 2)) then
-          do iEout = minEout + 1, maxEout
-            distro_int(:, iEout) = f * this % distro(iE + 1) % data(:, iEout)
-          end do
+        ! Do on nearest neighbor, or with linear interpolation?
+        if (INTERP_NEAREST) then
+          if (f >= 0.5_8) iE = iE + 1
+          allocate(distro_int(size(this % distro(iE) % data, dim=1), &
+            size(this % distro(iE) % data, dim=2)))
+          distro_int = this % distro(iE) % data
         else
-          do iEout = minEout + 1, maxEout
-            distro_int(:, iEout) = (ONE - f) * this % distro(iE) % data(:, iEout)
+          ! Now interpolate on the distributions at iE and iE+1 to 
+          ! generate the distribution to use at Ein. Store in distro_int
+          ! First we need to find the maximum number of Eouts in the distribution
+          maxEout = max(size(this % distro(iE) % data, dim = 2), &
+            size(this % distro(iE + 1) % data, dim = 2))
+          minEout = min(size(this % distro(iE) % data, dim = 2), &
+            size(this % distro(iE + 1) % data, dim = 2))
+          
+          allocate(distro_int(size(this % distro(iE) % data, dim=1), maxEout))
+          do iEout = 1, minEout
+            distro_int(:, iEout) = (ONE - f) * this % distro(iE) % data(:, iEout) + &
+              f * this % distro(iE + 1) % data(:, iEout)
           end do
+          if (maxEout == size(this % distro(iE + 1) % data, dim = 2)) then
+            do iEout = minEout + 1, maxEout
+              distro_int(:, iEout) = f * this % distro(iE + 1) % data(:, iEout)
+            end do
+          else
+            do iEout = minEout + 1, maxEout
+              distro_int(:, iEout) = (ONE - f) * this % distro(iE) % data(:, iEout)
+            end do
+          end if
         end if
         
       end if
       
       ! Get the probability value
       if (associated(this % edist)) then
-        p_valid = interpolate_tab1(this % edist % p_valid, Ein)
+        if (this % edist % p_valid % n_regions > 0) then
+          p_valid = interpolate_tab1(this % edist % p_valid, Ein)
+        else
+          p_valid = ONE
+        end if
       else
         p_valid = ONE
       end if
@@ -417,17 +425,20 @@ module scattdata_class
           if (associated(this % adist)) then
             ! 2) calculate the angular boundaries for integration
             call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
-              this % E_bins, this % mu, interp, vals, bins)
+              this % E_bins, this % mu, interp, vals, bins) 
             ! 4) integrate according to scatt_type
             call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
               interp, vals, bins, this % order, distro)
           else if (associated(this % edist)) then
             ! 3) calculate the energy boundaries for integration
-            call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
-              this % INTT(iE), interp, bins)
-            ! 4) integrate according to scatt_type
-            call integrate_energyangle_file6_leg(distro_lab, this % mu, &
-              this % Eouts(iE) % data, this % E_bins, interp, bins, &
+!~             call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
+!~               this % INTT(iE), interp, bins)
+!~             ! 4) integrate according to scatt_type
+!~             call integrate_energyangle_file6_leg(distro_lab, this % mu, &
+!~               this % Eouts(iE) % data, this % E_bins, interp, bins, &
+!~               this % order, distro)
+            call integrate_energyangle_file6_leg2(distro_lab, this % mu, &
+              this % Eouts(iE) % data, this % INTT(iE), this % E_bins, &
               this % order, distro)
           end if
         case (SCATT_TYPE_TABULAR)
@@ -450,8 +461,8 @@ module scattdata_class
       end select
       
       ! Combine the results
-      distro = sigS * p_valid * distro * real(rxn % multiplicity, 8)
-      sigS_tot = sigS_tot + sigS
+      distro(:,:) = sigS * p_valid * real(rxn % multiplicity, 8) * distro(:,:) 
+      norm_tot = norm_tot + sigS * p_valid * real(rxn % multiplicity, 8)
       
     end function scatt_interp_distro
 
@@ -582,6 +593,7 @@ module scattdata_class
       real(8) :: r            ! Interpolation parameter
       integer :: NR, NE       ! edist % data navigation information
       real(8) :: KMR, KMA, KMconst ! Various data for Kalbach-Mann
+      real(8), allocatable :: pdf(:), cdf(:) ! PDF/CDF of Eout at Ein
       
       ! Exit if using an unsupported law
       if ((edist % law /= 44) .and. (edist % law /= 61)) return
@@ -606,24 +618,39 @@ module scattdata_class
       NP = int(data(lc + 2))
       allocate(Eouts(NP))
       Eouts = data(lc + 2 + 1 : lc + 2 + NP)
+      allocate(pdf(NP))
+      allocate(cdf(NP))
       
       if (edist % law  == 44) then
         lc = lc + 2
+        ! Get the PDF and CDF
+        pdf = data(lc + NP + 1 : lc + 2 * NP) 
+        cdf = data(lc + 2 * NP + 1 : lc + 3 * NP)
         do iEout = 1, NP
           KMR = data(lc + 3 * NP + iEout)
           KMA = data(lc + 4 * NP + iEout)
           ! Calculate the leading term and multiply by the probability of this
           ! Eout distribution
-          KMconst = 0.5_8 * KMA / sinh(KMA) * data(lc + NP + iEout) 
+          if (pdf(iEout) > ONE) then
+            KMconst = ZERO
+          else
+            KMconst = 0.5_8 * KMA / sinh(KMA) * pdf(iEout)
+          end if
           distro(:, iEout) = KMconst * (cosh(KMA * mu(:)) + KMR * sinh(KMA * mu(:)))
         end do
       else if (edist % law  == 61) then
         lcin = lc + 2
+        ! Get the PDF and CDF
+        pdf = data(lc + NP + 1 : lc + 2 * NP) 
+        cdf = data(lc + 2 * NP + 1 : lc + 3 * NP)
         do iEout = 1, NP
           lc = int(data(lcin + 3*NP + iEout))
+          
+          if (pdf(iEout) > ONE) pdf(iEout) = ZERO
+          
           ! Check if isotropic
           if (lc == 0) then
-            distro(:, iEout) = 0.5_8 * data(lcin + NP + iEout) 
+            distro(:, iEout) = 0.5_8 * pdf(iEout)
             cycle
           end if
           
@@ -674,7 +701,7 @@ module scattdata_class
           end if 
           
           ! Multiply by the PDF from ENDF (LDAT(K+2+NP+iEout))
-          distro(:, iEout) = distro(:, iEout) * data(lcin + NP + iEout)
+          distro(:, iEout) = distro(:, iEout) * pdf(iEout)
           
         end do
       end if
@@ -710,6 +737,7 @@ module scattdata_class
       
       ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
       R2 = awr * awr  * (ONE + Q * (awr + ONE) / (awr * Ein))
+      
       R = sqrt(R2)
       Rinv = ONE / R
         
@@ -819,36 +847,21 @@ module scattdata_class
       
       real(8) :: mu_low, mu_high  ! Low and high angular points
       real(8) :: R            ! The Reduced Mass (takes in to account Qval)
-      real(8) :: alpha        ! Energy-transfer constant
       integer :: g            ! Group index variable
       integer :: imu
       
       ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
-      R = sqrt(awr * awr  * (ONE + Q * (awr + ONE) / (awr * Ein)))
-      alpha = (R - 1) / (R + 1)
-      alpha = alpha * alpha
-
+      R = awr * sqrt((ONE + Q * (awr + ONE) / (awr * Ein)))
+      
       do g = 1, size(E_bins) - 1
         ! Calculate the values of mu corresponding to this energy group
         ! These come from eqs. 232-233 in Methods for Processing ENDF/B-VII, 
         ! also on pg 2798
         
-        ! First check to see if the energy transfer is possible
-        ! (the pg 2798 eqns dont work if R<1)
-        ! If it isnt, then we set the boundary to -1
-        
-        if (E_bins(g) < alpha * Ein) then
-          mu_low = -ONE
-        else
-          mu_low  = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g) / Ein) + &
-            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g)))
-        end if
-        if (E_bins(g + 1) < alpha * Ein) then
-          mu_high = -ONE
-        else
-          mu_high = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g + 1) / Ein) + &
-            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g + 1)))
-        end if
+        mu_low  = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g) / Ein) + &
+          (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g)))
+        mu_high = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g + 1) / Ein) + &
+          (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g + 1)))
         
         ! Find the index in mu corresponding to mu_low
         if (mu_low <= -ONE) then
@@ -881,6 +894,7 @@ module scattdata_class
           vals(MU_HI, g) = mu_high
           interp(MU_HI, g) = (mu_high - mu(imu)) / (mu(imu + 1) - mu(imu))
         end if
+        
       end do
     end subroutine calc_mu_bounds
 
@@ -1113,7 +1127,7 @@ module scattdata_class
                 (fEmu(imu, bins(MU_LO, g) + 1) - fEmu(imu, bins(MU_LO, g)))
               fhi = fEmu(imu, bins(MU_HI, g)) + interp_hi * &
                 (fEmu(imu, bins(MU_HI, g) + 1) - fEmu(imu, bins(MU_HI, g)))
-              fEmu_int(imu, g) = (Ehi - Elo) * (fhi + flo) * 0.5_8
+              fEmu_int(imu, g) = (Ehi - Elo) * (fhi + flo)
             end do
             
             ! Perform the legendre expansion
@@ -1122,6 +1136,8 @@ module scattdata_class
                 calc_int_pn_tablelin(order, mu(imu), &
                 mu(imu + 1), fEmu_int(imu, g), fEmu_int(imu + 1, g))
             end do
+            distro(:, g) = 0.5_8 * distro(:, g)
+            
           else ! Then we are completely below the threshold energy
             distro(:, g) = ZERO
           end if
@@ -1144,12 +1160,139 @@ module scattdata_class
         end do
       end if
       
-      ! Normalize the distribution
-      do g = 1, size(E_bins) - 1
-        if (distro(1, g) > ZERO) distro(:, g) = distro(:, g) / distro(1, g)
-      end do
-      
     end subroutine integrate_energyangle_file6_leg
+    
+    subroutine integrate_energyangle_file6_leg2(fEmu, mu, Eout, INTT, &
+      E_bins, order, distro)
+      
+      real(8), intent(in)  :: fEmu(:,:)     ! Energy-angle distro to act on
+      real(8), intent(in)  :: mu(:)         ! fEmu angular grid
+      real(8), intent(in)  :: Eout(:)       ! Outgoing energies
+      integer, intent(in)  :: INTT          ! Interpolation type (Hist || Lin-Lin)
+      real(8), intent(in)  :: E_bins(:)     ! Energy group boundaries
+      integer, intent(in)  :: order         ! Number of moments to find
+      real(8), intent(out) :: distro(:,:)   ! Resultant integrated distro
+                           
+      real(8), allocatable :: fEmu_int(:,:) ! Integrated (over E) fEmu
+      integer :: g           ! Energy group index
+      integer :: imu         ! angular grid index
+      integer :: iE          ! outgoing energy grid index
+      real(8), allocatable :: flo(:), fhi(:)  ! interpolated value of fEmu(imu,Eout)
+      integer :: iE_lo, iE_hi ! tmp val of bins(MU_LO, g)
+      real(8) :: interp_lo, interp_hi  ! tmp val of interpolation params
+      
+      allocate(fEmu_int(size(mu), size(E_bins) - 1))
+      fEmu_int = ZERO
+      allocate(flo(size(mu)))
+      allocate(fhi(size(mu)))
+      
+      if (size(Eout) > 1) then
+        ! This branch will perform integration of the outgoing energy of fEmu
+        ! over each energy group in E_bins. This will be done with trapezoidal
+        ! integration  
+        ! Trapezoidal integration = 1/2 * (b-a)*(f(b)+f(a))
+        do g = 1, size(E_bins) - 1
+          iE_lo = size(Eout) + 1
+          iE_hi = -size(Eout)
+          flo = ZERO
+          fhi = ZERO
+          do iE = 1, size(Eout) - 1
+            ! Start with the lower boundary
+            if (Eout(iE) <= E_bins(g)) then 
+              ! either the group boundary is inbetween this Eout and the next,
+              ! or it is not.
+              if (Eout(iE + 1) > E_bins(g)) then
+                ! We found it! Create flo
+                if (INTT == HISTOGRAM) then
+                  interp_lo = ZERO
+                else
+                  interp_lo = (E_bins(g) - Eout(iE)) / (Eout(iE + 1) - Eout(iE))
+                end if
+                flo = (ONE - interp_lo) * fEmu(:,iE) + interp_lo * fEmu(:,iE+1)
+                iE_lo = iE
+                exit
+              end if
+            end if
+          end do
+          ! Find the upper boundary
+          do iE = 1, size(Eout) - 1
+            if (Eout(iE) <= E_bins(g + 1)) then 
+              ! either the group boundary is inbetween this Eout and the next,
+              ! or it is not.
+              if (Eout(iE + 1) > E_bins(g + 1)) then
+                ! We found it! Create fhi
+                if (INTT == HISTOGRAM) then
+                  interp_hi = ZERO
+                else
+                  interp_hi = (E_bins(g+1) - Eout(iE)) / (Eout(iE + 1) - Eout(iE))
+                end if
+                fhi = (ONE - interp_hi) * fEmu(:,iE) + interp_hi * fEmu(:,iE+1)
+                iE_hi = iE
+                exit
+              end if
+            end if
+          end do
+          
+          ! Now do the Eout integration
+          if ((iE_lo  == size(Eout) + 1) .and. (iE_hi  == -size(Eout))) then
+            ! Then the Eouts are not within this energy group
+            distro(:, g) = ZERO
+          else if (iE_lo == iE_hi) then
+            ! The Eout distributions are within the same bin, only one
+            ! set of fhi and flo need to be integrated
+            fEmu_int(:, g) = (E_bins(g + 1) - E_bins(g)) * (fhi(:) + flo(:))
+            ! Integrate over angle
+            do imu = 1, size(mu) - 1
+              distro(:, g) = distro(:, g) + &
+                calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
+                  fEmu_int(imu, g), fEmu_int(imu + 1, g))
+            end do
+            
+            ! Since we used trapezoidal integration, multiply by 0.5 (skipped before)
+            distro(:, g) = 0.5_8 * distro(:, g)
+            
+          else
+            fEmu_int(:, g) = (Eout(iE_lo + 1) - E_bins(g)) * &
+              (fEmu(:, iE_lo + 1) + flo(:))
+            do iE = iE_lo + 1, abs(iE_hi) - 1
+              fEmu_int(:, g) = fEmu_int(:,g) + &
+                (Eout(iE + 1) - Eout(iE)) * (fEmu(:,iE + 1) + fEmu(:,iE))
+            end do
+            if (iE_hi > 0) then
+              fEmu_int(:, g) = fEmu_int(:,g) + &
+                (E_bins(g + 1) - Eout(iE_hi)) * (fhi(:) + fEmu(:, iE_hi))
+            end if
+            
+            ! Integrate over angle
+            do imu = 1, size(mu) - 1
+              distro(:, g) = distro(:, g) + &
+                calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
+                  fEmu_int(imu, g), fEmu_int(imu + 1, g))
+            end do
+            
+            ! Since we used trapezoidal integration, multiply by 0.5 (skipped before)
+            distro(:, g) = 0.5_8 * distro(:, g)
+            
+          end if
+        end do
+      else
+        ! We do not need to integrate at all, just set distro = fEmu if its'
+        ! Eout is in that group (where each group is (Emin, Emax])
+        do g = 1, size(E_bins) - 1
+          if ((Eout(1) > E_bins(g)) .and. (Eout(1) <= E_bins(g + 1))) then
+            ! Perform the legendre expansion
+            do imu = 1, size(mu) - 1
+              distro(:, g) = distro(:, g) + &
+                calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
+                  fEmu(imu, g), fEmu(imu + 1, g))
+            end do
+          else
+            distro(:, g) = ZERO
+          end if
+        end do
+      end if
+      
+    end subroutine integrate_energyangle_file6_leg2
     
 !===============================================================================
 ! INTEGRATE_ENERGYANGLE_*_TAB Finds the tabular distribution representation of

@@ -86,6 +86,11 @@ module constants
   ! Reciprocal of NUM_EP
   real(8), parameter :: R_NUM_EP = ONE / 32.0_8
   
+  ! Flag to interpolate on angular distributions with nearest neighbor or 
+  ! linear interpolation
+  logical, parameter :: INTERP_NEAREST = .false.
+!~   logical, parameter :: INTERP_NEAREST = .true.
+  
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
 
