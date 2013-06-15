@@ -92,6 +92,9 @@ module scattdata_class
       ! Test reactions to ensure we have a scattering reaction.
       if (.not. is_scatter(rxn % MT)) return
       
+      if (rxn % MT == N_LEVEL) return ! This is a level elastic reaction,
+      ! we dont want this either.
+      
       ! Now, check edist, if passed, and ensure it is of the right law type
       ! before proceeding
       if (associated(edist)) then
@@ -370,6 +373,8 @@ module scattdata_class
             size(this % distro(iE) % data, dim=2)))
           distro_int = this % distro(iE) % data
         else
+!!! THIS IS INCORRECT, WE NEED TO TAKE IN TO ACCOUNT WHICH ENERGIES EACH
+!!! EOUT DISTRIBUTION IS AT WHEN COMBINING. CURRENTLY TURNED OFF.
           ! Now interpolate on the distributions at iE and iE+1 to 
           ! generate the distribution to use at Ein. Store in distro_int
           ! First we need to find the maximum number of Eouts in the distribution
@@ -433,7 +438,7 @@ module scattdata_class
             ! 3) calculate the energy boundaries for integration
 !~             call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
 !~               this % INTT(iE), interp, bins)
-!~             ! 4) integrate according to scatt_type
+            ! 4) integrate according to scatt_type
 !~             call integrate_energyangle_file6_leg(distro_lab, this % mu, &
 !~               this % Eouts(iE) % data, this % E_bins, interp, bins, &
 !~               this % order, distro)
@@ -461,7 +466,7 @@ module scattdata_class
       end select
       
       ! Combine the results
-      distro(:,:) = sigS * p_valid * real(rxn % multiplicity, 8) * distro(:,:) 
+      distro(:,:) = sigS * p_valid * distro(:,:) * real(rxn % multiplicity, 8)
       norm_tot = norm_tot + sigS * p_valid * real(rxn % multiplicity, 8)
       
     end function scatt_interp_distro
@@ -620,33 +625,31 @@ module scattdata_class
       Eouts = data(lc + 2 + 1 : lc + 2 + NP)
       allocate(pdf(NP))
       allocate(cdf(NP))
+      ! Get the Eout PDF and CDF
+      pdf = data(lc + NP + 1 : lc + 2 * NP) 
+      cdf = data(lc + 2 * NP + 1 : lc + 3 * NP)
       
       if (edist % law  == 44) then
         lc = lc + 2
-        ! Get the PDF and CDF
-        pdf = data(lc + NP + 1 : lc + 2 * NP) 
-        cdf = data(lc + 2 * NP + 1 : lc + 3 * NP)
         do iEout = 1, NP
+          ! Normalize the PDF
+          if (iEout < (NP - 1)) &
+            pdf(iEout) = pdf(iEout) * (Eouts(iEout + 1) - Eouts(iEout))
+          ! Get the KM parameters
           KMR = data(lc + 3 * NP + iEout)
           KMA = data(lc + 4 * NP + iEout)
           ! Calculate the leading term and multiply by the probability of this
           ! Eout distribution
-          if (pdf(iEout) > ONE) then
-            KMconst = ZERO
-          else
-            KMconst = 0.5_8 * KMA / sinh(KMA) * pdf(iEout)
-          end if
+          KMconst = 0.5_8 * KMA / sinh(KMA) * pdf(iEout)
           distro(:, iEout) = KMconst * (cosh(KMA * mu(:)) + KMR * sinh(KMA * mu(:)))
         end do
       else if (edist % law  == 61) then
         lcin = lc + 2
-        ! Get the PDF and CDF
-        pdf = data(lc + NP + 1 : lc + 2 * NP) 
-        cdf = data(lc + 2 * NP + 1 : lc + 3 * NP)
         do iEout = 1, NP
-          lc = int(data(lcin + 3*NP + iEout))
+          if (iEout < (NP - 1)) &
+            pdf(iEout) = pdf(iEout) * (Eouts(iEout + 1) - Eouts(iEout))
           
-          if (pdf(iEout) > ONE) pdf(iEout) = ZERO
+          lc = int(data(lcin + 3*NP + iEout))
           
           ! Check if isotropic
           if (lc == 0) then

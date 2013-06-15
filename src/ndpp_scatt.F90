@@ -77,7 +77,7 @@ module ndpp_scatt
         edist => rxn % edist
         call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, &
           mu_bins)
-        if (rxn % has_energy_dist) then
+        if (associated(rxn % edist)) then
           do while (associated(edist % next))
             edist => edist % next
             i_nested_rxn = i_nested_rxn + 1
