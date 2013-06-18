@@ -100,7 +100,6 @@ module scattdata_class
       if (associated(edist)) then
         if ((edist % law  /= 44) .and. (edist % law  /= 61)) return
       end if
-      
       ! We survived the above check and thus have a scattering reaction.
       
       ! Save the order and scattering type
@@ -313,8 +312,11 @@ module scattdata_class
       integer :: bins(2, this % groups)   ! Start/end energy/angle bin indices
       real(8) :: vals(2, this % groups)   ! values on start/end energy/angle
       real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
+      real(8) :: Enorm                    ! Range of Energy space represented by
+                                          ! this reaction
       integer :: iEout, minEout, maxEout  ! Eout index, and max/min # of Eouts 
                                           ! in two interpolants
+      integer :: g                        ! Group index
       
       ! Set up the results memory 
       allocate(distro(this % order, this % groups))
@@ -330,8 +332,7 @@ module scattdata_class
         sigS_array => rxn % sigma
       end if
       
-      ! Get sigS - this code is pulled out of the big if(present) loop since both
-      ! branches need it.
+      ! Get sigS
       if (Ein < nuc % energy(rxn % threshold)) then
         ! This is a catch-all, our energy was below the threshold, distro
         ! should be set to zero and we shall just exit this function
@@ -347,8 +348,11 @@ module scattdata_class
           size(this % distro(iE) % data, dim=2)))
         distro_int = this % distro(iE) % data
       else
-        nuc_iE = binary_search(nuc % energy, nuc % n_grid, &
-          Ein)
+        if (Ein <= nuc % energy(1)) then
+          nuc_iE = 1
+        else
+          nuc_iE = binary_search(nuc % energy, nuc % n_grid, Ein)
+        end if
         ! check for rare case where two energy points are the same
         if (nuc % energy(nuc_iE) == nuc % energy(nuc_iE + 1)) &
           nuc_iE = nuc_iE + 1
@@ -361,7 +365,11 @@ module scattdata_class
         
         ! Search on the angular distribution's energy grid to find what energy
         ! index Ein is at.
-        iE = binary_search(this % E_grid, this % NE, Ein)
+        if (Ein < this % E_grid(1)) then
+          iE = 1
+        else
+          iE = binary_search(this % E_grid, this % NE, Ein)
+        end if
         
         ! Interpolate the distribution
         f = (Ein - this % E_grid(iE))/ &
@@ -426,48 +434,60 @@ module scattdata_class
           distro_int, distro_lab)
       
       select case (this % scatt_type)
-        case (SCATT_TYPE_LEGENDRE)
-          if (associated(this % adist)) then
-            ! 2) calculate the angular boundaries for integration
-            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
-              this % E_bins, this % mu, interp, vals, bins) 
-            ! 4) integrate according to scatt_type
-            call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
-              interp, vals, bins, this % order, distro)
-          else if (associated(this % edist)) then
-            ! 3) calculate the energy boundaries for integration
+      case (SCATT_TYPE_LEGENDRE)
+        if (associated(this % adist)) then
+          ! 2) calculate the angular boundaries for integration
+          call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
+            this % E_bins, this % mu, interp, vals, bins, Enorm) 
+          ! 4) integrate according to scatt_type
+          call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
+            interp, vals, bins, this % order, distro)
+        else if (associated(this % edist)) then
+          ! 3) calculate the energy boundaries for integration
 !~             call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
 !~               this % INTT(iE), interp, bins)
-            ! 4) integrate according to scatt_type
+          ! 4) integrate according to scatt_type
 !~             call integrate_energyangle_file6_leg(distro_lab, this % mu, &
 !~               this % Eouts(iE) % data, this % E_bins, interp, bins, &
 !~               this % order, distro)
-            call integrate_energyangle_file6_leg2(distro_lab, this % mu, &
-              this % Eouts(iE) % data, this % INTT(iE), this % E_bins, &
-              this % order, distro)
-          end if
-        case (SCATT_TYPE_TABULAR)
-          if (associated(this % adist)) then
-            ! 2) calculate the angular boundaries for integration
-            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
-              this % E_bins, this % mu, interp, vals, bins)
-            ! 4) integrate according to scatt_type
+          call integrate_energyangle_file6_leg2(distro_lab, this % mu, &
+            this % Eouts(iE) % data, this % INTT(iE), this % E_bins, &
+            this % order, distro)
+          ! Set the vals so the norm_tot calc below occurs correcty whether
+          ! we have an adist or an edist
+          Enorm = ONE
+        end if
+      case (SCATT_TYPE_TABULAR)
+        if (associated(this % adist)) then
+          ! 2) calculate the angular boundaries for integration
+          call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
+            this % E_bins, this % mu, interp, vals, bins, Enorm)
+          ! 4) integrate according to scatt_type
 !~             call integrate_energyangle_file4_tab(distro_lab(:, 1), this % mu, &
 !~               interp, vals, bins, this % order, distro)
-          else if (associated(this % edist)) then
-            ! 3) calculate the energy boundaries for integration
-            call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
-              this % INTT(iE), interp, bins)
-            ! 4) integrate according to scatt_type
+        else if (associated(this % edist)) then
+          ! 3) calculate the energy boundaries for integration
+          call calc_E_bounds(this % E_bins, this % Eouts(iE) % data, &
+            this % INTT(iE), interp, bins)
+          ! 4) integrate according to scatt_type
 !~             call integrate_energyangle_file6_tab(distro_lab, this % mu, &
 !~               this % Eouts(iE) % data, this % E_bins, interp, bins, &
 !~               this % order, distro)
-          end if
+                        ! Set the vals so the norm_tot calc below occurs correcty whether
+          ! we have an adist or an edist
+          Enorm = ONE
+        end if
       end select
       
-      ! Combine the results
-      distro(:,:) = sigS * p_valid * distro(:,:) * real(rxn % multiplicity, 8)
-      norm_tot = norm_tot + sigS * p_valid * real(rxn % multiplicity, 8)
+      ! Combine the results, normalizing by the total probability of transfer
+      ! from all energies to the energy range represented in the outgoing groups    
+      do g = 1, this % groups
+        distro(:, g) = distro(:, g) * sigS * p_valid * &
+          real(rxn % multiplicity, 8)
+        norm_tot = norm_tot + distro(1, g)
+        distro(:, g) = distro(:, g) * Enorm      
+      end do     
+      
       
     end function scatt_interp_distro
 
@@ -834,7 +854,7 @@ module scattdata_class
 ! bins for a given input energy.
 !===============================================================================
 
-    subroutine calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
+    subroutine calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
       
       real(8), intent(in)  :: awr         ! Atomic-weight ratio
       real(8), intent(in)  :: Q           ! Reaction Q-Value
@@ -847,10 +867,13 @@ module scattdata_class
                                           ! to the energy groups
       integer, intent(out) :: bins(:,:)   ! Outgoing mu indices corresponding
                                           ! to the energy groups
+      real(8), intent(out) :: Enorm   
+      
+      real(8) :: Emin, Emax       ! Max/Min E transfer of this reaction
       
       real(8) :: mu_low, mu_high  ! Low and high angular points
-      real(8) :: R            ! The Reduced Mass (takes in to account Qval)
-      integer :: g            ! Group index variable
+      real(8) :: R                ! The Reduced Mass (takes in to account Qval)
+      integer :: g                ! Group index variable
       integer :: imu
       
       ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
@@ -861,10 +884,19 @@ module scattdata_class
         ! These come from eqs. 232-233 in Methods for Processing ENDF/B-VII, 
         ! also on pg 2798
         
-        mu_low  = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g) / Ein) + &
-          (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g)))
-        mu_high = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g + 1) / Ein) + &
-          (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g + 1)))
+        if (R < ONE) then
+          mu_low  = sqrt(E_bins(g) / Ein)
+          mu_high = sqrt(E_bins(g + 1) / Ein)
+        else if (E_bins(g) > ZERO) then
+          mu_low  = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g) / Ein) + &
+            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g)))
+          mu_high = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g + 1) / Ein) + &
+            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g + 1)))
+        else
+          mu_low = -ONE
+          mu_high = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g + 1) / Ein) + &
+            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g + 1)))
+        end if
         
         ! Find the index in mu corresponding to mu_low
         if (mu_low <= -ONE) then
@@ -899,6 +931,31 @@ module scattdata_class
         end if
         
       end do
+      
+      ! Now set the normalization term (this is the fraction of all energy
+      ! space that this Ein -> g transfer represents out of all g.
+      Emin = Ein * (ONE + R * R - TWO * R) / ((ONE + awr) * (ONE + awr))
+      Emax = Ein * (ONE + R * R + TWO * R) / ((ONE + awr) * (ONE + awr))
+      
+      ! Three cases to consider for assigning the normalization:
+      ! 1) Emin and Emax within this group (transfer probability = 1)
+      ! 2) Emin and Emax outside this group (transfer probability = 0)
+      ! 3) Emin, Emax span multiple groups
+      ! These correspond to the if branches below.
+      
+      if (((Emin >= E_bins(1)) .and. (Emin <= E_bins(size(E_bins)))) .and. &
+        ((Emax >= E_bins(1)) .and. (Emax <= E_bins(size(E_bins))))) then
+        
+        Enorm = ONE
+      else if (((Emin < E_bins(1)) .or. (Emin > E_bins(size(E_bins)))) .and. &
+        ((Emax < E_bins(1)) .or. (Emax > E_bins(size(E_bins))))) then
+        
+        Enorm = ZERO
+      else
+        Enorm = (min(Emax, E_bins(size(E_bins))) - max(Emin, E_bins(1))) / &
+          (Emax - Emin)
+      end if      
+      
     end subroutine calc_mu_bounds
 
 !===============================================================================
@@ -965,6 +1022,7 @@ module scattdata_class
       real(8), intent(in)  :: vals(:,:)      ! mu values
       integer, intent(in)  :: bins(:,:)      ! indices of fEmu corresponding to
                                              ! the group boundaries
+      
       integer, intent(in)  :: order          ! Number of moments to find
       real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
                                              
@@ -995,6 +1053,7 @@ module scattdata_class
           distro(:, g) = distro(:, g) + &
             calc_int_pn_tablelin(order, mu(bins(MU_HI, g)), vals(MU_HI, g), &
             fEmu(bins(MU_HI, g)), fhi)
+            
         else
           ! The points are all within the same bin, can get flo and fhi directly
           flo = fEmu(bins(MU_LO, g)) + interp(MU_LO, g) * & 
@@ -1004,7 +1063,9 @@ module scattdata_class
           distro(:, g) = distro(:, g) + &
             calc_int_pn_tablelin(order, vals(MU_LO, g), vals(MU_HI, g), &
             flo, fhi)
+            
         end if
+        
       end do
       
     end subroutine integrate_energyangle_file4_leg

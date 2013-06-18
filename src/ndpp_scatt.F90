@@ -150,16 +150,15 @@ module ndpp_scatt
         norm_tot = ZERO
         do irxn = 1, Nrxn
           mySD => rxn_data(irxn)
+          ! If we do not have a scatter reaction, don't score it.
           if (.not. mySD % is_init) cycle
-          ! If the incoming energy point is outside the range of this reaction,
-          ! dont score it
-          if (E_grid(iE) < mySD % E_grid(1)) cycle
           ! Add the scattering distribution to the union scattering grid
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + &
             mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
         end do
-        
-        ! Normalize by sigS for later multiplication in the MC code
+
+        ! Normalize for later multiplication in the MC code
+        if (norm_tot == ZERO) norm_tot = ONE
         scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
         
       end do
