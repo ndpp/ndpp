@@ -21,7 +21,7 @@ module ndpp_scatt
 !===============================================================================
     
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, &
-                          scatt_mat, mu_bins, thin_tol)
+                          scatt_mat, mu_bins, thin_tol, maxiE)
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
@@ -30,8 +30,10 @@ module ndpp_scatt
       integer, intent(in)                 :: mu_bins        ! Number of angular points
                                                             ! to use during f_{n,MT} conversion
       real(8), intent(in)                 :: thin_tol       ! Thinning tolerance
+      integer, intent(inout)              :: maxiE          ! maximum index of 
+                                                            ! nuc % energy
       
-      real(8), pointer     :: E_grid(:)      ! Common Energy Grid
+      real(8), allocatable      :: E_grid(:)                ! Common Energy Grid
       type(DistEnergy), pointer :: edist
       type(Reaction),   pointer :: rxn
       integer :: num_tot_rxn
@@ -96,7 +98,16 @@ module ndpp_scatt
       end do
       
       ! Create the energy grid in which the distributions will be calculated on
-      E_grid => nuc % energy
+      if (energy_bins(size(energy_bins)) < nuc % energy(1)) then
+        maxiE = 1
+      else if (energy_bins(size(energy_bins)) > nuc % energy(nuc % n_grid)) then
+        maxiE = nuc % n_grid
+      else
+        maxiE = binary_search(nuc % energy, nuc % n_grid, &
+          energy_bins(size(energy_bins)))
+      end if
+      allocate(E_grid(maxiE))
+      E_grid = nuc % energy(1 : maxiE)
       
       ! Combine the reactions to a union grid
       if (scatt_type == SCATT_TYPE_TABULAR) then
@@ -125,8 +136,8 @@ module ndpp_scatt
     subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
-      type(ScattData), intent(inout), target  :: rxn_data(:) ! The converted distros
-      real(8), pointer, intent(out)        :: E_grid(:) ! Ein grid
+      type(ScattData), intent(inout), target :: rxn_data(:) ! The converted distros
+      real(8), allocatable, intent(in)     :: E_grid(:) ! Ein grid
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
       
       integer :: iE, NE                          ! Ein counter, # Ein
@@ -205,18 +216,19 @@ module ndpp_scatt
 ! in the specified format.
 !===============================================================================  
   
-  subroutine print_scatt(lib_format, data, E_grid, tol)
+  subroutine print_scatt(lib_format, data, E_grid, maxiE, tol)
     integer,              intent(in) :: lib_format  ! Library output type
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
+    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
     real(8),              intent(in) :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     
     if (lib_format == ASCII) then
-      call print_scatt_ascii(data, E_grid, tol)
+      call print_scatt_ascii(data, E_grid, maxiE, tol)
     else if (lib_format == BINARY) then
-      call print_scatt_bin(data, E_grid, tol)
+      call print_scatt_bin(data, E_grid, maxiE, tol)
     else if (lib_format == HDF5) then
       ! TBI
     end if
@@ -228,10 +240,11 @@ module ndpp_scatt
 ! in an ASCII format.
 !===============================================================================
      
-  subroutine print_scatt_ascii(data, E_grid, tol)
+  subroutine print_scatt_ascii(data, E_grid, maxiE, tol)
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
+    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     integer :: gmin, gmax, iE
@@ -241,22 +254,22 @@ module ndpp_scatt
     ! Assumes that the file and header information is already printed 
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format with at max 4 entries per line: 
-    ! <size of incoming energy array, size(E_grid)>
+    ! <size of incoming energy array, # E pts>
     ! <incoming energy array>
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
     
     ! Begin writing:
     
-    ! <size(E_grid)>
-    write(UNIT_NUC,'(I20)') size(E_grid)
+    ! # energy points
+    write(UNIT_NUC,'(I20)') maxiE
     
     ! <incoming energy array>
-    call print_ascii_array(E_grid, UNIT_NUC)    
+    call print_ascii_array(E_grid(1 : maxiE), UNIT_NUC)    
     
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
-    do iE = 1, size(E_grid)
+    do iE = 1, maxiE
       ! find gmin by checking the P0 moment
       do gmin = 1, size(data, dim = 2)
         if (data(1, gmin, iE) > tol) exit
@@ -281,10 +294,11 @@ module ndpp_scatt
 ! in in native Fortran stream format.
 !===============================================================================
      
-  subroutine print_scatt_bin(data, E_grid, tol)
+  subroutine print_scatt_bin(data, E_grid, maxiE, tol)
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
+    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     integer :: gmin, gmax, iE
@@ -292,22 +306,22 @@ module ndpp_scatt
     ! Assumes that the file and header information is already printed 
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format: 
-    ! <size of incoming energy array, size(E_grid)>
+    ! <size of incoming energy array, # E pts>
     ! <incoming energy array>
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
     
     ! Begin writing:
     
-    ! <size(E_grid)>
-    write(UNIT_NUC)  size(E_grid)
+    ! # energy points
+    write(UNIT_NUC)  maxiE
     
     ! <incoming energy array>
-    write(UNIT_NUC) E_grid
+    write(UNIT_NUC) E_grid(1 : maxiE)
 
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
-    do iE = 1, size(E_grid)
+    do iE = 1, maxiE
       ! find gmin by checking the P0 moment
       do gmin = 1, size(data, dim = 2)
         if (data(1, gmin, iE) > tol) exit

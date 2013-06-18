@@ -304,7 +304,10 @@ module ndpp_class
       integer                :: i_listing     ! index of xs_listing
       ! Scattering specific data
       real(8), allocatable   :: scatt_mat(:,:,:) !scattering matrix moments, 
-                                                 ! order x g_out x E_in                                              
+                                                 ! order x g_out x E_in            
+      integer                :: maxiE         ! Maximum index of nuc%energy that
+                                              ! will be printed (corresponds to
+                                              ! maximum energy group boundary)
       ! Chi specific data
       real(8), allocatable   :: chi_t(:,:)  ! grp x E_in chi tot values on a union grid
       real(8), allocatable   :: e_t_grid(:) ! List of energy points for chi tot
@@ -371,11 +374,12 @@ module ndpp_class
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-            self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol)
+            self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol, &
+            maxiE)
             
           ! Print the results to file
           call timer_start(self % time_print)
-          call print_scatt(self % lib_format, scatt_mat, nuc % energy, &
+          call print_scatt(self % lib_format, scatt_mat, nuc % energy, maxiE, &
             self % print_tol)
           call timer_stop(self % time_print)
           
