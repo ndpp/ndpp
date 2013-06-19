@@ -314,8 +314,6 @@ module scattdata_class
       real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       real(8) :: Enorm                    ! Range of Energy space represented by
                                           ! this reaction
-      integer :: iEout, minEout, maxEout  ! Eout index, and max/min # of Eouts 
-                                          ! in two interpolants
       integer :: g                        ! Group index
       
       ! Set up the results memory 
@@ -381,30 +379,9 @@ module scattdata_class
             size(this % distro(iE) % data, dim=2)))
           distro_int = this % distro(iE) % data
         else
-!!! THIS IS INCORRECT, WE NEED TO TAKE IN TO ACCOUNT WHICH ENERGIES EACH
-!!! EOUT DISTRIBUTION IS AT WHEN COMBINING. CURRENTLY TURNED OFF.
-          ! Now interpolate on the distributions at iE and iE+1 to 
-          ! generate the distribution to use at Ein. Store in distro_int
-          ! First we need to find the maximum number of Eouts in the distribution
-          maxEout = max(size(this % distro(iE) % data, dim = 2), &
-            size(this % distro(iE + 1) % data, dim = 2))
-          minEout = min(size(this % distro(iE) % data, dim = 2), &
-            size(this % distro(iE + 1) % data, dim = 2))
-          
-          allocate(distro_int(size(this % distro(iE) % data, dim=1), maxEout))
-          do iEout = 1, minEout
-            distro_int(:, iEout) = (ONE - f) * this % distro(iE) % data(:, iEout) + &
-              f * this % distro(iE + 1) % data(:, iEout)
-          end do
-          if (maxEout == size(this % distro(iE + 1) % data, dim = 2)) then
-            do iEout = minEout + 1, maxEout
-              distro_int(:, iEout) = f * this % distro(iE + 1) % data(:, iEout)
-            end do
-          else
-            do iEout = minEout + 1, maxEout
-              distro_int(:, iEout) = (ONE - f) * this % distro(iE) % data(:, iEout)
-            end do
-          end if
+!!! NOT YET IMPLEMENTED
+          message = "DISTRIBUTION INTERPOLATION NOT YET IMPLEMENTED"
+          call fatal_error()
         end if
         
       end if

@@ -250,8 +250,6 @@ module ndpp_scatt
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     integer :: gmin, gmax, iE
-    
-    character(MAX_LINE_LEN) :: line
   
     ! Assumes that the file and header information is already printed 
     ! (including # of groups and bins, and thinning tolerance)
@@ -304,8 +302,6 @@ module ndpp_scatt
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     integer :: g, gmin, gmax, iE
-    
-    character(MAX_LINE_LEN) :: line
   
     ! Assumes that the file and header information is already printed 
     ! (including # of groups and bins, and thinning tolerance)
