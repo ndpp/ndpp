@@ -406,9 +406,12 @@ module scattdata_class
       ! 1) convert from CM to Lab, if necessary
       allocate(distro_lab(size(this % distro(iE) % data, dim=1), &
         size(distro_int, dim=2)))
-      if (rxn % scatter_in_cm) &
+      if (rxn % scatter_in_cm) then
         call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, &
           distro_int, distro_lab)
+      else
+        distro_lab = distro_int
+      end if
       
       select case (this % scatt_type)
       case (SCATT_TYPE_LEGENDRE)

@@ -358,7 +358,7 @@ module ndpp_scatt
     integer,              intent(in) :: maxiE       ! max entry in E_grid to print
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
-    integer :: gmin, gmax, iE
+    integer :: g, gmin, gmax, iE
     
     ! Assumes that the file and header information is already printed 
     ! (including # of groups and bins, and thinning tolerance)
@@ -391,7 +391,9 @@ module ndpp_scatt
         write(UNIT_NUC) 0, 0
       else
         write(UNIT_NUC) gmin, gmax
-        write(UNIT_NUC) data(:, gmin : gmax, iE)
+        do g = gmin, gmax
+          write(UNIT_NUC) data(:, g, iE)
+        end do
       end if
       
     end do
