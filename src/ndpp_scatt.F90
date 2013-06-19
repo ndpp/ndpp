@@ -100,7 +100,7 @@ module ndpp_scatt
       ! Create the energy grid in which the distributions will be calculated on
       if (energy_bins(size(energy_bins)) < nuc % energy(1)) then
         maxiE = 1
-      else if (energy_bins(size(energy_bins)) > nuc % energy(nuc % n_grid)) then
+      else if (energy_bins(size(energy_bins)) >= nuc % energy(nuc % n_grid)) then
         maxiE = nuc % n_grid
       else
         maxiE = binary_search(nuc % energy, nuc % n_grid, &
