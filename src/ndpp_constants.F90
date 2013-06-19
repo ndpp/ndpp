@@ -72,7 +72,8 @@ module constants
   ! HDF5 output type (ascii and binary defined below)
   integer, parameter :: &
        HDF5   = 3,      &
-       NO_OUT = 4
+       NO_OUT = 4,      &
+       HUMAN  = 5
   
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS  

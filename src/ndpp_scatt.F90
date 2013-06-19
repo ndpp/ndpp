@@ -229,6 +229,8 @@ module ndpp_scatt
       call print_scatt_ascii(data, E_grid, maxiE, tol)
     else if (lib_format == BINARY) then
       call print_scatt_bin(data, E_grid, maxiE, tol)
+    else if (lib_format == HUMAN) then
+      call print_scatt_human(data, E_grid, maxiE, tol)
     else if (lib_format == HDF5) then
       ! TBI
     end if
@@ -288,6 +290,65 @@ module ndpp_scatt
     end do
     
   end subroutine print_scatt_ascii
+  
+!===============================================================================
+! PRINT_SCATT_HUMAN prints the scattering data to the specified output file
+! in an ASCII format.
+!===============================================================================
+     
+  subroutine print_scatt_human(data, E_grid, maxiE, tol)
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
+                                                    ! (order x g x Ein)
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
+    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
+    real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
+                                                    ! to keep
+    integer :: g, gmin, gmax, iE
+    
+    character(MAX_LINE_LEN) :: line
+  
+    ! Assumes that the file and header information is already printed 
+    ! (including # of groups and bins, and thinning tolerance)
+    ! Will follow this format with at max 4 entries per line: 
+    ! <size of incoming energy array, # E pts>
+    ! <incoming energy array>
+    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
+    
+    ! Begin writing:
+    
+    ! # energy points
+    write(UNIT_NUC,'(I20)') maxiE
+    
+    ! <incoming energy array>
+    call print_ascii_array(E_grid(1 : maxiE), UNIT_NUC)    
+    
+    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
+    do iE = 1, maxiE
+      ! find gmin by checking the P0 moment
+      do gmin = 1, size(data, dim = 2)
+        if (data(1, gmin, iE) > tol) exit
+      end do
+      ! find gmax by checking the P0 moment
+      do gmax = size(data, dim = 2), 1, -1
+        if (data(1, gmax, iE) > tol) exit
+      end do
+      if (gmin > gmax) then ! we have effectively all zeros
+        write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',E_grid(iE), &
+          '   gmin = ', 0, '   gmax = ', 0
+      else
+        write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',E_grid(iE), &
+          '   gmin = ', gmin, '   gmax = ', gmax
+        do g = gmin, gmax
+          write(UNIT_NUC,'(A,I5)') 'outgoing group = ', g
+          call print_ascii_array(data(:, g, iE), UNIT_NUC)
+        end do
+      end if
+    end do
+    
+  end subroutine print_scatt_human
+  
   
   !===============================================================================
 ! PRINT_SCATT_BIN prints the scattering data to the specified output file

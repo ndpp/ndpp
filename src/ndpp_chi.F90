@@ -858,6 +858,8 @@ contains
       call print_chi_ascii(chi_t, chi_p, chi_d, E_t, E_p, E_d)
     else if (lib_format == BINARY) then
       call print_chi_bin(chi_t, chi_p, chi_d, E_t, E_p, E_d)
+    else if (lib_format == HUMAN) then
+      call print_chi_human(chi_t, chi_p, chi_d, E_t, E_p, E_d)
     else if (lib_format == HDF5) then
       ! TBI
     end if
@@ -929,6 +931,85 @@ contains
     
   end subroutine print_chi_ascii
   
+!===============================================================================
+! PRINT_CHI_HUMAN prints the chi data to the specified output file
+! in a human-readable ASCII format.
+!===============================================================================
+  
+  subroutine print_chi_human(chi_t, chi_p, chi_d, E_t, E_p, E_d)
+    real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
+    real(8), allocatable, intent(in) :: chi_p(:,:) ! Unionized Prompt Chi
+    real(8), allocatable, intent(in) :: chi_d(:,:) ! Unionized Delayed Chi
+    real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
+    real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
+    real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
+    
+    integer :: iE
+    
+    character(MAX_LINE_LEN) :: line
+  
+    ! Assumes that the file and header information is already printed 
+    ! (including # of groups and bins, and thinning tolerance)
+    ! Will follow this format with at max 4 entries per line: 
+    ! <n_E_t>
+    ! <1:n_E_t energies>
+    ! <1:n_E_t E_t, chi_t(g,E)
+    ! <n_E_p>
+    ! <1:n_E_p energies>
+    ! <1:n_E_p E_p, chi_p(g,E)
+    ! <n_E_d>
+    ! <1:n_E_d energies>
+    ! <1:n_E_d E_d, chi_d(g,E)
+    
+    ! Begin writing:
+    
+    ! <n_E_t>
+    line = ''
+    write(line,'(I20)') size(E_t)
+    write(UNIT_NUC,'(A)') trim(line)
+    
+    ! <1:n_E_t energies>
+    call print_ascii_array(E_t, UNIT_NUC)
+    
+    ! <1:n_E_t E_t, chi_t>
+    do iE = 1, size(E_t)
+      write(line, '(1PE20.12)') E_t(iE)
+      write(UNIT_NUC, '(A)') trim(line)
+      call print_ascii_array(chi_t(:, iE), UNIT_NUC)
+    end do
+    
+    ! <n_E_p>
+    line = ''
+    write(line,'(I20)') size(E_p)
+    write(UNIT_NUC,'(A)') trim(line)
+    
+    ! <1:n_E_p energies>
+    call print_ascii_array(E_p, UNIT_NUC)
+    
+    ! <1:n_E_p E_p, chi_p>
+    do iE = 1, size(E_p)
+      write(line, '(1PE20.12)') E_p(iE)
+      write(UNIT_NUC, '(A)') trim(line)
+      call print_ascii_array(chi_p(:, iE), UNIT_NUC)
+    end do
+    
+    ! <n_E_d>
+    line = ''
+    write(line,'(I20)') size(E_d)
+    write(UNIT_NUC,'(A)') trim(line)
+    
+    ! <1:n_E_d energies>
+    call print_ascii_array(E_d, UNIT_NUC)
+    
+    ! <1:n_E_d E_d, chi_p>
+    do iE = 1, size(E_d)
+      write(line, '(1PE20.12)') E_d(iE)
+      write(UNIT_NUC, '(A)') trim(line)
+      call print_ascii_array(chi_d(:, iE), UNIT_NUC)
+    end do
+    
+  end subroutine print_chi_human
+
 !===============================================================================
 ! PRINT_CHI_BIN prints the chi data to the specified output file
 ! in Fortran binary (stream) format.

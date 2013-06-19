@@ -190,9 +190,15 @@ module ndpp_class
           self % lib_format = HDF5
         elseif (output_format_ == 'none') then
           self % lib_format = NO_OUT
+        elseif (output_format_ == 'human') then
+          self % lib_format = HUMAN
+          message = "Value of HUMAN provided for <output_format>, " // &
+                    "Beware that this output type is incompatible with Monte " // &
+                    "Carlo codes."
+          call warning()
         else ! incorrect value, print warning, but use default.
           message = "Value for <output_format> provided, but does not match " // &
-                    "ASCII, BINARY, or HDF5. Using default of ASCII."
+                    "ASCII, BINARY, HDF5, HUMAN, or NONE. Using default of ASCII."
           call warning()
           self % lib_format = ASCII
         end if
@@ -518,6 +524,8 @@ module ndpp_class
         write(UNIT_NDPP, '(A)') indent // '<filetype> binary </filetype>'
       else if (lib_format == HDF5) then 
         write(UNIT_NDPP, '(A)') indent // '<filetype> hdf5 </filetype>'
+      else if (lib_format == HUMAN) then
+        write(UNIT_NDPP, '(A)') indent // '<filetype> human </filetype>'
       end if
       write(UNIT_NDPP, '(A)') indent // '<entries> ' // trim(to_str(n_listings))// &
         '  </entries>'
@@ -728,7 +736,9 @@ module ndpp_class
       character(MAX_FILE_LEN) :: filename
       integer                 :: chi_present_int
       
-      if (this_ndpp % lib_format == ASCII) then
+      if ((this_ndpp % lib_format == ASCII) .or. &
+        (this_ndpp % lib_format == HUMAN)) then
+        
         ! Create filename for output library
         filename = trim(adjustl(nuc % name)) // trim(adjustl(this_ndpp % lib_name))
         
@@ -801,7 +811,6 @@ module ndpp_class
       end if
       
     end subroutine init_library
-  
   
   end module ndpp_class
   
