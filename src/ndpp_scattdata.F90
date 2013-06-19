@@ -300,7 +300,6 @@ module scattdata_class
       
       type(Reaction), pointer   :: rxn     ! The reaction of interest
       real(8), allocatable :: distro(:,:)  ! the output distribution
-      real(8), allocatable :: distro_lab(:,:) ! the distribution in after cm2lab
       real(8), allocatable :: distro_int(:,:) ! the distribution at Ein before cm2lab
       real(8) :: f, p_valid, sigS          ! interpolation, probability of this
                                            ! (nested) reaction, and \sigma_s(E)
@@ -308,10 +307,6 @@ module scattdata_class
                                            ! (lower bound if Ein is provided)
       integer :: nuc_iE                    ! Energy index on the nuclide's x/s
       real(8), pointer :: sigS_array(:)   => null() ! sigS pointer
-                                                    
-      integer :: bins(2, this % groups)   ! Start/end energy/angle bin indices
-      real(8) :: vals(2, this % groups)   ! values on start/end energy/angle
-      real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       real(8) :: Enorm                    ! Range of Energy space represented by
                                           ! this reaction
       integer :: g                        ! Group index
@@ -319,6 +314,7 @@ module scattdata_class
       ! Set up the results memory 
       allocate(distro(this % order, this % groups))
       distro = ZERO
+      Enorm  = ZERO
       
       ! Set rxn, so we can save some characters throughout this function.
       rxn => this % rxn
@@ -345,6 +341,8 @@ module scattdata_class
         allocate(distro_int(size(this % distro(iE) % data, dim=1), &
           size(this % distro(iE) % data, dim=2)))
         distro_int = this % distro(iE) % data
+        
+        distro = integrate_distro(this, Ein, iE, ONE, distro_int, Enorm)
       else
         if (Ein <= nuc % energy(1)) then
           nuc_iE = 1
@@ -370,7 +368,7 @@ module scattdata_class
         end if
         
         ! Interpolate the distribution
-        f = (Ein - this % E_grid(iE))/ &
+        f = (Ein - this % E_grid(iE)) / &
           (this % E_grid(iE + 1) - this % E_grid(iE))
         ! Do on nearest neighbor, or with linear interpolation?
         if (INTERP_NEAREST) then
@@ -378,10 +376,21 @@ module scattdata_class
           allocate(distro_int(size(this % distro(iE) % data, dim=1), &
             size(this % distro(iE) % data, dim=2)))
           distro_int = this % distro(iE) % data
+          
+          distro = integrate_distro(this, Ein, iE, ONE, distro_int, Enorm)
+          
         else
-!!! NOT YET IMPLEMENTED
-          message = "DISTRIBUTION INTERPOLATION NOT YET IMPLEMENTED"
-          call fatal_error()
+          ! Do the lower distribution
+          allocate(distro_int(size(this % distro(iE) % data, dim=1), &
+            size(this % distro(iE) % data, dim=2)))
+          distro_int = this % distro(iE) % data
+          distro = integrate_distro(this, Ein, iE, (ONE - f), distro_int, Enorm)
+          deallocate(distro_int)
+          ! Do the upper distribution
+          allocate(distro_int(size(this % distro(iE + 1) % data, dim=1), &
+            size(this % distro(iE + 1) % data, dim=2)))
+          distro_int = this % distro(iE + 1) % data
+          distro = distro + integrate_distro(this, Ein, iE + 1, f, distro_int, Enorm)
         end if
         
       end if
@@ -397,16 +406,59 @@ module scattdata_class
         p_valid = ONE
       end if
       
+      ! Combine the results, normalizing by the total probability of transfer
+      ! from all energies to the energy range represented in the outgoing groups    
+      do g = 1, this % groups
+        distro(:, g) = distro(:, g) * sigS * p_valid * &
+          real(rxn % multiplicity, 8)
+        norm_tot = norm_tot + distro(1, g)
+        distro(:, g) = distro(:, g) * Enorm      
+      end do   
+      
+    end function scatt_interp_distro
+
+!===============================================================================
+!===============================================================================
+! FUNCTIONS TO SUPPORT SCATTDATA
+!===============================================================================
+!===============================================================================
+
+!===============================================================================
+! INTEGRATE_DISTRO finds the energy/angle boundaries of a distribution, then
+! integrates over mu/Eout to produce the tabular or legendre distributions 
+! requested at iE.
+!===============================================================================
+
+    function integrate_distro(this, Ein, iE, f, distro_int, Enorm) &
+      result(result_distro)
+      
+      class(ScattData), target, intent(in) :: this ! Working ScattData object
+      real(8), intent(in) :: Ein      ! Incoming energy to interpolate on
+      real(8), intent(in) :: f        ! Interpolation factor for this distro_int
+      integer, intent(in) :: iE       ! incoming energy index (searched)
+      real(8), intent(in) :: distro_int(:,:) ! the distribution at Ein before cm2lab
+      real(8), intent(out) :: Enorm   ! Range of Energy space represented by
+                                      ! this reaction
+      real(8), allocatable :: result_distro(:,:)  ! the output distribution
+      
+      ! the distribution in the lab frame
+      real(8) :: distro_lab(size(distro_int, dim=1), size(distro_int, dim=2)) 
+      integer :: bins(2, this % groups)   ! Start/end energy/angle bin indices
+      real(8) :: vals(2, this % groups)   ! values on start/end energy/angle
+      real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
+      real(8) :: temp_Enorm               ! Storage for Enorm (for summing to Enorm)
+      
+      ! Set up the results memory 
+      allocate(result_distro(this % order, this % groups))
+      result_distro = ZERO
+      
       ! We know which distribution to work with, now it is time to:
       ! 1) convert from CM to Lab, if necessary
       ! 2) calculate the angular boundaries for integration
-      ! 3) calculate the energy boundaries for integration
-      ! 4) integrate according to scatt_type
+      ! 3) integrate according to scatt_type
       
       ! 1) convert from CM to Lab, if necessary
-      allocate(distro_lab(size(this % distro(iE) % data, dim=1), &
-        size(distro_int, dim=2)))
-      if (rxn % scatter_in_cm) then
+      if (this % rxn % scatter_in_cm) then
         call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, &
           distro_int, distro_lab)
       else
@@ -418,55 +470,29 @@ module scattdata_class
         if (associated(this % adist)) then
           ! 2) calculate the angular boundaries for integration
           call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
-            this % E_bins, this % mu, interp, vals, bins, Enorm) 
+            this % E_bins, this % mu, interp, vals, bins, temp_Enorm) 
           ! 3) integrate according to scatt_type
           call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
-            interp, vals, bins, this % order, distro)
+            interp, vals, bins, this % order, result_distro)
         else if (associated(this % edist)) then
           ! 3) integrate according to scatt_type
           call integrate_energyangle_file6_leg(distro_lab, this % mu, &
             this % Eouts(iE) % data, this % INTT(iE), this % E_bins, &
-            this % order, distro)
+            this % order, result_distro)
           ! Set the vals so the norm_tot calc below occurs correcty whether
           ! we have an adist or an edist
-          Enorm = ONE
+          temp_Enorm = ONE
         end if
       case (SCATT_TYPE_TABULAR)
-        if (associated(this % adist)) then
-          ! 2) calculate the angular boundaries for integration
-          call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
-            this % E_bins, this % mu, interp, vals, bins, Enorm)
-          ! 4) integrate according to scatt_type
-!~             call integrate_energyangle_file4_tab(distro_lab(:, 1), this % mu, &
-!~               interp, vals, bins, this % order, distro)
-        else if (associated(this % edist)) then
-          ! 3) integrate according to scatt_type
-!~             call integrate_energyangle_file6_tab(distro_lab, this % mu, &
-!~               this % Eouts(iE) % data, this % E_bins, interp, bins, &
-!~               this % order, distro)
-          ! Set the vals so the norm_tot calc below occurs correcty whether
-          ! we have an adist or an edist
-          Enorm = ONE
-        end if
+        
       end select
       
-      ! Combine the results, normalizing by the total probability of transfer
-      ! from all energies to the energy range represented in the outgoing groups    
-      do g = 1, this % groups
-        distro(:, g) = distro(:, g) * sigS * p_valid * &
-          real(rxn % multiplicity, 8)
-        norm_tot = norm_tot + distro(1, g)
-        distro(:, g) = distro(:, g) * Enorm      
-      end do     
+      ! Multiply by f for interpolation.
+      result_distro = result_distro * f
+      Enorm = Enorm + temp_Enorm * f
       
       
-    end function scatt_interp_distro
-
-!===============================================================================
-!===============================================================================
-! FUNCTIONS TO SUPPORT SCATTDATA
-!===============================================================================
-!===============================================================================
+    end function integrate_distro
 
 !===============================================================================
 ! CONVERT_FILE4 performs the overall control for converting file 4 ACE data to
