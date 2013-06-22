@@ -103,8 +103,9 @@ module ndpp_scatt
       else if (energy_bins(size(energy_bins)) >= nuc % energy(nuc % n_grid)) then
         maxiE = nuc % n_grid
       else
+        ! We add one to this so that we always have one energy pt above the max
         maxiE = binary_search(nuc % energy, nuc % n_grid, &
-          energy_bins(size(energy_bins)))
+          energy_bins(size(energy_bins))) + 1
       end if
       allocate(E_grid(maxiE))
       E_grid = nuc % energy(1 : maxiE)
