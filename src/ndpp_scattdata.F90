@@ -821,7 +821,6 @@ module scattdata_class
       
       ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
       R2 = awr * awr  * (ONE + Q * (awr + ONE) / (awr * Ein))
-!~       R2 = awr * awr  * (ONE - Q * (awr + ONE) / (awr * Ein))
       
       R = sqrt(R2)
       Rinv = ONE / R
@@ -943,7 +942,6 @@ module scattdata_class
       
       ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
       R = awr * sqrt((ONE + Q * (awr + ONE) / (awr * Ein)))
-!~       R = awr * sqrt((ONE - Q * (awr + ONE) / (awr * Ein)))
       
       do g = 1, size(E_bins) - 1
         ! Calculate the values of mu corresponding to this energy group

@@ -377,6 +377,10 @@ module ndpp_class
           ! Setup output nuclear data library
           call init_library(self, nuc)
           
+          ! display message
+          message = "....Performing Scattering Integration"
+          call write_message(6)
+    
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
@@ -396,6 +400,10 @@ module ndpp_class
           
           ! Integrate Chi
           if (self % integrate_chi) then
+            ! display message
+            message = "....Performing Fission Neutron Energy Integration"
+            call write_message(6)
+
             call timer_start(self % time_chi_preproc)
             if (nuc % fissionable) then
               call calc_chis(nuc, self % energy_bins, self % energy_groups, chi_t, &
