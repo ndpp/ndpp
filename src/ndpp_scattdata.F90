@@ -103,7 +103,7 @@ module scattdata_class
       ! before proceeding
       if (associated(edist)) then
         if ((edist % law  /= 3) .and. (edist % law  /= 44) .and. &
-          (edist % law  /= 61)) return
+          (edist % law  /= 61) .and. (edist % law /= 9)) return
       end if
       ! We survived the above check and thus have a scattering reaction.
       
@@ -128,8 +128,9 @@ module scattdata_class
           this % edist => null()
         end if
       else if (associated(edist)) then
-        if (edist % law == 3) then
-          ! We have an isotropic inelastic level scatter...
+        if ((edist % law == 3) .or. (edist % law == 9)) then
+          ! We have either an isotropic inelastic level scatter or an evaporation
+          ! spectrum
           this % edist => edist
           ! set up the isotropic adist
           rxn % adist % n_energy = 2
@@ -529,14 +530,26 @@ module scattdata_class
         else if ((associated(this % adist)) .and. &
           (associated(this % edist))) then
           ! Here, we have angular info in adist, but it goes to a single energy
-          ! specified in edist. This is for level inelastic scattering.
-          ! To accomodate this, we will find which outgoing group gets the data,
-          ! and set up interp, vals, and bins, accordingly, then we can call
-          ! integrate_energyangle_file4.
-          call inelastic_level(this % awr, this % rxn % Q_value, Ein, &
-            this % E_bins, this % mu, interp, vals, bins, temp_Enorm)
-          call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
-            interp, vals, bins, this % order, result_distro)
+          ! specified in edist. This is for level inelastic scattering and some 
+          ! (n,xn) reactions.
+          if (this % edist % law == 3) then
+            ! To accomodate level inelastic scattering, we will find which 
+            ! outgoing group gets the data,
+            ! and set up interp, vals, and bins, accordingly, then we can call
+            ! integrate_energyangle_file4.
+            call inelastic_level(this % awr, this % rxn % Q_value, Ein, &
+              this % E_bins, this % mu, interp, vals, bins, temp_Enorm)
+            call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
+              interp, vals, bins, this % order, result_distro)
+          else if (this % edist % law == 9) then
+            ! For these cases, we need to find out which outgoing groups get the 
+            ! isotropic (and then potentially converted from CM to Lab) angular
+            ! distribution data, which will be the same for each group.  
+            ! The group transfer should also be normalized by the probability of
+            ! transfer to that group.
+            call law9_scatter_leg(distro_lab(:, 1), this % edist, Ein, this % E_bins, this % mu, &
+              this % order, result_distro, temp_Enorm)
+          end if
         else if (associated(this % edist)) then
           ! 3) integrate according to scatt_type
           call integrate_energyangle_file6_leg(distro_lab, this % mu, &
@@ -550,7 +563,6 @@ module scattdata_class
       ! Multiply by f for interpolation.
       result_distro = result_distro * f
       Enorm = Enorm + temp_Enorm * f
-      
       
     end function integrate_distro
 
@@ -1069,6 +1081,73 @@ module scattdata_class
       end do
       
     end subroutine inelastic_level
+
+!===============================================================================
+! LAW9_SCATTER_LEG Finds the legendre moments of the incoming adistro and 
+! assigns the results to each of the outgoing energy groups (according to a
+! law 9 evaporation spectrum) according to the probabilities.
+!===============================================================================
+
+    subroutine law9_scatter_leg(fmu, edist, Ein, E_bins, mu, order, distro, &
+      Enorm)
+      
+      real(8), intent(in)  :: fmu(:)      ! Angle distro to act on
+      type(DistEnergy), pointer, intent(in) :: edist    ! My energy dist
+      real(8), intent(in)  :: Ein         ! Incoming energy
+      real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+      real(8), intent(in)  :: mu(:)       ! fEmu angular grid
+      integer, intent(in)  :: order       ! Number of moments to find
+      real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
+      real(8), intent(out) :: Enorm       ! Fraction of possible energy space
+                                          ! of this Ein reaction represented by 
+                                          ! the energy group structure of the 
+                                          ! problem      
+      
+      integer :: g, NR, NE, lc, imu
+      real(8) :: T, U, x, I, Egp1, Eg, pE_xfer
+      
+      pE_xfer = ZERO
+      Enorm = ZERO
+      
+      ! First begin by calculating the group transfer probabilities
+      
+      ! read number of interpolation regions and incoming energies 
+      NR  = int(edist % data(1))
+      NE  = int(edist % data(2 + 2*NR))
+      
+      ! determine nuclear temperature from tabulated function
+      T = interpolate_tab1(edist % data, Ein)
+
+      ! determine restriction energy
+      ! These were derived using a sage worksheet; note that in the equation for I,
+      ! the MCNP5 manual has exp(x) instead of exp(-x) which is found on the T2
+      ! website (http://t2.lanl.gov/nis/endf/intro25.html); the T2 formulation
+      ! makes sense and is correct.
+      lc = 2 + 2*NR + 2*NE
+      U = edist % data(lc + 1)
+      x = (Ein - U) / T
+      I = T * T * (ONE - exp(-x) * (ONE + x))
+      if (U < ZERO) U = Ein - U
+      do g = 1, size(E_bins) - 1
+        Egp1 = E_bins(g + 1)
+        if (Egp1 > (Ein - U)) Egp1 = Ein - U
+        Eg = E_bins(g)
+        if (Eg > (Ein - U)) Eg = Ein - U
+        pE_xfer = (T * exp(Egp1 / T) - Egp1 - T) * exp(-Egp1 / T)
+        pE_xfer = pE_xfer - (T * exp(Eg / T) - Eg - T) * exp(-Eg / T)
+        pE_xfer = T * pE_xfer / I
+        
+        ! Now set the angular distributions according to pE_xfer
+        do imu = 1, size(mu) - 1
+          distro(:, g) = distro(:, g) + &
+            calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
+              fmu(imu), fmu(imu + 1)) * pE_xfer
+        end do
+        ! Add pE_xfer to running tally in Enorm
+        Enorm = Enorm + pE_xfer
+      end do
+      
+    end subroutine law9_scatter_leg
 
 !===============================================================================
 ! INTEGRATE_ENERGYANGLE_*_LEG Finds Legendre moments of the energy-angle 

@@ -517,6 +517,10 @@ contains
       end if
       
       ! determine restriction energy
+      ! These were derived using a sage worksheet; note that in the equation for I,
+      ! the MCNP5 manual has exp(x) instead of exp(-x) which is found on the T2
+      ! website (http://t2.lanl.gov/nis/endf/intro25.html); the T2 formulation
+      ! makes sense and is correct.
       lc = 2 + 2*NR + 2*NE
       U = edist % data(lc + 1)
       x = (E_in - U) / T
