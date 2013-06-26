@@ -1208,7 +1208,6 @@ module scattdata_class
             flo, fhi)
             
         end if
-        
       end do
       
     end subroutine integrate_energyangle_file4_leg

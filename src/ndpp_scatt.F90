@@ -158,22 +158,31 @@ module ndpp_scatt
       
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
       do iE = 1, NE
-        scatt_mat(:, :, iE) = ZERO
-        norm_tot = ZERO
-        do irxn = 1, Nrxn
-          mySD => rxn_data(irxn)
-          ! If we do not have a scatter reaction, don't score it.
-          if (.not. mySD % is_init) cycle
-          ! Add the scattering distribution to the union scattering grid
-          scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + &
-            mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
-        end do
+        if (E_grid(iE) <= rxn_data(1) % E_bins(size(rxn_data(1) % E_bins))) then
+          scatt_mat(:, :, iE) = ZERO
+          norm_tot = ZERO
+          do irxn = 1, Nrxn
+            mySD => rxn_data(irxn)
+            ! If we do not have a scatter reaction, don't score it.
+            if (.not. mySD % is_init) cycle
+            ! Add the scattering distribution to the union scattering grid
+            scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + &
+              mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
+          end do
 
-        ! Normalize for later multiplication in the MC code
-        if (norm_tot == ZERO) norm_tot = ONE
-        scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
-        
+          ! Normalize for later multiplication in the MC code
+          if (norm_tot == ZERO) norm_tot = ONE
+          scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
+        else
+          ! This step is taken so that interpolation works OK if the MC code
+          ! has a particle with an energy == the top energy group value.
+          ! With this step, it has something to interpolate to, and that 
+          ! value is the same as the Ein value, which will be more accurate.
+          scatt_mat(:, :, iE) = scatt_mat(:, :, iE - 1)
+        end if
       end do
+      
+      
     end subroutine calc_scatt_grid
     
 !===============================================================================

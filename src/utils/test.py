@@ -7,9 +7,10 @@ import scipy.special as ss
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 
-h1 = ndpp.NDPP_lib('./1001.70c.g2','binary')
+h1 = ndpp.NDPP_lib('./1001.70c.g1','binary')
+#~ h1 = ndpp.NDPP_lib('./1002.84c.g1','binary')
 
-bins = 21
+bins = 201
 mu = np.linspace(-1.0, 1.0, bins)
 
 one_group = np.zeros((h1.NE_scatt, h1.scatt_order))
@@ -24,16 +25,12 @@ for iE in xrange(h1.NE_scatt):
     # Convert to a functional expansion
     for l in xrange(h1.scatt_order):
         data[iE][:] = data[iE][:] + (float(l) + 0.5) * ss.eval_legendre(l, mu[:]) * one_group[iE][l]
-    print data[iE][:]
 
-logEin = np.log(h1.Ein_scatt[:])
+lethargy = np.log(h1.Ein_scatt[h1.NE_scatt - 1] / h1.Ein_scatt[:])
 
-
-
-X, Y = np.meshgrid(h1.Ein_scatt, mu)
+X, Y = np.meshgrid(mu, lethargy)
 Z = data.reshape(np.shape(X))
-print np.shape(X), np.shape(Y), np.shape(Z)
 fig = plt.figure()
 ax = fig.gca(projection='3d')
-surf = ax.plot_surface(X, Y, Z, antialiased = True)
+surf = ax.plot_surface(X, Y, Z)
 plt.show()
