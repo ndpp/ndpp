@@ -2,6 +2,7 @@
 
 import struct
 import numpy as np
+import scipy.special as ss
 
 SCATT_TYPE_LEGENDRE = 0
 SCATT_TYPE_TABULAR  = 1
@@ -124,6 +125,51 @@ class NDPP_lib(object):
     def _read_chi(self):
         # NOT YET IMPLEMENTED!!        
         pass
+        
+    def condense_outgoing(self, groups):
+        condensed = np.zeros((self.NE_scatt, self.scatt_order))
+
+        for iE in xrange(self.NE_scatt):
+            gmin = self.scatter[iE].gmin
+            gmax = self.scatter[iE].gmax
+            
+            if gmin == gmax:
+                if gmin in groups:
+                    condensed[iE][:] += self.scatter[iE].outgoing[gmin- gmin][:]    
+            else:
+                for g in xrange(gmin, gmax + 1):
+                    if g in groups:
+                        condensed[iE][:] += self.scatter[iE].outgoing[g-gmin][:]
+            
+        return condensed
+        
+    def expand(self, outgoing, num_mu_pts = 201, order = None):
+        # Outgoing is the set of legendre moments vs incoming energies
+        # It is only for one group (or an already condensed set of groups)
+        # num_mu_pts is the number of pts to use on the mu variable to set up
+        # the functional data.
+        # (Perhaps this could be moved to a sympy function in the future instead
+        # of discrete pts)
+        
+        expanded = np.zeros((self.NE_scatt, num_mu_pts))
+        mu = np.linspace(-1.0, 1.0, num_mu_pts)
+        
+        # Set maxL equal to whatever is smaller, order, or self.scatt_order
+        if order != None:
+            maxL = min(order, self.scatt_order)
+        else:
+            maxL = self.scatt_order
+        
+        if self.scatt_type == SCATT_TYPE_LEGENDRE:
+            for iE in xrange(self.NE_scatt):
+                for l in xrange(maxL):
+                    expanded[iE][:] = expanded[iE][:] + \
+                        (float(l) + 0.5) * ss.eval_legendre(l, mu[:]) * \
+                        outgoing[iE][l]
+                        
+        elif self.scatt_type == SCATT_TYPE_TABULAR:
+            pass
+        return expanded
         
     def _get_data(self, n, typeCode, size):
         return list(struct.unpack('={0}{1}'.format(n,typeCode),
