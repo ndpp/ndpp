@@ -126,7 +126,7 @@ class NDPP_lib(object):
         # NOT YET IMPLEMENTED!!        
         pass
         
-    def condense_outgoing(self, groups):
+    def condense_outgoing_scatt(self, groups):
         condensed = np.zeros((self.NE_scatt, self.scatt_order))
 
         for iE in xrange(self.NE_scatt):
@@ -143,7 +143,7 @@ class NDPP_lib(object):
             
         return condensed
         
-    def expand(self, outgoing, num_mu_pts = 201, order = None):
+    def expand_scatt(self, outgoing, num_mu_pts = 201, order = None):
         # Outgoing is the set of legendre moments vs incoming energies
         # It is only for one group (or an already condensed set of groups)
         # num_mu_pts is the number of pts to use on the mu variable to set up
@@ -155,11 +155,12 @@ class NDPP_lib(object):
         mu = np.linspace(-1.0, 1.0, num_mu_pts)
         
         # Set maxL equal to whatever is smaller, order, or self.scatt_order
+        # Note that this will only be used if scatt_type == SCATT_TYPE_LEGENDRE 
         if order != None:
             maxL = min(order, self.scatt_order)
         else:
             maxL = self.scatt_order
-        
+            
         if self.scatt_type == SCATT_TYPE_LEGENDRE:
             for iE in xrange(self.NE_scatt):
                 for l in xrange(maxL):
@@ -169,7 +170,48 @@ class NDPP_lib(object):
                         
         elif self.scatt_type == SCATT_TYPE_TABULAR:
             pass
-        return expanded
+        return (expanded, mu)
+        
+    def test_scatt_positivity(self, num_mu_pts = 201, order = None):
+        # This function will pass through each Ein and outgoing group and
+        # will return a flag if the data set is negative and will also return
+        # a list of negative iE and groups
+        
+        # Initialize the return values
+        positivity = True
+        negativity_list = []
+        min_value = 1.0E50
+        
+        # Set maxL equal to whatever is smaller, order, or self.scatt_order
+        # Note that this will only be used if scatt_type == SCATT_TYPE_LEGENDRE 
+        if order != None:
+            maxL = min(order, self.scatt_order)
+        else:
+            maxL = self.scatt_order
+        
+        mu = np.linspace(-1.0, 1.0, num_mu_pts)
+        
+        if self.scatt_type == SCATT_TYPE_LEGENDRE:
+          for iE in xrange(self.NE_scatt):
+              gmin = self.scatter[iE].gmin
+              gmax = self.scatter[iE].gmax
+              
+              for g in xrange(gmin, gmax + 1):
+                  expanded = np.zeros(num_mu_pts)
+                  for l in xrange(maxL):
+                    expanded[:] = expanded[:] + \
+                        (float(l) + 0.5) * ss.eval_legendre(l, mu[:]) * \
+                        self.scatter[iE].outgoing[g - gmin][l]
+                  minval = min(expanded)
+                  if minval < min_value:
+                      min_value = minval
+                  if any(expanded[i] < 0.0 for i in expanded):
+                      positivity = False
+                      negativity_list.append((iE, g + gmin))
+        elif self.scatt_type == SCATT_TYPE_TABULAR:
+            pass
+            
+        return (positivity, negativity_list, min_value)
         
     def _get_data(self, n, typeCode, size):
         return list(struct.unpack('={0}{1}'.format(n,typeCode),

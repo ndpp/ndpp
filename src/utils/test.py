@@ -2,28 +2,44 @@
 
 import ndpp_data as ndpp
 import numpy as np
-import scipy.special as ss
-
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
-from matplotlib import cm
+from mayavi import mlab
 
 #~ h1 = ndpp.NDPP_lib('./1001.70c.g1','binary')
+h1 = ndpp.NDPP_lib('./1001.70c.g3','binary')
 #~ h1 = ndpp.NDPP_lib('./1002.84c.g1','binary')
 #~ h1 = ndpp.NDPP_lib('./8016.70c.g1','binary')
-h1 = ndpp.NDPP_lib('./92235.70c.g1','binary')
+#~ h1 = ndpp.NDPP_lib('./8016.70c.g3','binary')
+#~ h1 = ndpp.NDPP_lib('./92235.70c.g1','binary')
 
 bins = 201
-mu = np.linspace(-1.0, 1.0, bins)
-
-one_group = h1.condense_outgoing([0])
-data = h1.expand(one_group, bins)
-
-
+print h1.test_scatt_positivity(num_mu_pts = 2001)
+one_group = h1.condense_outgoing_scatt([0, 1, 2])
+glow = h1.condense_outgoing_scatt([0])
+gmid = h1.condense_outgoing_scatt([1])
+ghigh = h1.condense_outgoing_scatt([2])
+(data_1g, mu) = h1.expand_scatt(one_group, bins, order = 11)
 lethargy = np.log(h1.Ein_scatt[h1.NE_scatt - 1] / h1.Ein_scatt[:])
-print lethargy
-from mayavi import mlab
-s = mlab.surf(mu, lethargy[::-1], data.transpose(), representation = 'wireframe')
+
+x,y=np.meshgrid(mu,lethargy)
+
+s = mlab.mesh(x,y, data_1g, colormap = 'Spectral')
 mlab.axes(ranges = [-1, 1, 0.0, lethargy[0], -1, 3], xlabel= 'mu' ,ylabel = 'Energy', 
           zlabel='Distribution')
+mlab.outline()
+mlab.colorbar()
 mlab.show()
+mlab.clf()
+
+(data_g0, mu) = h1.expand_scatt(glow, bins, order = 11)
+(data_g1, mu) = h1.expand_scatt(gmid, bins, order = 11)
+(data_g2, mu) = h1.expand_scatt(ghigh, bins, order = 11)
+
+s = mlab.mesh(x,y, data_g0, colormap = 'Spectral')
+mlab.axes(ranges = [-1, 1, 0.0, lethargy[0], -1, 3], xlabel= 'mu' ,ylabel = 'Energy', 
+          zlabel='Distribution')
+mlab.outline()
+mlab.colorbar()
+mlab.show()
+
+                    
+
