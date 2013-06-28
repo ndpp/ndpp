@@ -9,11 +9,12 @@ from mayavi import mlab
 #~ h1 = ndpp.NDPP_lib('./1002.84c.g1','binary')
 #~ h1 = ndpp.NDPP_lib('./8016.70c.g1','binary')
 #~ h1 = ndpp.NDPP_lib('./8016.70c.g3','binary')
+h1 = ndpp.NDPP_lib('./92235.70c.g3','binary')
 #~ h1 = ndpp.NDPP_lib('./92235.70c.g1','binary')
-h1 = ndpp.NDPP_lib('./94240.70c.g3','binary')
+#~ h1 = ndpp.NDPP_lib('./94240.70c.g3','binary')
 
 bins = 21
-print h1.test_scatt_positivity(num_mu_pts = 21)
+print h1.test_scatt_positivity(num_mu_pts = bins)
 one_group = h1.condense_outgoing_scatt([0, 1, 2])
 glow = h1.condense_outgoing_scatt([0])
 gmid = h1.condense_outgoing_scatt([1])
