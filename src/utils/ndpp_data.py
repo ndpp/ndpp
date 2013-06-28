@@ -3,9 +3,76 @@
 import struct
 import numpy as np
 import scipy.special as ss
+from xml.dom import minidom
 
 SCATT_TYPE_LEGENDRE = 0
 SCATT_TYPE_TABULAR  = 1
+
+class ndpp_table(object):
+    def __init__(self, nuc):
+        self.alias = nuc.attributes['alias'].value
+        self.awr = nuc.attributes['awr'].value
+        self.location = nuc.attributes['location'].value
+        self.name = nuc.attributes['name'].value
+        self.path = nuc.attributes['path'].value
+        self.kT = nuc.attributes['temperature'].value
+        self.zaid = nuc.attributes['zaid'].value
+
+class lib_xml(object):
+    def __init__(self, lib_file):
+        # Read xsdata and create XML document object
+        xmldoc = minidom.parse(lib_file)
+
+        # Get type of library
+        self.filetype = self.get_attrib(xmldoc, "filetype")
+        
+        # Get directory of library
+        self.directory = self.get_attrib(xmldoc, "directory")
+        
+        # Get number of entries
+        self.n_nuclides = int(self.get_attrib(xmldoc, "entries"))
+        
+        # Get flag if chi is present
+        self.chi_present = bool(self.get_attrib(xmldoc, "chi_present"))
+        
+        # Get scattering type
+        self.scatt_type = int(self.get_attrib(xmldoc, "scatt_type"))
+        
+        # Get scattering order
+        self.scatt_order = int(self.get_attrib(xmldoc, "scatt_order"))
+        
+        # Get printing tolerance
+        self.print_tol = float(self.get_attrib(xmldoc, "print_tol"))
+        
+        # Get thinning tolerance
+        self.thin_tol = float(self.get_attrib(xmldoc, "thin_tol"))
+        
+        # Get mu_bins
+        self.mu_bins = int(self.get_attrib(xmldoc, "mu_bins"))
+        
+        # Get energy_bins
+        self.energy_bins = []
+        e_bins_tmp = ((self.get_attrib(xmldoc, "energy_bins")).split())
+        for i in xrange(len(e_bins_tmp)):
+            self.energy_bins.append(float(e_bins_tmp[i]))
+        self.energy_bins = np.asarray(self.energy_bins, dtype=np.double)
+        
+        # Make list of nuclides XML info
+        nuc_list = xmldoc.getElementsByTagName('ndpp_table')
+        
+        # Create lists for zaid, filenames, alias, ...
+        self.nuc_info = []
+        for nuc in nuc_list:
+            self.nuc_info.append(ndpp_table(nuc))
+        
+    def get_attrib(self, xmldoc, tag):
+        start = '<' + tag + '>'
+        start.strip()
+        end = '</' + tag + '>'
+        end.strip()
+        
+        return xmldoc.getElementsByTagName(tag.strip())[0].toxml().replace( \
+            start,'').replace(end,'').strip()
 
 class scatt_data(object):
     def __init__(self, gmin, gmax, order):
@@ -18,7 +85,7 @@ class scatt_data(object):
 class NDPP_lib(object):
     def __init__(self, filename, filetype):
         
-        self.filetype = filetype.lower()        
+        self.filetype = filetype.lower()   
         
         if self.filetype == 'hdf5':
             import h5py
@@ -66,7 +133,6 @@ class NDPP_lib(object):
         if self.chi_present:
             self._read_chi()
         
-
     def _read_metadata(self):
         if self._metadata == True:
             return
@@ -107,7 +173,7 @@ class NDPP_lib(object):
         
         # Get Ein
         self.Ein_scatt = np.asarray(self._get_double(n=self.NE_scatt, 
-                                               path='scatt/Ein_scatt'))
+                                               path='scatt/Ein_scatt'), dtype = np.double)
         
         # Get scattering data for each Ein  
         base = 'scatt/scatt_data/'
@@ -202,10 +268,11 @@ class NDPP_lib(object):
                     expanded[:] = expanded[:] + \
                         (float(l) + 0.5) * ss.eval_legendre(l, mu[:]) * \
                         self.scatter[iE].outgoing[g - gmin][l]
+                  
                   minval = min(expanded)
                   if minval < min_value:
                       min_value = minval
-                  if any(expanded[i] < 0.0 for i in expanded):
+                  if minval < 0.0:
                       positivity = False
                       negativity_list.append((iE, g + gmin))
         elif self.scatt_type == SCATT_TYPE_TABULAR:
