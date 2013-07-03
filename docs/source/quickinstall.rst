@@ -12,33 +12,30 @@ NDPP, see :ref:`usersguide_install` in the User's Manual.
 Prerequisites
 -------------
 
-In order to compile and run OpenMC, a number of prerequisite software packages
+In order to compile and run NDPP, a number of prerequisite software packages
 and libraries may be needed. These include:
 
 - A Fortran compiler such as gfortran_
 - git_ version control software for obtaining source code (*optional*)
-- An MPI implementation for parallel runs (*optional*)
 - HDF5_ Library for portable binary output format (*optional*)
-- PETSc_ for CMFD acceleration (*optional*)
 
 .. _gfortran: http://gcc.gnu.org/wiki/GFortran
 .. _git: http://git-scm.com
 .. _HDF5: http://www.hdfgroup.org/HDF5/
-.. _PETSc: http://www.mcs.anl.gov/petsc/
 
 --------------------
 Obtaining the Source
 --------------------
 .. leave this for now, since we dont know exactly where it will live.
-All OpenMC source code is hosted on GitHub_. The latest version of the OpenMC
+All NDPP source code is hosted on GitHub_. The latest version of the NDPP
 source code can be downloaded from GitHub with the following command::
 
-    git clone git@github.com:mit-crpg/openmc.git
+    git clone git@github.com:nelsonag/ndpp.git
 
 If you don't have git installed, you can download the source as a zip or tar
 file directly from GitHub.
 
-.. _GitHub: https://github.com/mit-crpg/openmc
+.. _GitHub: https://github.com/nelsonag/ndpp
 
 -------------------------------
 Compiling on Linux and Mac OS X
@@ -52,13 +49,13 @@ the root directory of the source code:
     cd src
     make
 
-This will build an executable named ``openmc``.
+This will build an executable named ``ndpp``.
 
 --------------------
 Compiling on Windows
 --------------------
 
-To compile OpenMC on a Windows operating system, you will need to first install
+To compile NDPP on a Windows operating system, you will need to first install
 Cygwin_, a Linux-like environment for Windows. When configuring Cygwin, make
 sure you install both the gfortran compiler as well as git. Once you have
 obtained the source code, run the following commands from within the source code
@@ -69,6 +66,6 @@ root directory:
     cd src
     make
 
-This will build an executable named ``openmc``.
+This will build an executable named ``ndpp``.
 
 .. _Cygwin: http://www.cygwin.com/
