@@ -1,14 +1,15 @@
-=============================================
-The NDPP Monte Carlo Data Pre-Processing Code
-=============================================
+===================================================
+The NDPP Continuous Energy Data Pre-Processing Code
+===================================================
 
-NDPP [Nuclear Data PreProcessor] is a Monte Carlo neutron transport data 
-preprocessing code which converts continuous-energy ACE data in to 
-information that is more readily tallied by a Monte Carlo for the generation
-of multi-group cross-sections. Specifically, it integrates the outgoing energy
-and angular distributions of a reaction over the outgoing energies and angles
-in to a format and energy group structure defined by the user.  NDPP uses 
-subroutines written for the OpenMC Monte Carlo particle transport code.
+NDPP [Nuclear Data PreProcessor] is a continuous-energy neutron data 
+preprocessing code which converts continuous-energy ACE data to 
+information that is more readily tallied by a Monte Carlo solver for the 
+generation of multi-group cross-sections. Specifically, it integrates the 
+outgoing energy and angular distributions of a reaction to produce a format 
+(Legendre moments or tabular data) and energy group structure defined by the 
+user.  NDPP makes use of subroutines written for the OpenMC Monte Carlo neutron 
+transport code.
 
 NDPP is developed by the `University of Michigan`_.  For 
 more information, feel free to contact `Adam Nelson`_.

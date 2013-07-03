@@ -1,12 +1,12 @@
 .. _usersguide_beginners:
 
-============================
-A Beginner's Guide to OpenMC
-============================
+==========================
+A Beginner's Guide to NDPP
+==========================
 
---------------------
-What does OpenMC do?
---------------------
+------------------
+What does NDPP do?
+------------------
 
 In a nutshell, OpenMC simulates neutrons moving around randomly in a `nuclear
 reactor`_ (or other fissile system). This is what's known as `Monte Carlo`_
