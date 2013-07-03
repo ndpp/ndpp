@@ -134,6 +134,7 @@ module scattdata_class
           this % edist => edist
           ! set up the isotropic adist
           rxn % adist % n_energy = 2
+          if (allocated(rxn % adist % energy)) deallocate(rxn % adist % energy)
           allocate(rxn % adist % energy(2))
           ! Set the upper value to that in E_bins(max)
           rxn % adist % energy(2) = E_bins(size(E_bins))
@@ -145,10 +146,13 @@ module scattdata_class
             rxn % adist % energy(1) = E_bins(1)
           end if
           ! Set the type to Isotropic
+          if (allocated(rxn % adist % type)) deallocate(rxn % adist % type)
           allocate(rxn % adist % type(2))
           rxn % adist % type = ANGLE_ISOTROPIC
+          if (allocated(rxn % adist % location)) deallocate(rxn % adist % location)
           allocate(rxn % adist % location(2))
           rxn % adist % location = 0
+          if (allocated(rxn % adist % data)) deallocate(rxn % adist % data)
           allocate(rxn % adist % data(2))
           rxn % adist % data = ZERO
           this % adist => rxn % adist
