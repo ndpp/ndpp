@@ -68,39 +68,40 @@ Overview of Program Flow
 
 To provide the pre-integrated nuclear data to a Monte Carlo code, NDPP performs
 the following steps:
-  1. Read input files to determine the user's desired putput format, energy 
-     group structure, representation of angular data, and a list of 
-     libraries/nuclides/temperatures to perform the pre-processing for.
 
-  2. NDPP will then perform the following for each library/nuclide/temperature 
-     requested by the user:
+1. Read input files to determine the user's desired putput format, energy 
+group structure, representation of angular data, and a list of 
+libraries/nuclides/temperatures to perform the pre-processing for.
 
-    2.a. Read the ACE-formatted nuclear data in to memory.
+2. NDPP will then perform the following for each library/nuclide/temperature 
+requested by the user:
 
-    2.b. Write the header information for the pre-processed data library to be 
-         output from NDPP.
+  2.a. Read the ACE-formatted nuclear data in to memory.
 
-    2.c. For each scattering reaction type, progress through each of the incoming
-         energies and perform the following:
+  2.b. Write the header information for the pre-processed data library to be 
+  output from NDPP.
 
-        2.c.1. Determine the angular distribution boundaries which correspond 
-               to the energy group structure requested.
-         
-        2.c.2. Perform integration over the outgoing energy and angle 
-               dimensions to generate Legendre moments or histogram bins as 
-               requested.
+  2.c. For each scattering reaction type, progress through each of the incoming
+  energies and perform the following:
 
-    2.d. Combine all the reaction type's data on to a unionized incoming energy 
-         grid.
+    2.c.1. Determine the angular distribution boundaries which correspond 
+    to the energy group structure requested.
+     
+    2.c.2. Perform integration over the outgoing energy and angle 
+    dimensions to generate Legendre moments or histogram bins as 
+    requested.
 
-    2.e. If the user requested thinning of this grid, perform thinning.
+  2.d. Combine all the reaction type's data on to a unionized incoming energy 
+  grid.
 
-    2.f. Write the scattering data to the output library.
+  2.e. If the user requested thinning of this grid, perform thinning.
 
-    2.g. Perform steps similar to 2.c to 2.f but for the fission neutron
-         outgoing energy distribution, :math:`\chi`.
+  2.f. Write the scattering data to the output library.
 
-  3. Print NDPP summary output data for the user's information.
+  2.g. Perform steps similar to 2.c to 2.f but for the fission neutron
+  outgoing energy distribution, :math:`\chi`.
+
+3. Print NDPP summary output data for the user's information.
 
 
 .. _Monte Carlo: http://en.wikipedia.org/wiki/Monte_Carlo_method

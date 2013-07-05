@@ -33,7 +33,7 @@ ndpp.xml file.  In the following discussion, if a parameter has a default value
 then its presence is optional; if it is omitted, the default will be used.
 
 ``<scatt_type>`` Element
-----------------------------------
+------------------------
 
 The ``<scatt_type>`` element has no attributes and has an accepted
 value of "tabular" or "legendre". If set to "tabular", the incoming 
@@ -46,7 +46,7 @@ will be output with the scattering order defined in the ``<scatt_order>`` elemen
   *NOTE*: The `tabular` format has not yet been implemented in NDPP
 
 ``<scatt_order>`` Element
-----------------------------------
+-------------------------
 
 The ``<scatt_order>`` element has no attributes and contains a single integer. 
 As discussed in the ``<scatt_type>`` section, the ``<scatt_order>`` element 
@@ -56,7 +56,7 @@ depending on the value of ``<scatt_type>``.
   *Default*: 5
   
 ``<mu_bins>`` Element
-----------------------------------
+---------------------
 
 The ``<mu_bins>`` element has no attributes and contains a single integer.  This
 value represents the number of angular points used when converting the ACE-
@@ -93,22 +93,22 @@ will be created, one with energies between 0 and 1 MeV and the other with
 energies between 1 and 20 MeV.
 
 ``<integrate_chi>`` Element
------------------------
+---------------------------
 
 The ``<integrate_chi>`` element has no attributes and has an accepted value of
 "true" or "false". If set to "true", all fissionable nuclides will have their
-fission neutron spectrum (:math:`\Chi\left(E\right)`) integrated over the 
+fission neutron spectrum (:math:`\chi\left(E\right)`) integrated over the 
 provided energy group structure and writen to the output files.  
-If "false", then the :math:`\Chi\left(E\right)` integration will not be performed.
+If "false", then the :math:`\chi\left(E\right)` integration will not be performed.
 
   *Default*: true
 
 ``<thinning_tol>`` Element
-------------------
+--------------------------
 
 The ``<thinning_tol>`` element has no attributes and accepts a single
 floating-point number.  This element is used to set the percent tolerance for 
-thinning the energy grid of the calculated data (:math:`\Chi\left(E\right)` and 
+thinning the energy grid of the calculated data (:math:`\chi\left(E\right)` and 
 the scattering distributions). The larger this value is the smaller the memory 
 footprint is of the resultant data, but with decreased inaccuracy.
 
@@ -116,7 +116,7 @@ footprint is of the resultant data, but with decreased inaccuracy.
   *NOTE*: This feature is not yet implemented in NDPP
   
 ``<print_tol>`` Element
-------------------
+-----------------------
 
 The ``<print_tol>`` element has no attributes and accepts a single
 floating-point number.  This element is used to set the minimum value of
@@ -127,7 +127,7 @@ preprocessed data library.
   *Default*: 1.0E-8
   
 ``<output_format>`` Element
---------------------
+---------------------------
 
 The ``<output_format>`` element determines what format the preprocessed data
 libraries should use.  This element has no attributes and accepts a string.  
@@ -150,5 +150,6 @@ Cross-Section Library Specification -- cross_sections.xml
 The `cross_sections.xml` file uses the same format used in OpenMC_; its format
 and generation strategies are discussed at cross_sections.xml_
 
+.. _XML: http://www.w3.org/XML/
 .. _OpenMC: https://github.com/mit-crpg/openmc
 .. _cross_sections.xml: http://mit-crpg.github.io/openmc/usersguide/install.html#cross-section-configuration

@@ -23,13 +23,14 @@ delayed, and total values of :math:`\chi_g(E')`:
 .. math::
     :label: chi_d
 
-    \chi_{delayed,g}(E') =\ \sum\limits_{c}\:\Y_c(E') 
-        int\limits_{E_g}^{E_{g-1}}\chi_c\left(E,E'\right)dE'
+    \chi_{delayed,g}(E') =\ \sum\limits_{c}\:\ Y_c(E') 
+        \int\limits_{E_g}^{E_{g-1}}\chi_c\left(E,E'\right)dE'
 
 .. math::
     :label: chi_t
+    
     \chi_{total,g}(E') =\ \left(1-\beta(E')\right) \chi_{prompt,g}(E') + 
-        beta(E') \chi_{delayed,g}(E')
+        \beta(E') \chi_{delayed,g}(E')
 
 In the above equations, :math:`E'` is the incoming neutron energy, :math:`MT` 
 is the reaction channel, :math:`d` is the energy distributions within that 
@@ -81,8 +82,6 @@ After the calculation of
 group, the values are normalized to 1.0 to account for any inaccuracies 
 introduced by the interpolation schemes.
 
-.. _ace-law-4:
-
 ACE Law 4 - Continuous Tabular Distribution
 +++++++++++++++++++++++++++++++++++++++++++
 
@@ -106,8 +105,6 @@ so-called Maxwell spectrum. A probability distribution for the Maxwell spectrum
 can be written in the form
 
 .. math::
-    :label: maxwell-spectrum
-
     \chi(E,E') dE' = c E'^{1/2} e^{-E'/T(E)} dE'
 
 where :math:`E` is the incoming energy of the neutron and :math:`T` is the
@@ -119,7 +116,7 @@ determined, we then can analytically determine the value of
 :math:`\int\limits_{E_g}^{E_{g-1}}\chi\left(E',E\right)dE` with the following
 relation:
 
-..math::
+.. math::
     \int\limits_{E_g}^{E_{g-1}}\chi\left(E,E'\right)dE' =\ 
         c \left(\frac{1}{2}\sqrt{\pi}\left(T(E)\right)^{\frac{3}{2}} 
         erf\left(\frac{E'}{T(E)}\right)-
@@ -137,8 +134,6 @@ sufficient energy. The probability distribution for an evaporation spectrum can
 be written in the form
 
 .. math::
-    :label: evaporation-spectrum
-
     \chi(E,E') dE' = c E' e^{-E'/T(E)} dE'
 
 where :math:`E` is the incoming energy of the neutron and :math:`T` is the
@@ -150,7 +145,7 @@ determined, we then analytically determine the value of
 :math:`\int\limits_{E_g}^{E_{g-1}}\chi\left(E,E'\right)dE'` with the following
 relation:
 
-..math::
+.. math::
     \int\limits_{E_g}^{E_{g-1}}\chi\left(E,E'\right)dE' =\ 
         -T(E) c \exp{-\frac{E'}{T(E)}}\left(T(E)+E'\right)
 
@@ -164,8 +159,6 @@ The probability distribution for a Watt fission spectrum can be written in the
 form
 
 .. math::
-    :label: watt-spectrum
-
     \chi(E,E') dE' = c e^{-E'/a(E)} \sinh \sqrt{b(E) \, E'} dE'
 
 where :math:`a` and :math:`b` are parameters for the distribution and are given
@@ -176,7 +169,7 @@ analytically determine the value of
 :math:`\int\limits_{E_g}^{E_{g-1}}\chi\left(E,E'\right)dE'` with the following
 relation:
 
-..math::
+.. .. math::
     \int\limits_{E_g}^{E_{g-1}}\chi\left(E,E'\right)dE' =\ 
 
 .. NEED TO DO THIS!!!! How did I integrate it before???
@@ -191,8 +184,8 @@ This law is very similar to ACE Law 4, except there is another dimension in the
 table to represent the angular probability distribution function.  Since the 
 :math:`\chi` portion of NDPP is not concerned with the outgoing angle, and 
 therefore this extra dimension can be ignored.  Therefore the methods used to
-calculate :math:`\int\limits_{E_g}^{E_{g-1}}\chi\left(E,E'\right)dE'`, is the 
-same as is discussed in :ref:`_ace-law-4`.
+calculate :math:`\int\limits_{E_g}^{E_{g-1}}\chi\left(E,E'\right)dE'`, are the 
+same as is discussed in the Law 4 section.
 
 ----------------------------------------------------
 Creation of Union Energy Grids for :math:`\chi_g(E)`

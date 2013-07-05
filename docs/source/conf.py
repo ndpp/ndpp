@@ -38,8 +38,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'OpenMC'
-copyright = u'2011-2012, Massachusetts Institute of Technology'
+project = u'NDPP'
+copyright = u'2013, University of Michigan and Massachusetts Institute of Technology'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -87,7 +87,8 @@ exclude_trees = []
 #pygments_style = 'bw'
 #pygments_style = 'fruity'
 #pygments_style = 'manni'
-pygments_style = 'tango'
+#pygments_style = 'tango'
+pygments_style = 'autumn'
 
 
 # A list of ignored prefixes for module index sorting.
@@ -99,8 +100,8 @@ pygments_style = 'tango'
 # The theme to use for HTML and HTML Help pages.  Major themes that come with
 # Sphinx are currently 'default' and 'sphinxdoc'.
 html_theme = 'haiku'
-#html_theme = 'altered_nature'
 #html_theme = 'sphinxdoc'
+#html_theme = 'default'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -114,14 +115,14 @@ html_theme_options = {'full_logo': True,
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
-html_title = "OpenMC Documentation"
+html_title = "NDPP Documentation"
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
 #html_short_title = None
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = '../img/openmc.png'
+html_logo = '../img/ndpp.png'
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
@@ -169,9 +170,7 @@ html_logo = '../img/openmc.png'
 #html_file_suffix = ''
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'openmcdoc'
-
-
+htmlhelp_basename = 'ndppdoc'
 
 # -- Options for LaTeX output --------------------------------------------------
 
@@ -184,13 +183,14 @@ htmlhelp_basename = 'openmcdoc'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'openmc.tex', u'OpenMC Documentation',
-   u'Massachusetts Institute of Technology', 'manual'),
+  ('index', 'ndpp.tex', u'NDPP Documentation',
+  'University of Michigan \\and Massachusetts Institute of Technology', 
+  'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.
-#latex_logo = None
+latex_logo = '../img/ndpp.png'
 
 # For "manual" documents, if this is true, then toplevel headings are parts,
 # not chapters.

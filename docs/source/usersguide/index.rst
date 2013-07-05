@@ -12,6 +12,7 @@ form more suitable for tallying in a Monte Carlo neutron transport code.
     :numbered:
     :maxdepth: 3
 
+    beginners
     install
     input
     troubleshoot
