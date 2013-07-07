@@ -11,3 +11,4 @@ Theory and Methodology
     introduction
     cross_sections
     chi
+    scatter
