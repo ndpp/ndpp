@@ -461,10 +461,7 @@ module scattdata_class
 !~         norm_tot = norm_tot + distro(1, g)
 !~         distro(:, g) = distro(:, g) * Enorm      
 !~       end do  
- 
-!!! For some reason the Energy distribution treatment of Enorm is off,
-!!! setting Enorm to one now, it just means E_bins(1) must equal 0.0 for accuracy.
-      Enorm = ONE
+      
       do g = 1, this % groups
         distro(:, g) = distro(:, g) * sigS * p_valid
         norm_tot = norm_tot + distro(1, g)
