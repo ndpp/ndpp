@@ -350,7 +350,7 @@ module scattdata_class
       integer :: iE                        ! incoming energy index (searched)
                                            ! (lower bound if Ein is provided)
       integer :: nuc_iE                    ! Energy index on the nuclide's x/s
-      real(8), pointer :: sigS_array(:)   => null() ! sigS pointer
+      real(8), pointer :: sigS_array(:) => null() ! sigS pointer
       real(8) :: Enorm                    ! Range of Energy space represented by
                                           ! this reaction
       integer :: g                        ! Group index
@@ -372,7 +372,7 @@ module scattdata_class
       
       ! Get sigS
       if ((Ein < nuc % energy(rxn % threshold)) .or. &
-        (Ein > this % E_grid(size(this % E_grid)))) then
+        (Ein > this % E_bins(size(this % E_bins)))) then
         ! This is a catch-all, our energy was below the threshold or above the
         ! max group value, 
         ! distro should be set to zero and we shall just exit this function
@@ -720,8 +720,8 @@ module scattdata_class
       allocate(pdf(NP))
       allocate(cdf(NP))
       ! Get the Eout PDF and CDF
-      pdf = data(lc + NP + 1 : lc + 2 * NP) 
-      cdf = data(lc + 2 * NP + 1 : lc + 3 * NP)
+      pdf = data(lc + 2 + NP + 1 : lc + 2 + 2 * NP) 
+      cdf = data(lc + 2 + 2 * NP + 1 : lc + 2 + 3 * NP)
       
       if (edist % law  == 44) then
         lc = lc + 2
@@ -1255,43 +1255,69 @@ module scattdata_class
           iE_hi = -size(Eout)
           flo = ZERO
           fhi = ZERO
-          do iE = 1, size(Eout) - 1
-            ! Start with the lower boundary
-            if (Eout(iE) <= E_bins(g)) then 
-              ! either the group boundary is inbetween this Eout and the next,
-              ! or it is not.
-              if (Eout(iE + 1) > E_bins(g)) then
-                ! We found it! Create flo
-                if (INTT == HISTOGRAM) then
-                  interp_lo = ZERO
-                else
-                  interp_lo = (E_bins(g) - Eout(iE)) / (Eout(iE + 1) - Eout(iE))
+          if ((Eout(1) > E_bins(g)) .and. (Eout(size(Eout)) < E_bins(g + 1))) then
+            iE_lo = 1
+            interp_lo = ZERO
+            flo = fEmu(:, iE_lo)
+            iE_hi = size(Eout)
+            interp_hi = ZERO
+            fhi = fEmu(:, iE_hi)
+            
+            do iE = 1, size(Eout) - 1
+              fEmu_int(:, g) = fEmu_int(:,g) + &
+                (Eout(iE + 1) - Eout(iE)) * (fEmu(:,iE + 1) + fEmu(:,iE))
+            end do
+            
+            ! Integrate over angle
+            do imu = 1, size(mu) - 1
+              distro(:, g) = distro(:, g) + &
+                calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
+                  fEmu_int(imu, g), fEmu_int(imu + 1, g))
+            end do
+            
+            distro(:, g) = 0.5_8 * distro(:, g)
+            
+            Enorm = ONE
+            exit
+          else
+            do iE = 1, size(Eout) - 1
+              ! Start with the lower boundary
+              if (Eout(iE) <= E_bins(g)) then 
+                ! either the group boundary is inbetween this Eout and the next,
+                ! or it is not.
+                if (Eout(iE + 1) > E_bins(g)) then
+                  ! We found it! Create flo
+                  if (INTT == HISTOGRAM) then
+                    interp_lo = ZERO
+                  else
+                    interp_lo = (E_bins(g) - Eout(iE)) / (Eout(iE + 1) - Eout(iE))
+                  end if
+                  flo = (ONE - interp_lo) * fEmu(:,iE) + interp_lo * fEmu(:,iE+1)
+                  iE_lo = iE
+                  exit
                 end if
-                flo = (ONE - interp_lo) * fEmu(:,iE) + interp_lo * fEmu(:,iE+1)
-                iE_lo = iE
-                exit
               end if
-            end if
-          end do
-          ! Find the upper boundary
-          do iE = 1, size(Eout) - 1
-            if (Eout(iE) <= E_bins(g + 1)) then 
-              ! either the group boundary is inbetween this Eout and the next,
-              ! or it is not.
-              if (Eout(iE + 1) > E_bins(g + 1)) then
-                ! We found it! Create fhi
-                if (INTT == HISTOGRAM) then
-                  interp_hi = ZERO
-                else
-                  interp_hi = (E_bins(g+1) - Eout(iE)) / (Eout(iE + 1) - Eout(iE))
+            end do
+            
+            ! Find the upper boundary
+            do iE = 1, size(Eout) - 1
+              if (Eout(iE) <= E_bins(g + 1)) then 
+                ! either the group boundary is inbetween this Eout and the next,
+                ! or it is not.
+                if (Eout(iE + 1) > E_bins(g + 1)) then
+                  ! We found it! Create fhi
+                  if (INTT == HISTOGRAM) then
+                    interp_hi = ZERO
+                  else
+                    interp_hi = (E_bins(g+1) - Eout(iE)) / (Eout(iE + 1) - Eout(iE))
+                  end if
+                  fhi = (ONE - interp_hi) * fEmu(:,iE) + interp_hi * fEmu(:,iE+1)
+                  iE_hi = iE
+                  exit
                 end if
-                fhi = (ONE - interp_hi) * fEmu(:,iE) + interp_hi * fEmu(:,iE+1)
-                iE_hi = iE
-                exit
               end if
-            end if
-          end do
-          
+            end do
+          end if
           ! Now do the Eout integration
           if ((iE_lo  == size(Eout) + 1) .and. (iE_hi  == -size(Eout))) then
             ! Then the Eouts are not within this energy group
@@ -1359,6 +1385,8 @@ module scattdata_class
           interp_hi = (E_bins(size(E_bins)) - Eout(iE_hi)) /&
             (Eout(iE_hi + 1) - Eout(iE_hi))
         end if
+        
+        if (Enorm == ONE) return
         
         Enorm = (ONE - interp_hi) * cdf(iE_hi) + interp_hi * cdf(iE_hi + 1)
         Enorm = Enorm - ((ONE - interp_lo) * cdf(iE_lo) + &

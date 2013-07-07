@@ -35,9 +35,6 @@ program test_scatt
   ! Test calc_mu_bounds
   call test_calc_mu_bounds()
   
-  ! Test calc_E_bounds
-  call test_calc_E_bounds()
-  
   ! Test integrate_energyangle_file4_leg
   call test_integrate_file4_leg()
   
@@ -82,9 +79,13 @@ program test_scatt
       allocate(mySD % E_grid(2))
       allocate(mySD % distro(2))
       allocate(mySD % Eouts(2))
+      allocate(mySD % pdfs(2))
+      allocate(mySD % cdfs(2))
       do i = 1, 2
         allocate(mySD % distro(i) % data(2,2))
         allocate(mySD % Eouts(i) % data(2))
+        allocate(mySD % pdfs(i) % data(2))
+        allocate(mySD % cdfs(i) % data(2))
       end do
       allocate(mySD % INTT(2))
       allocate(mySD % mu(2))
@@ -840,7 +841,7 @@ program test_scatt
       integer :: NR, NEin, INTTp, NPEout
       real(8), allocatable :: Ein(:), P(:), L(:), Eout(:), PDF(:), CDF(:), &
                               LC(:,:), R(:), A(:), CSOUT(:,:), PDFang(:,:), &
-                              CDFang(:,:)
+                              CDFang(:,:), pdfi(:), cdfi(:), pdf_ref(:)
       integer, allocatable :: NPang(:), JJ(:)
       
       write(*,*)
@@ -865,6 +866,9 @@ program test_scatt
       PDF = (/0.5_8, 0.5_8/)
       allocate(CDF(NPEout))
       CDF = (/ZERO, ONE/)
+      allocate(pdf_ref(NPEout))
+!~       pdf_ref = (/0.25_8, 0.5_8 /)
+      pdf_ref = PDF
       
       ! Set the storage grid
       iE = 2
@@ -910,7 +914,15 @@ program test_scatt
         0.4254590641_8, 0.7014634088_8, 1.1565176427_8/)
       distro_ref(:, 2) = 0.5_8 * (/0.5409883534_8, 0.4948293954_8, &
         0.4797586878_8, 0.4948293954_8, 0.5409883534_8/)
-      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
+      ! Check that pdfi and cdfi match the expected output
+      if ((any(pdfi /= pdf_ref)) .or. (any(cdfi /= CDF))) then
+        write(*,*) pdfi
+        write(*,*) cdfi
+        write(*,*) edist % data
+        write(*,*) 'convert_file6 FAILED! (Invalid PDF & CDF Values - Law 44 INTT=1)'
+        stop 10
+      end if
       ! Check results
       if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
         (any((distro(:,2) - distro_ref(:,2)) > TEST_TOL))) then
@@ -934,6 +946,8 @@ program test_scatt
       deallocate(Eouts)
       distro = ZERO
       INTT = -1
+      deallocate(pdfi)
+      deallocate(cdfi)
       
       ! Now set INTTp > 10, and make sure we get correct results
       write(*,*) 'Testing Law 44 (INTTp > 10)'
@@ -941,8 +955,13 @@ program test_scatt
       edist % data = (/real(NR,8), real(NEin,8), Ein, L, &
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, TWO * R, TWO * A, &
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, R, A/)
-      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
       ! Check results
+      ! Check that pdfi and cdfi match the expected output
+      if ((any(pdfi /= pdf_ref)) .or. (any(cdfi /= CDF))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid PDF & CDF Values - Law 44 INTT=2)'
+        stop 10
+      end if
       if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
         (any((distro(:,2) - distro_ref(:,2)) > TEST_TOL))) then
         write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Law 44 INTT=2)'
@@ -966,6 +985,8 @@ program test_scatt
       distro = ZERO
       INTT = -1
       deallocate(edist % data)
+      deallocate(pdfi)
+      deallocate(cdfi)
       
       ! Test Law 61
       ! Set the things which dont depend on type of LDAT
@@ -984,7 +1005,12 @@ program test_scatt
       ! Set the reference solution
       distro_ref(:, 1) = 0.25_8
       distro_ref(:, 2) = 0.25_8
-      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
+      ! Check that pdfi and cdfi match the expected output
+      if ((any(pdfi /= pdf_ref)) .or. (any(cdfi /= CDF))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid PDF & CDF Values - Law 61)'
+        stop 10
+      end if
       ! Check results
       if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
         (any((distro(:,2) - distro_ref(:,2)) > TEST_TOL))) then
@@ -1009,6 +1035,8 @@ program test_scatt
       distro = ZERO
       INTT = -1
       deallocate(edist % data)
+      deallocate(pdfi)
+      deallocate(cdfi)
       
       ! Law 61, tabular 
       ! for iE = 1, will use isotropic hist and lin-lin distros
@@ -1049,7 +1077,12 @@ program test_scatt
       
       ! Test the isotropic values
       iE = 1
-      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
+      ! Check that pdfi and cdfi match the expected output
+      if ((any(pdfi /= pdf_ref)) .or. (any(cdfi /= CDF))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid PDF & CDF Values - Law 61 Iso)'
+        stop 10
+      end if
       ! Check results
       if ((any(distro(:,1) /= 0.25_8)) .or. (any(distro(:,2) /= 0.25_8))) then
         write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Law 61 Iso)'
@@ -1071,12 +1104,19 @@ program test_scatt
       deallocate(Eouts)
       distro = ZERO
       INTT = -1
+      deallocate(pdfi)
+      deallocate(cdfi)
       
       ! Test the linear values
       iE = 2
       distro_ref(:, 1) = 0.5_8 * (/ZERO, 0.2_8, 0.5_8, 0.7_8, ONE/)
       distro_ref(:, 2) = 0.5_8 * (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
-      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
+      ! Check that pdfi and cdfi match the expected output
+      if ((any(pdfi /= pdf_ref)) .or. (any(cdfi /= CDF))) then
+        write(*,*) 'convert_file6 FAILED! (Invalid PDF & CDF Values - Law 61 Lin)'
+        stop 10
+      end if
       ! Check results
       if ((any((distro(:,1) - distro_ref(:,1)) > TEST_TOL)) .or. &
         (any((distro(:,2) - distro_ref(:,2)) > TEST_TOL))) then
@@ -1100,13 +1140,21 @@ program test_scatt
       end if
       ! Reset values
       deallocate(Eouts)
+      deallocate(pdfi)
+      deallocate(cdfi)
       distro = -ONE
       INTT = -1
       
       ! Invalid Law
       write(*,*) 'Testing Invalid Law'
       edist % law = 7
-      call convert_file6(iE, mu, edist, Eouts, INTT, distro)
+      call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
+      ! Check that pdfi and cdfi match the expected output
+!~       if ((any(pdfi /= pdf_ref)) .or. (any(cdfi /= CDF))) then
+      if (allocated(pdfi) .and. allocated(cdfi)) then
+        write(*,*) 'convert_file6 FAILED! (Invalid PDF & CDF Values - Invalid Law)'
+        stop 10
+      end if
       ! Check results
       if ((any(distro(:,1) /= -ONE)) .or. (any(distro(:,2) /= -ONE))) then
         write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Invalid Law)'
@@ -1190,6 +1238,8 @@ program test_scatt
       mySD % distro (2) % data = ZERO
       ! Set other info needed in mySD
       allocate(mySD % Eouts(NE))
+      allocate(mySD % pdfs(NE))
+      allocate(mySD % cdfs(NE))
       allocate(mySD % INTT(NE))
       mySD % INTT = 0
       ! Set the angular distribution info 
@@ -1418,6 +1468,7 @@ program test_scatt
       integer              :: num_pts     ! Number of angular pts to use
       integer              :: i           ! temp loop counter
       integer              :: num_Eout    ! Number of Eout bins
+      real(8)              :: Enorm       ! Energy range normalization
       
       write(*,*)
       write(*,*) '---------------------------------------------------'
@@ -1458,14 +1509,15 @@ program test_scatt
       write(*,*) 'Testing Ein > all E_bins'
       Ein = 20.0_8
       E_bins = (/1E-11_8, ONE, TWO/)
-      call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
+      call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
+write(*,*) 'Enorm = ', Enorm      
       ! For transfer to the lower group, hand calcs show that:
       ! mu_low = -1 and mu_high = 0.22537631014397342822
       if ((any((interp(:,1) - &
-        (/ZERO, 0.2537631014397342822_8/)) > TEST_TOL)) .or. &
+        (/7.071067811865469E-6_8, 0.2537631014397342822_8/)) > TEST_TOL)) .or. &
         (any((vals(:,1) - &
-        (/-ONE, 0.22537631014397342822_8/)) > TEST_TOL)) .or. &
-        (any(bins(:,1) /= (/1, 13/)))) then
+        (/7.071067811865469E-7_8, 0.22537631014397342822_8/)) > TEST_TOL)) .or. &
+        (any(bins(:,1) /= (/11, 13/)))) then
         write(*,*) 'calc_mu_bounds FAILED! (Ein > all of E_bins, MU_LO)'
         stop 10
       end if
@@ -1488,7 +1540,8 @@ program test_scatt
       write(*,*) 'Testing Ein < all E_bins'
       Ein = 1E-11_8
       E_bins = (/ONE, TWO, 20.0_8/)
-      call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
+      call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
+write(*,*) 'Enorm = ', Enorm      
       ! Check results
       ! Since Ein < min(E_bins), we know that all mu transfers are to mu=1
       ! (and thus improbable). This means interp == 1, bins == size(mu) - 1,
@@ -1507,7 +1560,8 @@ program test_scatt
       write(*,*) 'Testing Ein within one E_bin'
       Ein = 1.5_8
       E_bins = (/ONE, TWO, 20.0_8/)
-      call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins)
+      call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
+write(*,*) 'Enorm = ', Enorm            
       ! Check results
       ! Since Ein < E_bins(2), we know that in the 1st group, the upper mu
       ! transfer is to mu=1 (like in the previous case).
@@ -1533,93 +1587,7 @@ program test_scatt
       write(*,*) '---------------------------------------------------'
       
     end subroutine test_calc_mu_bounds
-    
-!===============================================================================
-! TEST_CALC_E_BOUNDS Tests the calculation of the energy integration points 
-!===============================================================================  
-
-    subroutine test_calc_E_bounds()
-      real(8), allocatable :: E_bins(:)   ! Energy group boundaries
-      real(8), allocatable :: Eout(:)     ! Output energies
-      integer              :: INTT        ! Output energies interpolation type
-      real(8), allocatable :: interp(:,:) ! Outgoing E interpolants
-                                          ! corresponding to the energy groups
-      integer, allocatable :: bins(:,:)   ! Outgoing E indices corresponding
-                                          ! to the energy groups
-      integer              :: NEout       ! Number of Eout pts
-      integer              :: NEbins      ! Number of E_bins
-      ! Reference solution holders
-      real(8), allocatable :: interp_ref(:,:) 
-      integer, allocatable :: bins_ref(:,:)  
-      
-      write(*,*)
-      write(*,*) '---------------------------------------------------'
-      write(*,*) 'Testing calc_E_bounds'
-      write(*,*)
-      
-      ! This test will examine E_bins situated at various positions relative to
-      ! Eout (above, below, between, etc).  
-      ! We will have to do this with linear and histogram interpolations.
-      
-      ! Allocate and set up Eout
-      NEout  = 3
-      allocate(Eout(NEout))
-      Eout = (/ONE, TWO, 3.0_8/)
-      
-      ! Allocate and set up E_bins
-      NEbins = 5
-      allocate(E_bins(NEbins))
-      E_bins = (/0.25_8, 0.75_8, TWO, 2.5_8, 4.0_8/)
-      
-      ! Allocate interp, vals, bins, and their reference solution spaces
-      allocate(interp    (2, NEbins - 1))
-      allocate(bins      (2, NEbins - 1))
-      allocate(interp_ref(2, NEbins - 1))
-      allocate(bins_ref  (2, NEbins - 1))
-      
-      ! First test linear interpolation
-      write(*,*) 'Testing Linear Interpolation'
-      INTT = LINEAR_LINEAR
-      ! Set reference solution
-      bins_ref(MU_LO, :) = (/-1, -1, 2, 2/)
-      bins_ref(MU_HI, :) = (/-1, 2, 2, -2/)
-      interp_ref(MU_LO, :) = (/ZERO, ZERO, ZERO, 0.5_8/)
-      interp_ref(MU_HI, :) = (/ZERO, ZERO, 0.5_8, ZERO/)
-      call calc_E_bounds(E_bins, Eout, INTT, interp, bins)
-      ! Check results
-      if (any(bins /= bins_ref)) then
-        write(*,*) 'calc_E_bounds FAILED! (Incorrect Bins - INTT = Linear)'
-        stop 10
-      end if
-      if (any(interp /= interp_ref)) then
-        write(*,*) 'calc_E_bounds FAILED! (Incorrect Interps - INTT = Linear)'
-        stop 10
-      end if
-      
-      ! Test Histogram interpolation.
-      write(*,*) 'Testing Histogram Interpolation'
-      INTT = HISTOGRAM
-      ! Set reference solution
-      bins_ref(MU_LO, :) = (/-1, -1, 2, 2/)
-      bins_ref(MU_HI, :) = (/-1, 2, 2, -2/)
-      interp_ref = -interp_ref
-      call calc_E_bounds(E_bins, Eout, INTT, interp, bins)
-      ! Check results
-      if (any(bins /= bins_ref)) then
-        write(*,*) 'calc_E_bounds FAILED! (Incorrect Bins - INTT = Histogram)'
-        stop 10
-      end if
-      if (any(interp /= interp_ref)) then
-        write(*,*) 'calc_E_bounds FAILED! (Incorrect Interps - INTT = Histogram)'
-        stop 10
-      end if
-      
-      write(*,*)
-      write(*,*) 'calc_E_bounds Passed!'
-      write(*,*) '---------------------------------------------------'
-
-    end subroutine test_calc_E_bounds
-     
+   
 !===============================================================================
 ! TEST_INTEGRATE_FILE4_LEG Tests the ability to integrate a set of file 4 
 ! distributions to produce Legendre moments.
@@ -1752,9 +1720,6 @@ program test_scatt
       real(8), allocatable :: mu(:)           ! fEmu angular grid
       real(8), allocatable :: Eout(:)         ! Outgoing energies
       real(8), allocatable :: E_bins(:)       ! Energy grp boundaries
-      real(8), allocatable :: interp(:,:)     ! interpolants of E values
-      integer, allocatable :: bins(:,:)       ! indices of fEmu corresponding to
-                                              ! the group boundaries
       integer              :: order           ! Number of moments to find
       real(8), allocatable :: distro(:,:)     ! Resultant integrated distribution
       
@@ -1763,6 +1728,10 @@ program test_scatt
       integer              :: num_pts, num_G  ! Number of mu pts and energy grps
       integer              :: num_Eout, iE    ! Number of outgoing E pts, and index
       real(8)              :: dmu             ! mu spacing
+      real(8)              :: Enorm           ! Energy range normalization
+      integer              :: INTT            ! Interpolation type
+      real(8), allocatable :: CDF(:)          ! Cumulative dist. function of Eouts
+      
       
       write(*,*)
       write(*,*) '---------------------------------------------------'
@@ -1807,11 +1776,9 @@ program test_scatt
       ! Set Eout
       allocate(Eout(num_Eout))
       Eout = 1.5_8
-      ! Set the bins and interp vals
-      allocate(bins(2, num_G))
-      bins(:, 1) = (/1, 1/)
-      allocate(interp(2, num_G))
-      interp(:, 1) = (/0.5_8, ONE/)
+      ! Allocate CDF as needed
+      allocate(CDF(num_Eout))
+      CDF = ONE
       ! Allocate and ready distro
       allocate(distro(order, num_G))
       distro = ZERO
@@ -1819,16 +1786,22 @@ program test_scatt
       allocate(distro_ref(order, num_G))
       distro_ref(:,1) = (/ONE, ONE / 3.0_8, ZERO, ZERO, ZERO, ZERO/)
       ! Run the calcs!
-      call integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
-        bins, order - 1, distro)
+      call integrate_energyangle_file6_leg(fEmu, mu, Eout, INTT, CDF, E_bins, &
+        order - 1, distro, Enorm)
+      
       ! Test the results
+      if (Enorm /= ONE) then
+        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Enorm, Case 1)'
+        write(*,*) Enorm
+        stop 10
+      end if
       if (any(abs(distro - distro_ref) > TEST_TOL)) then
         write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 1)'
         write(*,*) abs(distro(:,1)-distro_ref(:,1))
         stop 10
       end if
       ! Deallocs to get ready for case 2
-      deallocate(E_bins, fEmu, Eout, bins, interp, distro, distro_ref)
+      deallocate(E_bins, fEmu, Eout, CDF, distro, distro_ref)
       
       ! Case 2, all groups within one set of Eouts
       write(*,*) 'Testing Multiple Groups within two Eout points'
@@ -1847,13 +1820,9 @@ program test_scatt
       ! Set Eout
       allocate(Eout(num_Eout))
       Eout = (/ONE, 3.0_8/)
-      ! Set the bins and interp vals
-      allocate(bins(2, num_G))
-      bins(:, 1) = (/1, 1/)
-      bins(:, 2) = (/1, 1/)
-      allocate(interp(2, num_G))
-      interp(:, 1) = (/ ZERO, 0.5_8/)
-      interp(:, 2) = (/0.5_8,   ONE/)
+      ! Allocate CDF as needed
+      allocate(CDF(num_Eout))
+      CDF = ONE
       ! Allocate and ready distro
       allocate(distro(order, num_G))
       distro = ZERO
@@ -1863,9 +1832,15 @@ program test_scatt
       distro_ref(:, 1) = (/ONE, ONE / 12.0_8, ZERO, ZERO, ZERO, ZERO/)
       distro_ref(:, 2) = (/ONE, ONE / 4.0_8, ZERO, ZERO, ZERO, ZERO/)
       ! Run the calcs!
-      call integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
-        bins, order - 1, distro)
+      call integrate_energyangle_file6_leg(fEmu, mu, Eout, INTT, CDF, E_bins, &
+        order - 1, distro, Enorm)
+      
       ! Test the results
+      if (Enorm /= ONE) then
+        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Enorm, Case 2)'
+        write(*,*) Enorm
+        stop 10
+      end if
       if (any(abs(distro - distro_ref) > TEST_TOL)) then
         write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 2)'
         write(*,*) abs(distro(:,1)-distro_ref(:,1))
@@ -1873,7 +1848,7 @@ program test_scatt
         stop 10
       end if
       ! Deallocs to get ready for case 3
-      deallocate(E_bins, fEmu, Eout, bins, interp, distro, distro_ref)
+      deallocate(E_bins, fEmu, Eout, CDF, distro, distro_ref)
       
       ! Case 3, groups spanning multiple Eout points
       ! Will do with 1 group that surrounds 3 Eouts
@@ -1885,6 +1860,9 @@ program test_scatt
       num_Eout = 3
       allocate(Eout(num_Eout))
       Eout = (/ONE, TWO, 3.0_8/)
+      ! Allocate CDF as needed
+      allocate(CDF(num_Eout))
+      CDF = ONE
       E_bins = (/ZERO, 4.0_8/)
       ! Set angular distribution to isotropic at the lower Eout, 
       ! increasing linearly anisotropic at the middle Eout
@@ -1895,25 +1873,27 @@ program test_scatt
         fEmu(imu, 2) = 0.5_8 * (mu(imu) + ONE)
         fEmu(imu, 3) = -0.5_8 * mu(imu) + 0.5_8
       end do
-      ! Set the bins and interp vals
-      allocate(bins(2, num_G))
-      bins(:, 1) = (/-1, -(num_Eout-1)/)
-      allocate(interp(2, num_G))
-      interp(:, 1) = (/ZERO, ZERO/)
       ! Allocate and ready distro
       allocate(distro(order, num_G))
       distro = ZERO
       ! Set the reference solution
       allocate(distro_ref(order, num_G))
       ! These are calculated in the Sage worksheet associated with this test.
-      distro_ref(:, 1) = (/ONE, ONE / 12.0_8, ZERO, ZERO, ZERO, ZERO/)
+      distro_ref(:, 1) = TWO * (/ONE, ONE / 12.0_8, ZERO, ZERO, ZERO, ZERO/)
       ! Run the calcs!
-      call integrate_energyangle_file6_leg(fEmu, mu, Eout, E_bins, interp, &
-        bins, order - 1, distro)
+      call integrate_energyangle_file6_leg(fEmu, mu, Eout, INTT, CDF, E_bins, &
+        order - 1, distro, Enorm)
       ! Test the results
+      if (Enorm /= ONE) then
+        write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Enorm, Case 3)'
+        write(*,*) Enorm
+        stop 10
+      end if
       if (any(abs(distro - distro_ref) > TEST_TOL)) then
         write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Case 3)'
         write(*,*) abs(distro(:,1)-distro_ref(:,1))
+        write(*,*) distro(:,1)
+        write(*,*) distro_ref(:,1)
         stop 10
       end if
       
@@ -1940,6 +1920,7 @@ program test_scatt
       real(8)                   :: dmu     ! delta-mu
       real(8)                   :: Ein
       integer                   :: imu     ! Loop counter
+      real(8)                   :: norm_tot ! Total normalization constant
       
       ! interp_distro takes an array of distributions in this % distro,
       ! and an incoming energy, stores the result in the result(distro).
@@ -2011,6 +1992,9 @@ program test_scatt
       allocate(mySD % E_bins(mySD % groups + 1))
       mySD % E_bins = (/1E-11_8, 20.0_8/)
       
+      ! Set norm_tot (just to one)
+      norm_tot = ONE
+      
       ! Now lets do an elastic distribution
       mySD % rxn => rxn(1)
       mySD % adist => rxn(1) % adist
@@ -2028,7 +2012,7 @@ program test_scatt
       Ein = 1.5_8
       ! Calculate the resultant distro
       allocate(distro_out(mySD % order + 1, mySD % groups))
-      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein, norm_tot)
       ! Set the reference solution
       ! The reference is simply the linear distribution converted to lab,
       ! multiplied by sigS (which is 0.75 due to interpolation). 
@@ -2050,7 +2034,7 @@ program test_scatt
       nullify(mySD % adist)
       mySD % edist => myedist
       distro_out = ZERO
-      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein, norm_tot)
       ! Set the reference solution
       distro_ref = ZERO
       if (any(abs(distro_out - distro_ref) > TEST_TOL)) then
@@ -2070,21 +2054,26 @@ program test_scatt
       mySD % Eouts(1) % data(1) = ONE
       allocate(mySD % Eouts(2) % data(1))
       mySD % Eouts(2) % data(1) = TWO
+      allocate(mySD % cdfs(mySD % NE))
+      allocate(mySD % cdfs(1) % data(1))
+      mySD % cdfs(1) % data = ONE
+      allocate(mySD % cdfs(2) % data(1))
+      mySD % cdfs(2) % data = ONE
       allocate(mySD % INTT(mySD % NE))
       mySD % INTT = LINEAR_LINEAR
       distro_out = ZERO
-      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein, norm_tot)
       ! Set the reference solution (2/.75 is to use the same reference
       ! as the first (elastic) case, but modifying it for the multiplicative
       ! constants out front.
       distro_ref(:,1) = TWO / 0.75_8 * (/0.75_8, 0.4625_8, 0.177758602769303_8, &
         0.0428571428571428_8, 0.00554988817179086_8, ZERO/)
-      if (any(abs(distro_out - distro_ref) > 1.0E-7_8)) then
+      if (any(abs(distro_out - distro_ref) > 3.0E-7_8)) then
         write(*,*) 'interp_distro FAILED! (Inelastic, >  Max Ein)'
         write(*,*) distro_out
         write(*,*) distro_ref
-        write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1)))
-        write(*,*) maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
+        write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1))), &
+          maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
         stop 10
       end if
       
@@ -2093,12 +2082,10 @@ program test_scatt
       ! What the heck, lets turn back on CM2Lab
       rxn % scatter_in_cm = .true.
       distro_out = ZERO
-      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
+      distro_out = mySD % interp_distro(mu_out, nuc, Ein, norm_tot)
       ! Set the reference solution
-!~       distro_ref(:,1) = (/0.605_8, 0.201666666666667_8, 0.0314322417310492_8, &
-!~         ZERO, -0.000696052807637037_8, ZERO/)
       distro_ref(:,1) = (/0.605_8, 0.218808318025869_8, 0.04262821170956291_8, &
-        3.457142468377673E-03_8, -1.787565480908065E-04_8, ZERO/)
+        3.457142468377673E-03_8, -1.787565480908065E-04_8, ZERO/) / 0.55_8
       if (any(abs(distro_out - distro_ref) > 1.0E-7_8)) then
         write(*,*) 'interp_distro FAILED! (Inelastic, w/in Ein range)'
         write(*,*) distro_out
@@ -2109,19 +2096,19 @@ program test_scatt
       end if
       
       ! Test tabular response type
-      distro_out = ZERO
-      mySD % scatt_type = SCATT_TYPE_TABULAR
-      distro_out = mySD % interp_distro(mu_out, nuc, Ein)
-      ! Set the reference solution
-      distro_ref = ZERO
-      if (any(abs(distro_out - distro_ref(1:5,:)) > TEST_TOL)) then
-        write(*,*) 'interp_distro FAILED! (Tabular)'
-        write(*,*) distro_out
-        write(*,*) distro_ref
-        write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1)))
-        write(*,*) maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
-        stop 10
-      end if
+!~       distro_out = ZERO
+!~       mySD % scatt_type = SCATT_TYPE_TABULAR
+!~       distro_out = mySD % interp_distro(mu_out, nuc, Ein, norm_tot)
+!~       ! Set the reference solution
+!~       distro_ref = ZERO
+!~       if (any(abs(distro_out - distro_ref(1:5,:)) > TEST_TOL)) then
+!~         write(*,*) 'interp_distro FAILED! (Tabular)'
+!~         write(*,*) distro_out
+!~         write(*,*) distro_ref
+!~         write(*,*) maxval(abs(distro_out(:,1)-distro_ref(:,1)))
+!~         write(*,*) maxloc(abs(distro_out(:,1)-distro_ref(:,1)))
+!~         stop 10
+!~       end if
       
       write(*,*)
       write(*,*) 'interp_distro Test Passed!'
