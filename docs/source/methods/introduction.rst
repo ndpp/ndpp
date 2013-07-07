@@ -34,8 +34,7 @@ present in the continuous-energy ACE file.  In the above example of multi-group
 scattering moments, the :math:`f_{n,MT}(E',E,\mu)` is tabulated in the ACE file
 as a function of the incoming energy, :math:`E'`. If this continuous functional
 form is tallied instead of a discrete event (like with an analog estimator), the
-tally will see an increase in the rate of convergence, as discussed in 
-`Moment Tally`_.
+tallies' rate of convergence will increased, as discussed in `Moment Tally`_.
 
 However, these functions exist in various, non-concise forms within the ACE 
 data.  To convert these functions to a consistent and concise format such as
@@ -81,20 +80,20 @@ requested by the user:
   2.b. Write the header information for the pre-processed data library to be 
   output from NDPP.
 
-  2.c. For each scattering reaction type, progress through each of the incoming
+  2.c. For each scattering reaction type, step through each of the incoming
   energies and perform the following:
 
-    2.c.1. Determine the angular distribution boundaries which correspond 
+    2.c.1. Determine the angular distribution boundaries corresponding 
     to the energy group structure requested.
      
     2.c.2. Perform integration over the outgoing energy and angle 
-    dimensions to generate Legendre moments or histogram bins as 
+    dimensions to generate Legendre moments or tabular bins as 
     requested.
 
   2.d. Combine all the reaction type's data on to a unionized incoming energy 
   grid.
 
-  2.e. If the user requested thinning of this grid, perform thinning.
+  2.e. Perform optional energy grid thinning.
 
   2.f. Write the scattering data to the output library.
 
@@ -103,6 +102,8 @@ requested by the user:
 
 3. Print NDPP summary output data for the user's information.
 
-
 .. _Monte Carlo: http://en.wikipedia.org/wiki/Monte_Carlo_method
-.. _Moment Tally: need_to_cite
+.. _Moment Tally: Adam G. Nelson and William R. Martin, "Improved Convergence of Monte Carlo
+  Generated Multi-Group Scattering Moments," *Proc. Int. Conf. Mathematics and
+  Computational Methods Applied to Nuclear Science and Engineering*, Sun Valley,
+  Idaho, May 5--9 (2013).

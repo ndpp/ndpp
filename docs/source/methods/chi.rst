@@ -119,8 +119,7 @@ relation:
 .. math::
     \int\limits_{E_g}^{E_{g-1}}\chi\left(E,E'\right)dE' =\ 
         c \left(\frac{1}{2}\sqrt{\pi}\left(T(E)\right)^{\frac{3}{2}} 
-        erf\left(\frac{E'}{T(E)}\right)-
-        T(E)\sqrt{E'}\exp{-\frac{E'}{T(E)}}} \right)
+        erf\left(\frac{E'}{T(E)}\right)-T(E)\sqrt{E'}\exp{-\frac{E'}{T(E)}}\right)
 
 This integral is forced to 0 for values of E' greater than the restriction
 energy, :math:`U(E)`. 
@@ -217,21 +216,6 @@ user-specified tolerance when linear interpolation with neighboring points is
 used instead of the explicit value are discared from the data. 
 
 
-This feature is not yet implemented.
+`This feature is not yet implemented.`
 
-----------
-References
-----------
-
-.. |sab| replace:: S(:math:`\alpha,\beta,T`)
-
-.. _Foderaro: http://hdl.handle.net/1721.1/1716
-
-.. _OECD: http://www.oecd-nea.org/dbprog/MMRW-BOOKS.html
-
-.. _NJOY: http://t2.lanl.gov/codes.shtml
-
-.. _PREPRO: http://www-nds.iaea.org/ndspub/endf/prepro/
-
-.. _ENDF-6 Format: http://www-nds.iaea.org/ndspub/documents/endf/endf102/endf102.pdf
 
