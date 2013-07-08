@@ -723,10 +723,6 @@ module scattdata_class
       if (edist % law  == 44) then
         lc = lc + 2
         do iEout = 1, NP
-          ! Normalize the PDF (ACE has it as pdf / (Ehigh - Elow)
-          if (iEout < NP) then
-            pdf(iEout) = pdf(iEout)! * (Eouts(iEout + 1) - Eouts(iEout))
-          end if
           ! Get the KM parameters
           KMR = data(lc + 3 * NP + iEout)
           KMA = data(lc + 4 * NP + iEout)
@@ -738,11 +734,6 @@ module scattdata_class
       else if (edist % law  == 61) then
         lcin = lc + 2
         do iEout = 1, NP
-          ! Normalize the PDF (ACE has it as pdf / (Ehigh - Elow)
-          if (iEout < NP) then
-            pdf(iEout) = pdf(iEout)! * (Eouts(iEout + 1) - Eouts(iEout))
-          end if
-          
           lc = int(data(lcin + 3*NP + iEout))
           
           ! Check if isotropic
