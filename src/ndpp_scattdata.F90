@@ -454,19 +454,14 @@ module scattdata_class
       end if
       
       ! Combine the results, normalizing by the total probability of transfer
-      ! from all energies to the energy range represented in the outgoing groups    
-!~       do g = 1, this % groups
-!~         distro(:, g) = distro(:, g) * sigS * p_valid * &
-!~           real(rxn % multiplicity, 8)
-!~         norm_tot = norm_tot + distro(1, g)
-!~         distro(:, g) = distro(:, g) * Enorm      
-!~       end do  
+      ! from all energies to the energy range represented in the outgoing groups      
       
+      ! Combine the terms to one before multiplying
+      sigS = sigS * p_valid * real(rxn % multiplicity, 8)
       do g = 1, this % groups
-        distro(:, g) = distro(:, g) * sigS * p_valid
-        norm_tot = norm_tot + distro(1, g)
-        distro(:, g) = distro(:, g) * Enorm  * real(rxn % multiplicity, 8)  
+        distro(:, g) = distro(:, g) * sigS
       end do  
+      norm_tot = norm_tot + sigS / real(rxn % multiplicity) ! Dont include the TY
       
     end function scatt_interp_distro
 
