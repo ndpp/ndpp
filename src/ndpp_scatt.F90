@@ -162,7 +162,7 @@ module ndpp_scatt
           scatt_mat(:, :, iE) = ZERO
           norm_tot = ZERO
           do irxn = 1, Nrxn
-            mySD => rxn_data(irxn)
+            mySD => rxn_data(irxn)          
             ! If we do not have a scatter reaction, don't score it.
             if (.not. mySD % is_init) cycle
             ! Add the scattering distribution to the union scattering grid

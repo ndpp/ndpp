@@ -457,11 +457,12 @@ module scattdata_class
       ! from all energies to the energy range represented in the outgoing groups      
       
       ! Combine the terms to one before multiplying
-      sigS = sigS * p_valid * real(rxn % multiplicity, 8)
+      sigS = sigS * p_valid! * real(rxn % multiplicity, 8)
       do g = 1, this % groups
         distro(:, g) = distro(:, g) * sigS
       end do  
-      norm_tot = norm_tot + sigS / real(rxn % multiplicity) ! Dont include the TY
+      ! Add this contribution to the normalization constant
+      norm_tot = norm_tot + sigS! / real(rxn % multiplicity, 8) ! Forget TY
       
     end function scatt_interp_distro
 
@@ -549,8 +550,9 @@ module scattdata_class
         else if (associated(this % edist)) then
           ! 3) integrate according to scatt_type
           call integrate_energyangle_file6_leg(distro_lab, this % mu, &
-            this % Eouts(iE) % data, this % INTT(iE), this % cdfs(iE) % data, &
-            this % E_bins, this % order, result_distro, temp_Enorm)
+            this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
+            this % E_bins, this % order, result_distro, temp_Enorm) 
+          
         end if
       case (SCATT_TYPE_TABULAR)
         
@@ -721,9 +723,8 @@ module scattdata_class
           ! Get the KM parameters
           KMR = data(lc + 3 * NP + iEout)
           KMA = data(lc + 4 * NP + iEout)
-          ! Calculate the leading term and multiply by the probability of this
-          ! Eout distribution
-          KMconst = 0.5_8 * KMA / sinh(KMA) * pdf(iEout)
+          ! Calculate the leading term
+          KMconst = 0.5_8 * KMA / sinh(KMA)
           distro(:, iEout) = KMconst * (cosh(KMA * mu(:)) + KMR * sinh(KMA * mu(:)))
         end do
       else if (edist % law  == 61) then
@@ -733,7 +734,7 @@ module scattdata_class
           
           ! Check if isotropic
           if (lc == 0) then
-            distro(:, iEout) = 0.5_8 * pdf(iEout)
+            distro(:, iEout) = 0.5_8
             cycle
           end if
           
@@ -784,7 +785,7 @@ module scattdata_class
           end if 
           
           ! Multiply by the PDF from ENDF
-          distro(:, iEout) = distro(:, iEout) * pdf(iEout)
+          distro(:, iEout) = distro(:, iEout)
           
         end do
       end if
@@ -1199,186 +1200,103 @@ module scattdata_class
       
     end subroutine integrate_energyangle_file4_leg
     
-    subroutine integrate_energyangle_file6_leg(fEmu, mu, Eout, INTT, cdf, &
+    subroutine integrate_energyangle_file6_leg(fEmu, mu, Eout, INTT, thispdf, &
       E_bins, order, distro, Enorm)
       
-      real(8), intent(in)  :: fEmu(:,:)   ! Energy-angle distro to act on
-      real(8), intent(in)  :: mu(:)       ! fEmu angular grid
-      real(8), intent(in)  :: Eout(:)     ! Outgoing energies
-      integer, intent(in)  :: INTT        ! Interpolation type (Hist || Lin-Lin)
-      real(8), intent(in)  :: cdf(:)      ! Outgoing E-dist CDF
-      real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
-      integer, intent(in)  :: order       ! Number of moments to find
-      real(8), intent(out) :: distro(:,:) ! Resultant integrated distro
-      real(8), intent(out) :: Enorm       ! Fraction of possible energy space
-                                          ! of this Ein reaction represented by 
-                                          ! the energy group structure of the 
-                                          ! problem
-      
-      real(8), allocatable :: fEmu_int(:,:) ! Integrated (over E) fEmu
-      integer :: g           ! Energy group index
-      integer :: imu         ! angular grid index
-      integer :: iE          ! outgoing energy grid index
-      real(8), allocatable :: flo(:), fhi(:)  ! interpolated value of fEmu(imu,Eout)
+      real(8), intent(in)    :: fEmu(:,:)     ! Energy-angle distro to act on
+      real(8), intent(in)    :: mu(:)         ! fEmu angular grid
+      real(8), intent(in)    :: Eout(:)       ! Outgoing energies
+      integer, intent(in)    :: INTT          ! Interpolation type (Hist || Lin-Lin)
+      real(8), intent(in)    :: thispdf(:)    ! Outgoing E-dist PDF from mySD
+      real(8), intent(in)    :: E_bins(:)     ! Energy group boundaries
+      integer, intent(in)    :: order         ! Number of moments to find
+      real(8), intent(out)   :: distro(:,:)   ! Resultant integrated distro
+      real(8), intent(inout) :: Enorm         ! Energy normalization, will be one.
+                             
+      real(8), allocatable   :: fEmu_int(:,:) ! Integrated (over E) fEmu
+      real(8), allocatable   :: pdf(:)        ! local version of pdf to mess with
+      integer :: g            ! Energy group index
+      integer :: imu          ! angular grid index
+      integer :: iE           ! outgoing energy grid index
+      integer :: NEout        ! Number of outgoing energies
       integer :: iE_lo, iE_hi ! tmp val of bins(MU_LO, g)
-      real(8) :: interp_lo, interp_hi  ! tmp val of interpolation params
+      real(8) :: f_lo, f_hi   ! Interpolation for lo and hi
       
       allocate(fEmu_int(size(mu), size(E_bins) - 1))
       fEmu_int = ZERO
-      allocate(flo(size(mu)))
-      allocate(fhi(size(mu)))
+      NEout = size(Eout)
       
-      if (size(Eout) > 1) then
+      Enorm = ONE
+      
+      ! First lets normalize the PDF
+      allocate(pdf(NEout))
+      do iE = 1, NEout - 1
+        pdf(iE) = thispdf(iE) * (Eout(iE + 1) - Eout(iE))
+      end do
+      
+      if (NEout > 1) then
         ! This branch will perform integration of the outgoing energy of fEmu
-        ! over each energy group in E_bins. This will be done with trapezoidal
-        ! integration  
-        ! Trapezoidal integration = 1/2 * (b-a)*(f(b)+f(a))
+        ! over each energy group in E_bins. 
+        ! Since sum(p(E)*deltaE) = 1.0, we know how to do our integration.
+        ! sum(f(E)*p(E)*deltaE)
         do g = 1, size(E_bins) - 1
-          iE_lo = size(Eout) + 1
-          iE_hi = -size(Eout)
-          flo = ZERO
-          fhi = ZERO
-          if ((Eout(1) > E_bins(g)) .and. (Eout(size(Eout)) < E_bins(g + 1))) then
+          ! Find iE_lo, and add the first term to fEmu_int
+          if (E_bins(g) < Eout(1)) then
+            ! We need to skip this lower bound
             iE_lo = 1
-            interp_lo = ZERO
-            flo = fEmu(:, iE_lo)
-            iE_hi = size(Eout)
-            interp_hi = ZERO
-            fhi = fEmu(:, iE_hi)
             
-            do iE = 1, size(Eout) - 1
-              fEmu_int(:, g) = fEmu_int(:,g) + &
-                (Eout(iE + 1) - Eout(iE)) * (fEmu(:,iE + 1) + fEmu(:,iE))
-            end do
-            
-            ! Integrate over angle
-            do imu = 1, size(mu) - 1
-              distro(:, g) = distro(:, g) + &
-                calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
-                  fEmu_int(imu, g), fEmu_int(imu + 1, g))
-            end do
-            
-            distro(:, g) = 0.5_8 * distro(:, g)
-            
-            Enorm = ONE
-            exit
-          else
-            do iE = 1, size(Eout) - 1
-              ! Start with the lower boundary
-              if (Eout(iE) <= E_bins(g)) then 
-                ! either the group boundary is inbetween this Eout and the next,
-                ! or it is not.
-                if (Eout(iE + 1) > E_bins(g)) then
-                  ! We found it! Create flo
-                  if (INTT == HISTOGRAM) then
-                    interp_lo = ZERO
-                  else
-                    interp_lo = (E_bins(g) - Eout(iE)) / (Eout(iE + 1) - Eout(iE))
-                  end if
-                  flo = (ONE - interp_lo) * fEmu(:,iE) + interp_lo * fEmu(:,iE+1)
-                  iE_lo = iE
-                  exit
-                end if
-              end if
-            end do
-            
-            ! Find the upper boundary
-            do iE = 1, size(Eout) - 1
-              if (Eout(iE) <= E_bins(g + 1)) then 
-                ! either the group boundary is inbetween this Eout and the next,
-                ! or it is not.
-                if (Eout(iE + 1) > E_bins(g + 1)) then
-                  ! We found it! Create fhi
-                  if (INTT == HISTOGRAM) then
-                    interp_hi = ZERO
-                  else
-                    interp_hi = (E_bins(g+1) - Eout(iE)) / (Eout(iE + 1) - Eout(iE))
-                  end if
-                  fhi = (ONE - interp_hi) * fEmu(:,iE) + interp_hi * fEmu(:,iE+1)
-                  iE_hi = iE
-                  exit
-                end if
-              end if
-            end do
-          end if
-          ! Now do the Eout integration
-          if ((iE_lo  == size(Eout) + 1) .and. (iE_hi  == -size(Eout))) then
-            ! Then the Eouts are not within this energy group
+          else if (E_bins(g) >= Eout(NEout)) then
+            ! In this case, the lower group boundary is above all energies;
+            ! this means the group is outside the Eout range, and thus this group
+            ! has a zero distribution
             distro(:, g) = ZERO
-          else if (iE_lo == iE_hi) then
-            ! The Eout distributions are within the same bin, only one
-            ! set of fhi and flo need to be integrated
-            fEmu_int(:, g) = (E_bins(g + 1) - E_bins(g)) * (fhi(:) + flo(:))
-            ! Integrate over angle
-            do imu = 1, size(mu) - 1
-              distro(:, g) = distro(:, g) + &
-                calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
-                  fEmu_int(imu, g), fEmu_int(imu + 1, g))
-            end do
-            
-            ! Since we used trapezoidal integration, multiply by 0.5 (skipped before)
-            distro(:, g) = 0.5_8 * distro(:, g)
+            cycle
             
           else
-            fEmu_int(:, g) = (Eout(iE_lo + 1) - E_bins(g)) * &
-              (fEmu(:, iE_lo + 1) + flo(:))
-            do iE = iE_lo + 1, abs(iE_hi) - 1
-              fEmu_int(:, g) = fEmu_int(:,g) + &
-                (Eout(iE + 1) - Eout(iE)) * (fEmu(:,iE + 1) + fEmu(:,iE))
-            end do
-            if (iE_hi > 0) then
-              fEmu_int(:, g) = fEmu_int(:,g) + &
-                (E_bins(g + 1) - Eout(iE_hi)) * (fhi(:) + fEmu(:, iE_hi))
-            end if
-            
-            ! Integrate over angle
-            do imu = 1, size(mu) - 1
-              distro(:, g) = distro(:, g) + &
-                calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
-                  fEmu_int(imu, g), fEmu_int(imu + 1, g))
-            end do
-            
-            ! Since we used trapezoidal integration, multiply by 0.5 (skipped before)
-            distro(:, g) = 0.5_8 * distro(:, g)
+            ! The group boundary is inbetween 2 Eout pts. Interpolate.
+            iE_lo = binary_search(Eout, NEout, E_bins(g))
+            f_lo = (E_bins(g) - Eout(iE_lo)) / (Eout(iE_lo + 1) - Eout(iE_lo))
+
+            fEmu_int(:, g) = fEmu_int(:, g) + f_lo * pdf(iE_lo) * fEmu(:, iE_lo)
+            iE_lo = iE_lo + 1
             
           end if
+          ! Find iE_hi and add the last term to fEmu_int
+          if (E_bins(g + 1) < Eout(1)) then
+            ! We can skip this group completely then
+            distro(:, g) = ZERO
+            cycle
+          else if (E_bins(g + 1) >= Eout(NEout)) then
+            ! The upper grp boundary is above Eout, and so its value is zero
+            ! We therefore dont need to add its contribution to the integral
+            iE_hi = NEout - 1
+          else
+            ! The group boundary is inbetween 2 Eout pts. Interpolate.
+            iE_hi = binary_search(Eout, NEout, E_bins(g + 1))
+            f_hi = (E_bins(g + 1) - Eout(iE_hi)) / (Eout(iE_hi + 1) - Eout(iE_hi))
+
+            fEmu_int(:, g) = fEmu_int(:, g) + f_hi * pdf(iE_hi) * &
+              fEmu(:, iE_hi)
+            iE_hi = iE_hi - 1
+          end if
+          
+          ! Now we can do the intermediate points
+          do iE = iE_lo, iE_hi
+            fEmu_int(:, g) = fEmu_int(:, g) + pdf(iE) * fEmu(:, iE)
+          end do
+          
+          ! Perform the legendre expansion, and divide by two from trapezoid int
+          do imu = 1, size(mu) - 1
+            distro(:, g) = distro(:, g) + &
+              calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
+                fEmu_int(imu, g), fEmu_int(imu + 1, g))
+          end do
+          
         end do
-        
-        ! Calculate Enorm
-        ! Do this by passing finding where E_bins(1) and E_bins(size(E_bins)) are
-        ! in Eout, and finding CDF(E_bins(size(E_bins))) - CDF(E_bins(1))
-        if (E_bins(1) <= Eout(1)) then
-          iE_lo = 1
-          interp_lo = ZERO
-        else if (E_bins(1) >= Eout(size(Eout))) then
-          iE_lo = size(Eout) - 1
-          interp_lo = ONE
-        else
-          iE_lo = binary_search(Eout, size(Eout), E_bins(1))
-          interp_lo = (E_bins(1) - Eout(iE_lo)) / (Eout(iE_lo + 1) - Eout(iE_lo))
-        end if
-        if (E_bins(size(E_bins)) <= Eout(1)) then
-          iE_hi = 1
-          interp_hi = ZERO
-        else if (E_bins(size(E_bins)) >= Eout(size(Eout))) then
-          iE_hi = size(Eout) - 1
-          interp_hi = ONE
-        else
-          iE_hi = binary_search(Eout, size(Eout), E_bins(size(E_bins)))
-          interp_hi = (E_bins(size(E_bins)) - Eout(iE_hi)) /&
-            (Eout(iE_hi + 1) - Eout(iE_hi))
-        end if
-        
-        if (Enorm == ONE) return
-        
-        Enorm = (ONE - interp_hi) * cdf(iE_hi) + interp_hi * cdf(iE_hi + 1)
-        Enorm = Enorm - ((ONE - interp_lo) * cdf(iE_lo) + &
-          interp_lo * cdf(iE_lo + 1))
         
       else
         ! We do not need to integrate at all, just set distro = fEmu if its'
         ! Eout is in that group (where each group is (Emin, Emax])
-        Enorm = ZERO
         do g = 1, size(E_bins) - 1
           if ((Eout(1) > E_bins(g)) .and. (Eout(1) <= E_bins(g + 1))) then
             ! Perform the legendre expansion
@@ -1387,10 +1305,8 @@ module scattdata_class
                 calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
                   fEmu(imu, 1), fEmu(imu + 1, 1))
             end do
-            Enorm = ONE
           else
             distro(:, g) = ZERO
-            Enorm = ZERO
           end if
         end do
       end if
