@@ -438,7 +438,7 @@ contains
   subroutine hdf5_write_attribute_string(group, var, attr_type, attr_str)
 
     integer(HID_T), intent(in) :: group     ! name of group
-    character(*),   intent(in) :: var       ! name of varaible to set attr
+    character(*),   intent(in) :: var       ! name of variable to set attr
     character(*),   intent(in) :: attr_type ! the attr type id
     character(*),   intent(in) :: attr_str  ! attribute sting
 

@@ -241,8 +241,8 @@ module ndpp_scatt
       call print_scatt_bin(data, E_grid, maxiE, tol)
     else if (lib_format == HUMAN) then
       call print_scatt_human(data, E_grid, maxiE, tol)
-    else if (lib_format == HDF5) then
-      ! TBI
+    else if (lib_format == H5) then
+      call print_scatt_hdf5(data, E_grid, maxiE, tol)
     end if
     
   end subroutine print_scatt
@@ -354,11 +354,10 @@ module ndpp_scatt
     end do
     
   end subroutine print_scatt_human
-  
-  
-  !===============================================================================
+    
+!===============================================================================
 ! PRINT_SCATT_BIN prints the scattering data to the specified output file
-! in in native Fortran stream format.
+! in a native Fortran stream format.
 !===============================================================================
      
   subroutine print_scatt_bin(data, E_grid, maxiE, tol)
@@ -409,5 +408,60 @@ module ndpp_scatt
     end do
     
   end subroutine print_scatt_bin
+    
+!===============================================================================
+! PRINT_SCATT_HDF5 prints the scattering data to the specified output group
+! with the HDF5 library.
+!===============================================================================
+     
+  subroutine print_scatt_hdf5(data, E_grid, maxiE, tol)
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
+                                                    ! (order x g x Ein)
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
+    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
+    real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
+                                                    ! to keep
+    integer :: g, gmin, gmax, iE
+
+#ifdef HDF5
+    ! Assumes that the file and header information is already printed 
+    ! (including # of groups and bins, and thinning tolerance)
+    ! Will follow this format: 
+    ! <size of incoming energy array, # E pts>
+    ! <incoming energy array>
+    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
+    
+    ! Begin writing:
+    
+    ! # energy points
+    write(UNIT_NUC)  maxiE
+    
+    ! <incoming energy array>
+    write(UNIT_NUC) E_grid(1 : maxiE)
+
+    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
+    do iE = 1, maxiE
+      ! find gmin by checking the P0 moment
+      do gmin = 1, size(data, dim = 2)
+        if (data(1, gmin, iE) > tol) exit
+      end do
+      ! find gmax by checking the P0 moment
+      do gmax = size(data, dim = 2), 1, -1
+        if (data(1, gmax, iE) > tol) exit
+      end do
+      if (gmin > gmax) then ! we have effectively all zeros
+        write(UNIT_NUC) 0, 0
+      else
+        write(UNIT_NUC) gmin, gmax
+        do g = gmin, gmax
+          write(UNIT_NUC) data(:, g, iE)
+        end do
+      end if
+      
+    end do
+#endif
+  end subroutine print_scatt_hdf5
     
 end module ndpp_scatt

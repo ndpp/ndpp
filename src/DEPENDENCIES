@@ -47,6 +47,7 @@ ndpp_class.o: ace_header.o
 ndpp_class.o: ndpp_constants.o
 ndpp_class.o: ndpp_chi.o
 ndpp_class.o: dict_header.o
+ndpp_class.o: hdf5_interface.o
 ndpp_class.o: ndpp_error.o
 ndpp_class.o: ndpp_global.o
 ndpp_class.o: ndpp_output.o

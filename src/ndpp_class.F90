@@ -1,21 +1,21 @@
 module ndpp_class
-  !!! Right now I dont require that the upper bound of the energy bins matches the top of the data.
-  !!! e.g., E_max could be 2.0 MeV. But, since the data is still tabulated above that, the E_in
-  !!! data in the ACE files will still be collected, but the code is only concerned with the outgoing
-  !!! energy groups. I think this is OK, and it should be up to the user to have energy_in in
-  !!! OpenMC match energy_out, but... do I want to do anything about that here???
+  
   use ace,              only: read_ace_table
   use ace_header
   use constants
   use dict_header
   use error,            only: fatal_error, warning
   use global,           only: message, path_input, master, xs_listings, &
-                              xs_listing_dict, nuclides
+                              xs_listing_dict, nuclides, hdf5_output_file
   use ndpp_chi
   use output,           only: write_message, header, time_stamp, print_ascii_array
   use ndpp_scatt
   use string,           only: lower_case, starts_with, ends_with, to_str
   use timer_header
+  
+#ifdef HDF5
+  use hdf5_interface
+#endif
 
   implicit none
   private
@@ -34,7 +34,7 @@ module ndpp_class
     integer              :: energy_groups = 0
     ! Output library name
     character(len=255)   :: lib_name
-    ! Flag to denote if the output library is ASCII or Binary (!!!HDF5 in future?)
+    ! Flag to denote library write format
     integer              :: lib_format    = ASCII
     ! Scattering data output type (currently only Legendre or Histogram)
     integer              :: scatt_type    = SCATT_TYPE_LEGENDRE
@@ -173,12 +173,6 @@ module ndpp_class
         call fatal_error()
       end if
       
-      ! Get lib_name, if none provided use the number of groups as ".g###"
-      if (len_trim(library_name_) == 0) then
-        library_name_ = '.g' // trim(adjustl(to_str(self % energy_groups)))
-      end if
-      self % lib_name = library_name_
-      
       ! Get the output type, if none is provided, the default is set by the class.
       call lower_case(output_format_)
       if (len_trim(output_format_) > 0) then ! one is provided, make sure it is correct
@@ -187,7 +181,13 @@ module ndpp_class
         elseif (output_format_ == 'binary') then
           self % lib_format = BINARY
         elseif (output_format_ == 'hdf5') then
-          self % lib_format = HDF5
+#ifdef HDF5
+          self % lib_format = H5
+#else
+          message = "Value of HDF5 provided for <output_format>. " // &
+                    "NDPP must be compiled with HDF5 enabled."
+          call fatal_error()
+#endif
         elseif (output_format_ == 'none') then
           self % lib_format = NO_OUT
         elseif (output_format_ == 'human') then
@@ -203,6 +203,19 @@ module ndpp_class
           self % lib_format = ASCII
         end if
       end if
+      
+      ! Get lib_name, if none provided, and not using HDF5,
+      ! use the number of groups as ".g###"
+      ! The distinction is because HDF5 data all goes in to one file.
+      if (len_trim(library_name_) == 0) then
+        if (self % lib_format == H5) then
+          library_name_ = 'g' // trim(adjustl(to_str(self % energy_groups))) &
+                          // '.h5'
+        else
+          library_name_ = '.g' // trim(adjustl(to_str(self % energy_groups)))
+        end if
+      end if
+      self % lib_name = library_name_
       
       ! Get scattering type information.
       call lower_case(scatt_type_)
@@ -328,34 +341,22 @@ module ndpp_class
       ! location in a set of files.
       ! We will write the header and metadata here and then, after each nuclide 
       ! is complete, print that nuclide's entry. 
-      ! Finally, we will close the xml file
+      ! Finally, we will close the xml file.
+      ! We also will write the HDF5 metafile (the library) which will contain
+      ! the data for all ACE libraries to be processed. This is different than
+      ! the ASCII or binary files; in those cases, each nuclide has its own file.
 
       call timer_start(self % time_print)
       call print_ndpp_lib_xml_header(self % n_listings, self % energy_bins, &
         self % lib_format, self % scatt_type, self % scatt_order, &
         self % mu_bins, self % integrate_chi, self % print_tol, self % thin_tol)
+#ifdef HDF5
+      if (self % lib_format == H5) then
+        call hdf5_file_create(self % lib_name, hdf5_output_file)
+!!! Do I also want to have header information just like in ndpp_lib.xml in here?        
+      end if
+#endif
       call timer_stop(self % time_print)
-      
-      ! For each xs library requested, this routine will:
-      ! 1) Read the ACE file
-      ! 2) Calculate the scattering information as follows:
-      !   2.a) For each scattering MT of the xs library:
-      !     2.a.i) For each angular distribution Ein:
-      !       2.a.i.1) Avg nuclide temperature adjustment???
-      !       2.a.i.2) Convert from CM-LAB if necessary
-      !       2.a.i.3) For each outgoing energy energy *group*
-      !         2.a.i.3.a) Do the conversion, integration, etc. (the hard part...)
-      !         2.a.i.3.b) Multiply the end-result by the microscopic x/s for this MT
-      !     2.a.ii) Sum each (MT,E_in,g_out) set of results to a total for each incoming E
-      !   2.b) Normalize?
-      ! 3) If requested, calculate the Chi data as follows:
-      !   3.a) For each Fission MT
-      !     3.a.i) For each incoming energy:
-      !       3.a.i.1) Integrate the chi(MT,Eout) over each energy group, store.
-      !       3.a.i.1) Multiply end result by microscopic x/s for this MT
-      !     3.a.ii) Sum each (MT,E_in,g_out) results to a total for each incoming E
-      !   3.b) Normalize?
-      ! 4) Print the data according to the requested filename and format type
       
       ! Display output message
       message = "Beginning Pre-Processing..."
@@ -430,8 +431,6 @@ module ndpp_class
             "NDPP does not support S(A,B) tables and Dosimetry Tables!"
           call warning()
         end if
-        ! Close the file/HDF5 object
-        !!!call finalize_output()
         
         ! Write this nuclide to the ndpp_lib.xml file
         call timer_start(self % time_print)
@@ -444,7 +443,10 @@ module ndpp_class
           call nuclides(1) % clear()
           deallocate(nuclides)
         end if
-        close(UNIT_NUC)
+      
+        ! Close the file or HDF5 group
+        call finalize_library(self % lib_format)
+        
       end do
       
       call timer_stop(self % time_preproc)
@@ -452,6 +454,12 @@ module ndpp_class
       ! Close the ndpp_lib.xml file
       call timer_start(self % time_print)
       call print_ndpp_lib_xml_closer(self % lib_format)
+#ifdef HDF5
+      ! Close the hdf5 file
+      if (self % lib_format == H5) then
+        call hdf5_file_close(hdf5_output_file)
+      end if
+#endif
       call timer_stop(self % time_print)
       
     end subroutine preprocess_ndpp
@@ -530,7 +538,7 @@ module ndpp_class
         write(UNIT_NDPP, '(A)') indent // '<filetype> ascii </filetype>'
       else if (lib_format == BINARY) then 
         write(UNIT_NDPP, '(A)') indent // '<filetype> binary </filetype>'
-      else if (lib_format == HDF5) then 
+      else if (lib_format == H5) then 
         write(UNIT_NDPP, '(A)') indent // '<filetype> hdf5 </filetype>'
       else if (lib_format == HUMAN) then
         write(UNIT_NDPP, '(A)') indent // '<filetype> human </filetype>'
@@ -735,6 +743,8 @@ module ndpp_class
       end do
 
     end subroutine read_cross_sections_xml
+
+! Routine to initialize each nuclide's library
     
     subroutine init_library(this_ndpp, nuc)
       type(nuclearDataPreProc), intent(in) :: this_ndpp ! NDPP data
@@ -813,12 +823,26 @@ module ndpp_class
         
         ! Write mu_bins
         write(UNIT_NUC) this_ndpp % mu_bins
-          
-      else if (this_ndpp % lib_format == HDF5) then
-        !!! TBI
+#ifdef HDF5          
+      else if (this_ndpp % lib_format == H5) then
+        call hdf5_open_group("/" // trim(adjustl(nuc % name)))
+#endif
       end if
       
     end subroutine init_library
+    
+! Close the file or HDF5 group
+    subroutine finalize_library(lib_format)
+      integer, intent(in) :: lib_format
+      
+      if (lib_format /= H5) then
+        close(UNIT_NUC)
+#ifdef HDF5          
+      else
+        call hdf5_close_group()
+#endif
+      end if      
+    end subroutine finalize_library
   
   end module ndpp_class
   

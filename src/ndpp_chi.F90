@@ -864,7 +864,7 @@ contains
       call print_chi_bin(chi_t, chi_p, chi_d, E_t, E_p, E_d)
     else if (lib_format == HUMAN) then
       call print_chi_human(chi_t, chi_p, chi_d, E_t, E_p, E_d)
-    else if (lib_format == HDF5) then
+    else if (lib_format == H5) then
       ! TBI
     end if
     
