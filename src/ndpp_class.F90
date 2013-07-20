@@ -412,8 +412,8 @@ module ndpp_class
               
               ! Print the results to file
               call timer_start(self % time_print)
-              call print_chi(self % lib_format, chi_t, chi_p, chi_d, e_t_grid, &
-                e_p_grid, e_d_grid)
+              call print_chi(nuc % name, self % lib_format, chi_t, chi_p, &
+                chi_d, e_t_grid, e_p_grid, e_d_grid)
               call timer_stop(self % time_print)
             end if
           end if

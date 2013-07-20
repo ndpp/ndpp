@@ -10,6 +10,10 @@ module ndpp_chi
   use output,           only: write_message, header, print_ascii_array
   use search,           only: binary_search
   use string,           only: to_str
+  
+#ifdef HDF5
+  use hdf5_interface
+#endif
 
   implicit none
   
@@ -849,7 +853,8 @@ contains
 ! in the specified format.
 !===============================================================================  
   
-  subroutine print_chi(lib_format, chi_t, chi_p, chi_d, E_t, E_p, E_d)
+  subroutine print_chi(name, lib_format, chi_t, chi_p, chi_d, E_t, E_p, E_d)
+    character(len=*),     intent(in) :: name       ! (hdf5 specific) name of group
     integer,              intent(in) :: lib_format ! Library output type
     real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
     real(8), allocatable, intent(in) :: chi_p(:,:) ! Unionized Prompt Chi
@@ -865,7 +870,7 @@ contains
     else if (lib_format == HUMAN) then
       call print_chi_human(chi_t, chi_p, chi_d, E_t, E_p, E_d)
     else if (lib_format == H5) then
-      ! TBI
+      call print_chi_hdf5(name, chi_t, chi_p, chi_d, E_t, E_p, E_d)
     end if
     
   end subroutine print_chi
@@ -1070,5 +1075,90 @@ contains
     write(UNIT_NUC) chi_d
     
   end subroutine print_chi_bin
+  
+!===============================================================================
+! PRINT_CHI_BIN prints the chi data to the specified output file
+! in Fortran binary (stream) format.
+!===============================================================================
+  
+  subroutine print_chi_hdf5(name, chi_t, chi_p, chi_d, E_t, E_p, E_d)
+    character(len=*),     intent(in) :: name       ! name of group
+    real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
+    real(8), allocatable, intent(in) :: chi_p(:,:) ! Unionized Prompt Chi
+    real(8), allocatable, intent(in) :: chi_d(:,:) ! Unionized Delayed Chi
+    real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
+    real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
+    real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
+    
+    integer :: orig_group, chi_group
+    character(MAX_FILE_LEN) :: group_name, chi_name
+    
+    ! Create a new hdf5 group for the chi information
+    group_name = "/" // trim(adjustl(name)) // "/chi"
+    orig_group = temp_group
+    call hdf5_open_group(group_name)
+    chi_group = temp_group
+    
+    ! Assumes that the file and header information is already printed 
+    ! (including # of groups and bins, and thinning tolerance)
+    ! Will follow this format:
+    ! <n_E_t>
+    ! <1:n_E_t energies>
+    ! <1:n_E_t chi_t(g,E)
+    ! <n_E_p>
+    ! <1:n_E_p energies>
+    ! <1:n_E_p chi_p(g,E)
+    ! <n_E_d>
+    ! <1:n_E_d energies>
+    ! <1:n_E_d chi_d(g,E)
+    
+    ! Begin writing:
+    
+    ! Start with Total chi, create a group for this
+    chi_name = group_name // "/chi_t"
+    call hdf5_open_group(chi_name)
+    ! # energy points !!! Maybe not necessary with HDF5, can I get the size
+    ! easily???
+    call hdf5_write_integer(temp_group, 'NEin', size(E_t))
+    ! <1:n_E_t energies>
+    call hdf5_write_double_1Darray(temp_group, 'Ein', E_t, size(E_t))
+    ! <1:n_E_t chi_t>
+    call hdf5_write_double_2Darray(temp_group, 'chi', chi_t, &
+      (/size(chi_t, dim = 1), size(chi_t, dim = 2)/))
+    call hdf5_close_group()
+    temp_group = chi_group
+    
+    ! Move to prompt chi, create a group for this.
+    chi_name = group_name // "/chi_p"
+    call hdf5_open_group(chi_name)
+    ! # energy points !!! Maybe not necessary with HDF5, can I get the size
+    ! easily???
+    call hdf5_write_integer(temp_group, 'NEin', size(E_p))
+    ! <1:n_E_p energies>
+    call hdf5_write_double_1Darray(temp_group, 'Ein', E_p, size(E_p))
+    ! <1:n_E_p chi_p>
+    call hdf5_write_double_2Darray(temp_group, 'chi', chi_p, &
+      (/size(chi_p, dim = 1), size(chi_p, dim = 2)/))
+    call hdf5_close_group()
+    temp_group = chi_group
+    
+    ! Move to delayed chi, create a group for this.
+    chi_name = group_name // "/chi_d"
+    call hdf5_open_group(chi_name)
+    ! # energy points !!! Maybe not necessary with HDF5, can I get the size
+    ! easily???
+    call hdf5_write_integer(temp_group, 'NEin', size(E_d))
+    ! <1:n_E_d energies>
+    call hdf5_write_double_1Darray(temp_group, 'Ein', E_d, size(E_d))
+    ! <1:n_E_d chi_d>
+    call hdf5_write_double_2Darray(temp_group, 'chi', chi_d, &
+      (/size(chi_d, dim = 1), size(chi_d, dim = 2)/))
+    call hdf5_close_group()
+    temp_group = chi_group
+    
+    call hdf5_close_group()
+    temp_group = orig_group
+    
+  end subroutine print_chi_hdf5
   
 end module ndpp_chi

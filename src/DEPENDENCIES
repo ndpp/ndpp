@@ -36,6 +36,7 @@ ndpp_chi.o: ndpp_constants.o
 ndpp_chi.o: dict_header.o
 ndpp_chi.o: ndpp_error.o
 ndpp_chi.o: fission.o
+ndpp_chi.o: hdf5_interface.o
 ndpp_chi.o: ndpp_global.o
 ndpp_chi.o: interpolation.o
 ndpp_chi.o: ndpp_output.o
@@ -88,6 +89,7 @@ ndpp_output.o: string.o
 ndpp_scatt.o: ace_header.o
 ndpp_scatt.o: ndpp_constants.o
 ndpp_scatt.o: dict_header.o
+ndpp_scatt.o: hdf5_interface.o
 ndpp_scatt.o: ndpp_error.o
 ndpp_scatt.o: ndpp_global.o
 ndpp_scatt.o: interpolation.o
