@@ -10,6 +10,10 @@ module ndpp_scatt
   use scattdata_class,  only: scattdata
   use search,           only: binary_search
   use string,           only: to_str
+  
+#ifdef HDF5
+  use hdf5_interface
+#endif
 
   implicit none
   
@@ -182,51 +186,15 @@ module ndpp_scatt
         end if
       end do
       
-      
     end subroutine calc_scatt_grid
-    
-!===============================================================================
-! MIN_VALUE_LOCS Finds the reaction in rxn_data with the next highest Ein, and
-! stores the result in hits
-!===============================================================================
-  
-    subroutine min_value_locs(rxn_data, loc, done, hits)
-      type(ScattData), intent(in)  :: rxn_data(:) ! Rxn information
-      integer, intent(in)    :: loc(:)  ! Location of last-used energy
-      logical, intent(in)    :: done(:) ! Flag to state whether a rxn's grid is complete
-      logical, intent(inout) :: hits(:) ! The reactions which are the lowest E
-      
-      integer :: i
-      real(8) :: min_val
-      
-      hits = .false.
-      min_val = INFINITY
-      
-      ! Find the next smallest energy value
-      do i = 1, size(rxn_data)
-        if (.not. done(i)) then
-          if (rxn_data(i) % E_grid(loc(i)) < min_val) &
-            min_val = rxn_data(i) % E_grid(loc(i))
-        end if
-      end do
-      
-      ! Find all locs  that are within a certain tolerance of the min value
-      do i = 1, size(rxn_data)
-        if (.not. done(i)) then
-          if (abs(rxn_data(i) % E_grid(loc(i)) - min_val) < FP_PRECISION) then
-            hits(i) = .true.
-          end if
-        end if
-      end do
-    
-    end subroutine min_value_locs 
   
 !===============================================================================
 ! PRINT_SCATT prints the scattering data to the specified output file
 ! in the specified format.
 !===============================================================================  
   
-  subroutine print_scatt(lib_format, data, E_grid, maxiE, tol)
+  subroutine print_scatt(name, lib_format, data, E_grid, maxiE, tol)
+    character(len=*),     intent(in) :: name        ! (hdf5 specific) name of group
     integer,              intent(in) :: lib_format  ! Library output type
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
@@ -242,7 +210,7 @@ module ndpp_scatt
     else if (lib_format == HUMAN) then
       call print_scatt_human(data, E_grid, maxiE, tol)
     else if (lib_format == H5) then
-      call print_scatt_hdf5(data, E_grid, maxiE, tol)
+      call print_scatt_hdf5(name, data, E_grid, maxiE, tol)
     end if
     
   end subroutine print_scatt
@@ -414,14 +382,22 @@ module ndpp_scatt
 ! with the HDF5 library.
 !===============================================================================
      
-  subroutine print_scatt_hdf5(data, E_grid, maxiE, tol)
+  subroutine print_scatt_hdf5(name, data, E_grid, maxiE, tol)
+    character(len=*),     intent(in) :: name        ! name of nuclide for group
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
     integer,              intent(in) :: maxiE       ! max entry in E_grid to print
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
-    integer :: g, gmin, gmax, iE
+    integer :: g, gmin, gmax, iE, orig_group, scatt_group
+    character(MAX_FILE_LEN) :: group_name, iE_name
+    
+    ! Create a new hdf5 group for the scatter.
+    group_name = "/" // trim(adjustl(name)) // "/scatt"
+    orig_group = temp_group
+    call hdf5_open_group(group_name)
+    scatt_group = temp_group
 
 #ifdef HDF5
     ! Assumes that the file and header information is already printed 
@@ -434,15 +410,18 @@ module ndpp_scatt
     
     ! Begin writing:
     
-    ! # energy points
-    write(UNIT_NUC)  maxiE
+    ! # energy points !!! Maybe not necessary with HDF5, can I get the size
+    ! easily???
+    call hdf5_write_integer(temp_group, 'NEin', maxiE)
     
     ! <incoming energy array>
-    write(UNIT_NUC) E_grid(1 : maxiE)
+    call hdf5_write_double_1Darray(temp_group, 'Ein', E_grid(1 : maxiE), maxiE)
 
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
     do iE = 1, maxiE
+      iE_name = group_name // "/iE" // trim(adjustl(to_str(iE)))
+      call hdf5_open_group(iE_name)
       ! find gmin by checking the P0 moment
       do gmin = 1, size(data, dim = 2)
         if (data(1, gmin, iE) > tol) exit
@@ -452,15 +431,20 @@ module ndpp_scatt
         if (data(1, gmax, iE) > tol) exit
       end do
       if (gmin > gmax) then ! we have effectively all zeros
-        write(UNIT_NUC) 0, 0
+        call hdf5_write_integer(temp_group, 'gmin', 0)
+        call hdf5_write_integer(temp_group, 'gmax', 0)
       else
-        write(UNIT_NUC) gmin, gmax
-        do g = gmin, gmax
-          write(UNIT_NUC) data(:, g, iE)
-        end do
+        call hdf5_write_integer(temp_group, 'gmin', gmin)
+        call hdf5_write_integer(temp_group, 'gmax', gmax)
+        call hdf5_write_double_2Darray(temp_group, 'data', data(:, gmin : gmax, iE), &
+          (/size(data(:, gmin : gmax, iE), dim = 1), &
+          size(data(:, gmin : gmax, iE), dim = 2)/))
       end if
-      
+      call hdf5_close_group()
+      temp_group = scatt_group
     end do
+    call hdf5_close_group()
+    temp_group = orig_group
 #endif
   end subroutine print_scatt_hdf5
     

@@ -390,7 +390,7 @@ module ndpp_class
             
           ! Print the results to file
           call timer_start(self % time_print)
-          call print_scatt(self % lib_format, scatt_mat, nuc % energy, maxiE, &
+          call print_scatt(nuc % name, self % lib_format, scatt_mat, nuc % energy, maxiE, &
             self % print_tol)
           call timer_stop(self % time_print)
           
