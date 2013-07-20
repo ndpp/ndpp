@@ -825,7 +825,34 @@ module ndpp_class
         write(UNIT_NUC) this_ndpp % mu_bins
 #ifdef HDF5          
       else if (this_ndpp % lib_format == H5) then
-        call hdf5_open_group("/" // trim(adjustl(nuc % name)))
+        filename = "/" // trim(adjustl(nuc % name))
+        call hdf5_open_group(filename)
+        
+        ! Write name, kt, energy_groups, energy_bins, 
+        ! scatt_type, scatt_order, integrate_chi, thin_tol, mu_bins
+        ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
+        ! is not in the standard, so the next if-then  block will explicitly do the cast.
+        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then 
+          chi_present_int = 1
+        else
+          chi_present_int = 0
+        end if
+        ! Now we can print (these should be attributes, but for we need
+        ! to first incorporate more routines for this in hdf5_interface)
+        call hdf5_write_string(temp_group, 'name', nuc % name, len(nuc % name))
+        call hdf5_write_double(temp_group, 'kT', nuc % kT)
+        call hdf5_write_integer(temp_group, 'energy_groups', &
+          this_ndpp % energy_groups)
+        call hdf5_write_double_1Darray(temp_group, 'energy_bins', &
+          this_ndpp % energy_bins, this_ndpp % energy_groups + 1)
+        call hdf5_write_integer(temp_group, 'scatt_type', &
+          this_ndpp % scatt_type)
+        call hdf5_write_integer(temp_group, 'scatt_order', &
+          this_ndpp % scatt_order)
+        call hdf5_write_integer(temp_group, 'integrate_chi', &
+          chi_present_int)
+        call hdf5_write_double(temp_group, 'thin_tol', &
+          this_ndpp % thin_tol)
 #endif
       end if
       
