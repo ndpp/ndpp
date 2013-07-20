@@ -415,15 +415,11 @@ module ndpp_class
               call print_chi(nuc % name, self % lib_format, chi_t, chi_p, &
                 chi_d, e_t_grid, e_p_grid, e_d_grid)
               call timer_stop(self % time_print)
+              
+              ! Deallocate data created for chi
+              deallocate(chi_t, e_t_grid, chi_p, e_p_grid, chi_d, e_d_grid)
             end if
           end if
-          
-          if (allocated(chi_t)) deallocate(chi_t)
-          if (allocated(e_t_grid)) deallocate(e_t_grid)
-          if (allocated(chi_p)) deallocate(chi_p)
-          if (allocated(e_p_grid)) deallocate(e_p_grid)
-          if (allocated(chi_d)) deallocate(chi_d)
-          if (allocated(e_d_grid)) deallocate(e_d_grid)
           
           call timer_stop(self % time_chi_preproc)
         else
