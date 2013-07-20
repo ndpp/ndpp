@@ -13,7 +13,7 @@ module global
 #endif
 
 #ifdef HDF5
-  use hdf5
+  use hdf5_interface,  only: HID_T
 #endif
 
   implicit none
@@ -72,7 +72,6 @@ module global
 #ifdef HDF5
   integer(HID_T) :: hdf5_output_file   ! identifier for output file
   integer(HID_T) :: hdf5_integer8_t    ! type for integer(8)
-  integer        :: hdf5_err           ! error flag 
 #endif
 
   ! ============================================================================

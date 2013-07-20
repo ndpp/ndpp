@@ -28,7 +28,7 @@ HDF5     = no
 #===============================================================================
 
 MPI_DIR   = /opt/mpich/3.0.2-$(COMPILER)
-HDF5_DIR  = /opt/hdf5/1.8.10-patch1-$(COMPILER)
+HDF5_DIR  = /usr
 
 #===============================================================================
 # Add git SHA-1 hash
@@ -105,10 +105,8 @@ endif
 # HDF5 for I/O
 
 ifeq ($(HDF5),yes)
-  F90FLAGS += -DHDF5 -I$(HDF5_DIR)/include
-  LDFLAGS += -L$(HDF5_DIR)/lib64 $(HDF5_DIR)/lib64/libhdf5hl_fortran.a \
-             $(HDF5_DIR)/lib64/libhdf5_hl.a $(HDF5_DIR)/lib64/libhdf5_fortran.a \
-             $(HDF5_DIR)/lib64/libhdf5.a -lz -lrt -lm -Wl,-rpath -Wl,$(HDF5_DIR)/lib64
+	F90 = $(HDF5_DIR)/bin/h5fc
+  F90FLAGS += -DHDF5
 endif
 
 #===============================================================================

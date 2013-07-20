@@ -59,13 +59,8 @@ ndpp_error.o: ndpp_global.o
 ndpp_global.o: ace_header.o
 ndpp_global.o: ndpp_constants.o
 ndpp_global.o: dict_header.o
+ndpp_global.o: hdf5_interface.o
 ndpp_global.o: material_header.o
-
-ndpp_hdf5.o: ndpp_constants.o
-ndpp_hdf5.o: ndpp_error.o
-ndpp_hdf5.o: ndpp_global.o
-ndpp_hdf5.o: ndpp_output.o
-ndpp_hdf5.o: string.o
 
 ndpp_init.o: ndpp_constants.o
 ndpp_init.o: ndpp_error.o

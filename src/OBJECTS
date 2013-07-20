@@ -6,6 +6,7 @@ endf.o \
 endf_header.o \
 fission.o \
 interpolation.o \
+hdf5_interface.o \
 list_header.o \
 material_header.o \
 ndpp.o \
@@ -14,7 +15,6 @@ ndpp_chi.o \
 ndpp_class.o \
 ndpp_constants.o \
 ndpp_error.o \
-ndpp_hdf5.o \
 ndpp_init.o \
 ndpp_legendre.o \
 ndpp_output.o \
