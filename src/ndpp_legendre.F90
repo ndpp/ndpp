@@ -20,7 +20,7 @@ module legendre
 ! value will be outside the expected range; if n is outside the stated range, 
 ! the return value will be 1.0_8.
 !===============================================================================
-  
+
     pure function calc_int_pn_tablelin(n, xlow, xhigh, flow, fhigh) &
       result(integrals)
       integer, intent(in)  :: n     ! Legendre orders requested (inclusive)
@@ -29,7 +29,7 @@ module legendre
       real(8), intent(in)  :: flow  ! Line y-value at low boundary
       real(8), intent(in)  :: fhigh ! Line y-value at high boundary
       
-      real(8) :: integrals(n + 1)       ! The Legendres evaluated at x (0:n)
+      real(8) :: integrals(n)       ! The Legendres evaluated at x (0:n)
       
       integer :: l     ! Index of the Legendre order
       real(8) :: values
@@ -37,6 +37,7 @@ module legendre
       ! The values below for integrals(l+1) are the integral of (f(x)*P_l(x)) 
       ! where f(x) is a straight line between flow and fhigh at xlow and xhigh
       integrals = ZERO
+          
       ! Sometimes xlow and xhigh can be very near each other (on the order of
       ! machine precision) and this is a perfectly valid situation, however, 
       ! these cases lead to division by zero errors when the actual result should
@@ -44,7 +45,7 @@ module legendre
       ! alrady been set to.
       if (xhigh-xlow < FP_PRECISION) return
       
-      do l = 0, n
+      do l = 0, n - 1
         select case (l)
           case (0)
             values = 0.5_8*((fhigh+flow)*xlow**2-TWO*flow*xhigh*xlow) &

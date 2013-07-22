@@ -5,8 +5,7 @@ module ndpp_class
   use constants
   use dict_header
   use error,            only: fatal_error, warning
-  use global,           only: message, path_input, master, xs_listings, &
-                              xs_listing_dict, nuclides, hdf5_output_file
+  use global
   use ndpp_chi
   use output,           only: write_message, header, time_stamp, print_ascii_array
   use ndpp_scatt
@@ -352,7 +351,8 @@ module ndpp_class
         self % mu_bins, self % integrate_chi, self % print_tol, self % thin_tol)
 #ifdef HDF5
       if (self % lib_format == H5) then
-        call hdf5_file_create(self % lib_name, hdf5_output_file)
+        call hdf5_file_create(self % lib_name, hdf5_output_file)     
+        hdf5_fh = hdf5_output_file
 !!! Do I also want to have header information just like in ndpp_lib.xml in here?        
       end if
 #endif
@@ -748,7 +748,7 @@ module ndpp_class
       
       character(MAX_LINE_LEN) :: line
       character(MAX_FILE_LEN) :: filename
-      integer                 :: chi_present_int
+      integer                 :: chi_present_int, period_loc
       
       if ((this_ndpp % lib_format == ASCII) .or. &
         (this_ndpp % lib_format == HUMAN)) then
@@ -820,10 +820,14 @@ module ndpp_class
         ! Write mu_bins
         write(UNIT_NUC) this_ndpp % mu_bins
 #ifdef HDF5          
-      else if (this_ndpp % lib_format == H5) then
-        filename = "/" // trim(adjustl(nuc % name))
+      else if (this_ndpp % lib_format == H5) then          
+        filename = trim(adjustl(nuc % name))
+        period_loc = scan(filename, '.')
+        filename(period_loc : period_loc) = '_'
+        filename = "/" // trim(adjustl(filename))
+write(*,*) temp_group        
         call hdf5_open_group(filename)
-        
+write(*,*) temp_group        
         ! Write name, kt, energy_groups, energy_bins, 
         ! scatt_type, scatt_order, integrate_chi, thin_tol, mu_bins
         ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
@@ -835,7 +839,8 @@ module ndpp_class
         end if
         ! Now we can print (these should be attributes, but for we need
         ! to first incorporate more routines for this in hdf5_interface)
-        call hdf5_write_string(temp_group, 'name', nuc % name, len(nuc % name))
+        call hdf5_write_string(temp_group, 'name', trim(adjustl(nuc % name)), &
+          len(trim(adjustl(nuc % name))))
         call hdf5_write_double(temp_group, 'kT', nuc % kT)
         call hdf5_write_integer(temp_group, 'energy_groups', &
           this_ndpp % energy_groups)

@@ -390,16 +390,22 @@ module ndpp_scatt
     integer,              intent(in) :: maxiE       ! max entry in E_grid to print
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
-    integer :: g, gmin, gmax, iE, orig_group, scatt_group
-    character(MAX_FILE_LEN) :: group_name, iE_name
+    integer :: g, gmin, gmax, iE
+
+#ifdef HDF5
+    integer(HID_T) :: orig_group, scatt_group
+    character(MAX_FILE_LEN) :: group_name, iE_name, nuc_name
+    integer :: period_loc
     
-    ! Create a new hdf5 group for the scatter.
-    group_name = "/" // trim(adjustl(name)) // "/scatt"
+   ! Create a new hdf5 group for the scatter.
+    nuc_name = trim(adjustl(name))
+    period_loc = scan(nuc_name, '.')
+    nuc_name(period_loc : period_loc) = '/'
+    group_name = "/" // trim(adjustl(nuc_name)) // "/scatt"
     orig_group = temp_group
     call hdf5_open_group(group_name)
     scatt_group = temp_group
-
-#ifdef HDF5
+    
     ! Assumes that the file and header information is already printed 
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format: 
@@ -417,14 +423,20 @@ module ndpp_scatt
     ! <incoming energy array>
     call hdf5_write_double_1Darray(temp_group, 'Ein', E_grid(1 : maxiE), maxiE)
 
+    call hdf5_close_group()
+
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
     do iE = 1, maxiE
-      iE_name = group_name // "/iE" // trim(adjustl(to_str(iE)))
+      iE_name = trim(adjustl(group_name)) // "/iE" // trim(adjustl(to_str(iE)))
       call hdf5_open_group(iE_name)
       ! find gmin by checking the P0 moment
       do gmin = 1, size(data, dim = 2)
-        if (data(1, gmin, iE) > tol) exit
+        if (data(1, gmin, iE) > tol) then
+          call hdf5_close_group()
+          temp_group = scatt_group
+          exit
+        end if
       end do
       ! find gmax by checking the P0 moment
       do gmax = size(data, dim = 2), 1, -1

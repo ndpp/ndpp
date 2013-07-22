@@ -1090,11 +1090,16 @@ contains
     real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
     real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
     
-    integer :: orig_group, chi_group
-    character(MAX_FILE_LEN) :: group_name, chi_name
+#ifdef HDF5
+    integer(HID_T) :: orig_group, chi_group
+    character(MAX_FILE_LEN) :: group_name, chi_name, nuc_name
+    integer :: period_loc
     
     ! Create a new hdf5 group for the chi information
-    group_name = "/" // trim(adjustl(name)) // "/chi"
+    nuc_name = trim(adjustl(name))
+    period_loc = scan(nuc_name, '.')
+    nuc_name(period_loc : period_loc) = '/'
+    group_name = "/" // trim(adjustl(nuc_name)) // "/chi"
     orig_group = temp_group
     call hdf5_open_group(group_name)
     chi_group = temp_group
@@ -1115,7 +1120,7 @@ contains
     ! Begin writing:
     
     ! Start with Total chi, create a group for this
-    chi_name = group_name // "/chi_t"
+    chi_name = trim(adjustl(group_name)) // "/chi_t"
     call hdf5_open_group(chi_name)
     ! # energy points !!! Maybe not necessary with HDF5, can I get the size
     ! easily???
@@ -1129,7 +1134,7 @@ contains
     temp_group = chi_group
     
     ! Move to prompt chi, create a group for this.
-    chi_name = group_name // "/chi_p"
+    chi_name = trim(adjustl(group_name)) // "/chi_p"
     call hdf5_open_group(chi_name)
     ! # energy points !!! Maybe not necessary with HDF5, can I get the size
     ! easily???
@@ -1143,7 +1148,7 @@ contains
     temp_group = chi_group
     
     ! Move to delayed chi, create a group for this.
-    chi_name = group_name // "/chi_d"
+    chi_name = trim(adjustl(group_name)) // "/chi_d"
     call hdf5_open_group(chi_name)
     ! # energy points !!! Maybe not necessary with HDF5, can I get the size
     ! easily???
@@ -1158,7 +1163,7 @@ contains
     
     call hdf5_close_group()
     temp_group = orig_group
-    
+#endif
   end subroutine print_chi_hdf5
   
 end module ndpp_chi

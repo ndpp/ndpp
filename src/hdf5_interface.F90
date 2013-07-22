@@ -58,6 +58,7 @@ contains
 
     ! Create the file
     call h5fcreate_f(trim(filename), H5F_ACC_TRUNC_F, file_id, hdf5_err)
+write(*,*) hdf5_err, file_id    
 
   end subroutine hdf5_file_create
 
@@ -81,7 +82,6 @@ contains
 
     ! Open file
     call h5fopen_f(trim(filename), open_mode, file_id, hdf5_err)
-
   end subroutine hdf5_file_open
 
 !===============================================================================
@@ -165,8 +165,7 @@ contains
     logical :: status ! does the group exist
 
     ! Check if group exists
-    call h5ltpath_valid_f(hdf5_fh, trim(group), .true., status, hdf5_err) 
-
+    call h5ltpath_valid_f(hdf5_fh, trim(group), .true., status, hdf5_err)
     ! Either create or open group
     if (status) then
       call h5gopen_f(hdf5_fh, trim(group), temp_group, hdf5_err)
@@ -406,7 +405,7 @@ contains
 
     ! Number of strings to write
     dims1(1) = 1
-
+    
     ! Insert null character at end of string when writing
     call h5tset_strpad_f(H5T_STRING, H5T_STR_NULLPAD_F, hdf5_err)
 
@@ -414,7 +413,7 @@ contains
     call h5screate_simple_f(1, dims1, dspace, hdf5_err)
     call h5dcreate_f(group, name, H5T_STRING, dspace, dset, hdf5_err)
 
-    ! Set up dimesnions of string to write
+    ! Set up dimensions of string to write
     dims2 = (/length, 1/) ! full array of strings to write 
     dims1(1) = length     ! length of string
 
