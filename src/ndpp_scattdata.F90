@@ -841,7 +841,7 @@ module scattdata_class
             mu_tmp = (ONE + R * mu(imu_tmp)) / &
               sqrt(ONE + R2 + TWO * R * mu(imu_tmp))
             tempsqrt = sqrt(ONE - R2)
-            mu_l(imu) = tempsqrt + 0.2_8 * (mu_tmp - tempsqrt)
+            mu_l(imu) = tempsqrt + 0.2_8 * (mu_tmp - tempsqrt) ! Here is the 20%.
           else
             mu_l(imu) = (ONE + R * mu(imu)) / sqrt(ONE + R2 + TWO * R * mu(imu))
           end if
