@@ -21,7 +21,7 @@ module constants
   ! adjusted. Modifying constants in other sections may cause the code to fail.
 
   ! Monoatomic ideal-gas scattering treatment threshold
-  real(8), parameter :: FREE_GAS_THRESHOLD = 400.0
+  real(8), parameter :: DEFAULT_FREEGAS_THRESHOLD = 400.0
 
   ! Significance level for confidence intervals
   real(8), parameter :: CONFIDENCE_LEVEL = 0.95_8
@@ -74,6 +74,14 @@ module constants
        H5     = 3,      &
        NO_OUT = 4,      &
        HUMAN  = 5
+
+  ! Value for freegas_cutoff in cross_sections.xml which means 'use the global'
+  real(8), parameter :: &
+       GLOBAL_FREEGAS_CUTOFF = -TWO
+
+  ! Value for freegas_cutoff (everywhere) which means 'apply everywhere'
+  real(8), parameter :: &
+       INFINITE_FREEGAS_CUTOFF = -ONE
   
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS  

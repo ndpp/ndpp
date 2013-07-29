@@ -13,4 +13,5 @@
   <variable name="output_format_" tag="output_format" type="word" length="6" />
   <variable name="thinning_tol_" tag="thinning_tol" type="double" default="0.2" />
   <variable name="print_tol_" tag="print_tol" type="double" default="1.0E-8"/>
+  <variable name="freegas_cutoff_" tag="freegas_cutoff" type="double" default="400.0" />
 </template>
