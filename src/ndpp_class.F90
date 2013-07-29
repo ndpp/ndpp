@@ -400,11 +400,23 @@ module ndpp_class
           ! for this nuclide
           if (xs_listings(i_listing) % freegas_cutoff /= &
             GLOBAL_FREEGAS_CUTOFF) then
-            nuc % freegas_cutoff = xs_listings(i_listing) % freegas_cutoff * &
-              nuc % kT
+            if (xs_listings(i_listing) % freegas_cutoff == &
+              INFINITE_FREEGAS_CUTOFF) then
+              nuc % freegas_cutoff = INFINITY
+            else
+              nuc % freegas_cutoff = xs_listings(i_listing) % freegas_cutoff * &
+                nuc % kT
+            end if
           else
-            nuc % freegas_cutoff = self % freegas_cutoff * nuc % kT
+            if (self % freegas_cutoff == INFINITY) then
+              nuc % freegas_cutoff = INFINITY
+            else
+              nuc % freegas_cutoff = self % freegas_cutoff * nuc % kT
+            end if
           end if
+          ! Also set xs_listings()%freegas_cutoff to the new nuclide value
+          ! so we can print our library by passing in just xs_listing()
+          xs_listings(i_listing) % freegas_cutoff = nuc % freegas_cutoff
 
           ! Setup output nuclear data library
           call init_library(self, nuc)
