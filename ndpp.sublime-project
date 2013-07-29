@@ -2,7 +2,9 @@
 	"folders":
 	[
 		{
-			"path": "src"
+			"path": "src",
+			"file_exclude_patterns": ["*.mod","ndpp"],
+			"folder_exclude_patterns": ["xml-fortran"]
 		},
 		{
 			"path": "docs/source/usersguide"
