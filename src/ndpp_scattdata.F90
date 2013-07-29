@@ -55,6 +55,8 @@ module scattdata_class
     type(Reaction),   pointer :: rxn   => NULL() ! My reaction
     type(DistEnergy), pointer :: edist => NULL() ! My reaction's combined dist
     type(DistAngle),  pointer :: adist => NULL() ! My reaction's angle dist
+    real(8)              :: vt_bar = ZERO     ! Average target velocity
+    real(8)              :: freegas_cutoff = ZERO ! Free gas cutoff energy
     
     ! Type-Bound procedures
     contains
@@ -118,6 +120,16 @@ module scattdata_class
       this % rxn => rxn
       ! Store the atomic weight ratio
       this % awr = nuc % awr
+
+      ! Calculate the target velocity and set freegas cutoff; 
+      ! only do if we are dealing with elastic reactions for now.
+      ! Non-elastic reactions will use the default values of zero     
+      if (this % rxn % MT == ELASTIC) then
+        ! This Ein is from the mean value of the Maxwellian Speed Dist.
+        this % vt_bar = calc_v(4.0_8 * nuc % kT / PI, this % awr)
+        ! Store the freegas cutoff energy (MeV)
+        this % freegas_cutoff = nuc % freegas_cutoff
+      end if
       
       ! Set distributions
       if (rxn % has_angle_dist) then
@@ -258,6 +270,8 @@ module scattdata_class
       this % order      =  0
       this % groups     =  0
       this % awr        = ZERO
+      this % vt_bar     = ZERO
+      this % freegas_cutoff = ZERO
       ! Reset pointers
       nullify(this % rxn)
       nullify(this % edist)
@@ -496,11 +510,17 @@ module scattdata_class
       real(8) :: vals(2, this % groups)   ! values on start/end energy/angle
       real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       real(8) :: temp_Enorm               ! Storage for Enorm (for summing to Enorm)
+      real(8) :: R                        ! Effective reduced mass
       
       ! Set up the results memory 
       allocate(result_distro(this % order, this % groups))
       result_distro = ZERO
       
+
+      ! Calcualte the effective reduced mass
+      R = calc_R(Ein, this % rxn % Q_value, this % awr, this % vt_bar, &
+        this % freegas_cutoff)
+
       ! We know which distribution to work with, now it is time to:
       ! 1) convert from CM to Lab, if necessary
       ! 2) calculate the angular boundaries for integration
@@ -508,8 +528,7 @@ module scattdata_class
       
       ! 1) convert from CM to Lab, if necessary
       if (this % rxn % scatter_in_cm) then
-        call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, &
-          distro_int, distro_lab)
+        call cm2lab(R, this % mu, distro_int, distro_lab)
       else
         distro_lab = distro_int
       end if
@@ -797,15 +816,13 @@ module scattdata_class
 ! of reference tabular distribution.
 !===============================================================================
 
-    subroutine cm2lab(awr, Q, Ein, mu, data, distro_out)
-      real(8), intent(in) :: awr   ! Atomic Weight Ratio for this nuclide
-      real(8), intent(in) :: Q     ! Binding Energy of reaction, for finding R
-      real(8), intent(in) :: Ein   ! Incoming energy
+    subroutine cm2lab(R, mu, data, distro_out)
+      real(8), intent(in) :: R     ! Reduced Effective Mass
       real(8), intent(in) :: mu(:) ! Angular grid
       real(8), intent(in) :: data(:,:) ! The distribution to convert
       real(8), intent(out) :: distro_out(:,:) ! The distribution to convert
       
-      real(8) :: R, Rinv, R2       ! Reduced Effective Mass, 1/R, and R^2
+      real(8) :: Rinv, R2       ! Reduced Effective Mass, 1/R, and R^2
       real(8) :: mu_l(size(data, dim = 1))  ! CM angular points corresponding to 
                                             ! mu(:), if mu was in Lab.
       real(8) :: tempdistro(size(data, dim = 1)) ! Temporary storage of the 
@@ -820,9 +837,7 @@ module scattdata_class
       mu_bins = size(data, dim = 1)
       
       ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
-      R2 = awr * awr  * (ONE + Q * (awr + ONE) / (awr * Ein))
-      
-      R = sqrt(R2)
+      R2 = R * R
       Rinv = ONE / R
         
       if (R2 < ONE) then
@@ -1320,5 +1335,51 @@ module scattdata_class
 ! distribution while the FILE6 version does the same for a combined energy-angle
 ! distribution
 !===============================================================================
+
+!===============================================================================
+! CALC_V Finds the speed (m/s) given energy in MeV and mass in AWR
+!===============================================================================
+
+pure function calc_v(Ein, awr) result(v)
+  real(8), intent(in)  :: Ein ! Incoming energy, in MeV
+  real(8), intent(in)  :: awr ! Atomic weight ratio of particle of interest
+  real(8)              :: v   ! speed
+
+  real(8) :: mass ! Mass in kg
+
+  mass = awr * MASS_NEUTRON * AMU ! [# / N * amu N * kg / amu] = [kg]
+  v = sqrt(TWO * Ein / mass)
+
+  
+end function calc_v
+
+!===============================================================================
+! CALC_R Finds the reduced-mass after adjusting for the free gas method.
+!===============================================================================
+
+pure function calc_R(Ein, Q, awr, vt, freegas_cutoff) result(R)
+  real(8), intent(in)  :: Ein ! Incoming neutron energy, in MeV
+  real(8), intent(in)  :: Q   ! Binding energy of reaction (MeV)
+  real(8), intent(in)  :: awr ! Atomic weight ratio of particle of interest
+  real(8), intent(in)  :: vt  ! average speed of nuclide
+  real(8), intent(in)  :: freegas_cutoff ! Energy at which to stop applying freegas
+  real(8)              :: R   ! speed (my result)
+
+  real(8) :: R_awr ! Reduced atomic weight ratio
+  real(8) :: v     ! speed of particle
+
+  ! First find the reduced mass itself.
+  ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
+  R_awr = sqrt(awr * awr  * (ONE + Q * (awr + ONE) / (awr * Ein)))
+
+  ! Now adjust it for thermal motion, if necessary
+  if (Ein < freegas_cutoff) then
+    v = calc_v(Ein, ONE)
+    R = R_awr * (v - vt) / (v + R_awr * vt)
+  else
+    R = R_awr
+  end if
+
+end function calc_R
 
 end module scattdata_class
