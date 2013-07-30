@@ -45,16 +45,17 @@ module constants
   ! PHYSICAL CONSTANTS
 
   real(8), parameter ::            &
-       PI           = 3.1415926535898_8, & ! pi
-       MASS_NEUTRON = 1.0086649156,      & ! mass of a neutron
-       MASS_PROTON  = 1.00727646677,     & ! mass of a proton
-       AMU          = 1.66053873e-27,    & ! 1 amu in kg
-       N_AVOGADRO   = 0.602214179,       & ! Avogadro's number in 10^24/mol
-       K_BOLTZMANN  = 8.617342e-11,      & ! Boltzmann constant in MeV/K
-       INFINITY     = huge(0.0_8),       & ! positive infinity
-       ZERO         = 0.0_8,             &
-       ONE          = 1.0_8,             &
-       TWO          = 2.0_8
+       PI             = 3.1415926535898_8, & ! pi
+       MASS_NEUTRON   = 1.0086649156,      & ! mass of a neutron
+       MASS_PROTON    = 1.00727646677,     & ! mass of a proton
+       AMU            = 1.66053873e-27,    & ! 1 amu in kg
+       JOULES_PER_MEV = 1.60217657E-13_8,  & ! Joules from MeV
+       N_AVOGADRO     = 0.602214179,       & ! Avogadro's number in 10^24/mol
+       K_BOLTZMANN    = 8.617342e-11,      & ! Boltzmann constant in MeV/K
+       INFINITY       = huge(0.0_8),       & ! positive infinity
+       ZERO           = 0.0_8,             &
+       ONE            = 1.0_8,             &
+       TWO            = 2.0_8
   
   ! ============================================================================
   ! NDPP OBJECT CONSTANTS

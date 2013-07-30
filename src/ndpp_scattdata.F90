@@ -55,6 +55,7 @@ module scattdata_class
     type(Reaction),   pointer :: rxn   => NULL() ! My reaction
     type(DistEnergy), pointer :: edist => NULL() ! My reaction's combined dist
     type(DistAngle),  pointer :: adist => NULL() ! My reaction's angle dist
+    real(8)              :: Et_bar = ZERO     ! Average target energy
     real(8)              :: vt_bar = ZERO     ! Average target velocity
     real(8)              :: freegas_cutoff = ZERO ! Free gas cutoff energy
     
@@ -121,12 +122,13 @@ module scattdata_class
       ! Store the atomic weight ratio
       this % awr = nuc % awr
 
-      ! Calculate the target velocity and set freegas cutoff; 
+      ! Calculate the target energy & velocity and set freegas cutoff; 
       ! only do if we are dealing with elastic reactions for now.
       ! Non-elastic reactions will use the default values of zero     
       if (this % rxn % MT == ELASTIC) then
         ! This Ein is from the mean value of the Maxwellian Speed Dist.
-        this % vt_bar = calc_v(4.0_8 * nuc % kT / PI, this % awr)
+        this % Et_bar = 4.0_8 * nuc % kT / PI
+        this % vt_bar = calc_v(this % Et_bar, this % awr)
         ! Store the freegas cutoff energy (MeV)
         this % freegas_cutoff = nuc % freegas_cutoff
       end if
@@ -270,6 +272,7 @@ module scattdata_class
       this % order      =  0
       this % groups     =  0
       this % awr        = ZERO
+      this % Et_bar     = ZERO
       this % vt_bar     = ZERO
       this % freegas_cutoff = ZERO
       ! Reset pointers
@@ -511,6 +514,7 @@ module scattdata_class
       real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       real(8) :: temp_Enorm               ! Storage for Enorm (for summing to Enorm)
       real(8) :: R                        ! Effective reduced mass
+      real(8) :: modEin                   ! modified Ein for free gas.
       
       ! Set up the results memory 
       allocate(result_distro(this % order, this % groups))
@@ -538,7 +542,12 @@ module scattdata_class
         if ((associated(this % adist)) .and. &
           (.not. associated(this % edist))) then
           ! 2) calculate the angular boundaries for integration
-          call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
+          if (Ein < this % freegas_cutoff) then
+            modEin = Ein + this % Et_bar
+          else
+            modEin = Ein
+          end if
+          call calc_mu_bounds(this % awr, R, modEin, &
             this % E_bins, this % mu, interp, vals, bins, temp_Enorm) 
           ! 3) integrate according to scatt_type
           call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
@@ -930,10 +939,10 @@ module scattdata_class
 ! bins for a given input energy.
 !===============================================================================
 
-    subroutine calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
+    subroutine calc_mu_bounds(awr, R, Ein, E_bins, mu, interp, vals, bins, Enorm)
       
       real(8), intent(in)  :: awr         ! Atomic-weight ratio
-      real(8), intent(in)  :: Q           ! Reaction Q-Value
+      real(8), intent(in)  :: R           ! Q-Value of this reaction
       real(8), intent(in)  :: Ein         ! Incoming energy
       real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
       real(8), intent(in)  :: mu(:)       ! tabular mu values
@@ -951,13 +960,9 @@ module scattdata_class
       real(8) :: Emin, Emax       ! Max/Min E transfer of this reaction
       
       real(8) :: mu_low, mu_high  ! Low and high angular points
-      real(8) :: R                ! The Reduced Mass (takes in to account Qval)
       integer :: g                ! Group index variable
-      integer :: imu
-      
-      ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
-      R = awr * sqrt((ONE + Q * (awr + ONE) / (awr * Ein)))
-      
+      integer :: imu              ! angle bin counter
+
       do g = 1, size(E_bins) - 1
         ! Calculate the values of mu corresponding to this energy group
         ! These come from eqs. 232-233 in Methods for Processing ENDF/B-VII, 
@@ -1348,9 +1353,7 @@ pure function calc_v(Ein, awr) result(v)
   real(8) :: mass ! Mass in kg
 
   mass = awr * MASS_NEUTRON * AMU ! [# / N * amu N * kg / amu] = [kg]
-  v = sqrt(TWO * Ein / mass)
-
-  
+  v = sqrt(TWO * Ein * JOULES_PER_MEV / mass) ! Convert to MeV to Joules
 end function calc_v
 
 !===============================================================================
@@ -1375,7 +1378,7 @@ pure function calc_R(Ein, Q, awr, vt, freegas_cutoff) result(R)
   ! Now adjust it for thermal motion, if necessary
   if (Ein < freegas_cutoff) then
     v = calc_v(Ein, ONE)
-    R = R_awr * (v - vt) / (v + R_awr * vt)
+    R = R_awr * (v + vt) / (v + R_awr * vt)
   else
     R = R_awr
   end if
