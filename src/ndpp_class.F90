@@ -631,14 +631,14 @@ module ndpp_class
           '" location="1" name="' // trim(nuc % name) // '" path="' // &
           trim(filename) // '" temperature="' // trim(to_str(nuc % kT)) // &
           '" zaid="' // trim(to_str(nuc % zaid)) // '" metastable= "1" ' // &
-          'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '/>'
+          'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '"/>'
       else
         write(UNIT_NDPP, '(A)') indent // '<ndpp_table alias="' // &
           trim(nuc % alias) // '" awr="' // trim(to_str(nuc % awr)) // &
           '" location="1" name="' // trim(nuc % name) // '" path="' // &
           trim(filename) // '" temperature="' // trim(to_str(nuc % kT)) // &
           '" zaid="' // trim(to_str(nuc % zaid)) // '" ' // &
-          'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '/>'
+          'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '"/>'
       end if
       
       

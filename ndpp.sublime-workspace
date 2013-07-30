@@ -4,34 +4,26 @@
 		"selected_items":
 		[
 			[
+				"freegas",
+				"freegas_cutoff"
+			],
+			[
 				"INFI",
 				"INFINITE_FREEGAS_CUTOFF"
 			],
 			[
 				"free",
 				"freegas_cutoff"
-			],
-			[
-				"freegas",
-				"freegas_cutoff_"
 			]
 		]
 	},
 	"buffers":
 	[
 		{
-			"file": "src/ndpp_ace.F90",
-			"settings":
-			{
-				"buffer_size": 44033,
-				"line_ending": "Unix"
-			}
-		},
-		{
 			"file": "src/ndpp_class.F90",
 			"settings":
 			{
-				"buffer_size": 37994,
+				"buffer_size": 38547,
 				"line_ending": "Unix"
 			}
 		},
@@ -39,7 +31,23 @@
 			"file": "src/ndpp_constants.F90",
 			"settings":
 			{
-				"buffer_size": 8197,
+				"buffer_size": 8280,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "src/ndpp_scattdata.F90",
+			"settings":
+			{
+				"buffer_size": 61400,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "src/ndpp_scatt.F90",
+			"settings":
+			{
+				"buffer_size": 19357,
 				"line_ending": "Unix"
 			}
 		}
@@ -68,6 +76,12 @@
 	},
 	"file_history":
 	[
+		"/home/nelsonag/bld/ndpp_test/ndpp.xml",
+		"/home/nelsonag/bld/ndpp_test/1001.70c.g1",
+		"/home/nelsonag/bld/ndpp_test/endf70.xml",
+		"/home/nelsonag/bld/ndpp_test/ndpp_lib.xml",
+		"/home/nelsonag/git/ndpp/ndpp.sublime-project",
+		"/home/nelsonag/git/ndpp/src/ndpp_ace.F90",
 		"/home/nelsonag/git/ndpp/src/templates/cross_sections_t.xml",
 		"/home/nelsonag/git/ndpp/src/templates/ndpp_t.xml",
 		"/home/nelsonag/git/ndpp/src/ace_header.F90",
@@ -93,6 +107,7 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"INFINITE_FREEGAS_CUTOFF"
 		],
 		"highlight": true,
 		"in_selection": false,
@@ -110,23 +125,23 @@
 	"groups":
 	[
 		{
-			"selected": 1,
+			"selected": 3,
 			"sheets":
 			[
 				{
 					"buffer": 0,
-					"file": "src/ndpp_ace.F90",
+					"file": "src/ndpp_class.F90",
 					"settings":
 					{
-						"buffer_size": 44033,
+						"buffer_size": 38547,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								2941,
-								2941
+								26711,
+								26711
 							]
 						],
 						"settings":
@@ -136,25 +151,25 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 540.0,
+						"translation.y": 8773.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
 				},
 				{
 					"buffer": 1,
-					"file": "src/ndpp_class.F90",
+					"file": "src/ndpp_constants.F90",
 					"settings":
 					{
-						"buffer_size": 37994,
+						"buffer_size": 8280,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								26602,
-								26602
+								1975,
+								1975
 							]
 						],
 						"settings":
@@ -164,25 +179,25 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 8652.0,
+						"translation.y": 614.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
 				},
 				{
 					"buffer": 2,
-					"file": "src/ndpp_constants.F90",
+					"file": "src/ndpp_scattdata.F90",
 					"settings":
 					{
-						"buffer_size": 8197,
+						"buffer_size": 61400,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								3255,
-								3255
+								61399,
+								61399
 							]
 						],
 						"settings":
@@ -191,8 +206,36 @@
 							"tab_size": 2,
 							"translate_tabs_to_spaces": true
 						},
-						"translation.x": 8.0,
-						"translation.y": 479.0,
+						"translation.x": 0.0,
+						"translation.y": 9093.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 3,
+					"file": "src/ndpp_scatt.F90",
+					"settings":
+					{
+						"buffer_size": 19357,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								828,
+								828
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/Fortran/Syntaxes/Fortran - Modern.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 4995.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
@@ -256,6 +299,6 @@
 	"show_open_files": false,
 	"show_tabs": true,
 	"side_bar_visible": true,
-	"side_bar_width": 150.0,
+	"side_bar_width": 96.0,
 	"status_bar_visible": true
 }

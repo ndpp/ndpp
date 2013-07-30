@@ -1378,7 +1378,7 @@ pure function calc_R(Ein, Q, awr, vt, freegas_cutoff) result(R)
   ! Now adjust it for thermal motion, if necessary
   if (Ein < freegas_cutoff) then
     v = calc_v(Ein, ONE)
-    R = R_awr * (v + vt) / (v + R_awr * vt)
+    R = R_awr * (v - vt) / (v + R_awr * vt)
   else
     R = R_awr
   end if
