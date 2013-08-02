@@ -87,7 +87,7 @@ module constants
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS  
   integer, parameter :: MAX_LEGENDRE_ORDER   = 10, & ! Max Lab Legendre Order
-                        FREEGAS_EOUT_PTS     = 1000  ! Number of Eout pts for FreeGas
+                        FREEGAS_EOUT_PTS     = 100  ! Number of Eout pts for FreeGas
                                                      
   ! Number of equiprobable bins
   integer, parameter :: NUM_EP = 32

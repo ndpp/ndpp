@@ -1378,7 +1378,8 @@ module scattdata_class
       ! I really should be using gaussian quadrature for Eout, and splitting
       ! the problem to above kT and below kT
       dE = E_bins(size(E_bins)) - E_bins(1)
-      NEout_per_grp = int(ceiling(real(dE, 8) / real(NEout, 8)))
+      !NEout_per_grp = int(ceiling(real(dE, 8) / real(NEout, 8)))
+      NEout_per_grp = NEout
       const_term = ((A + ONE) / A) ** 2 / kT
       do g = 1, size(E_bins) - 1
         dE = (E_bins(g + 1) - E_bins(g)) / real(NEout_per_grp, 8)
