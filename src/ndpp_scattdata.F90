@@ -542,6 +542,7 @@ module scattdata_class
             call integrate_freegas_leg(Ein, this % awr, this % kT, &
               distro_lab(:, 1), this % mu, this % E_bins, this % order, &
               this % NEout, result_distro)
+            temp_Enorm = ONE
           else
             ! 2) calculate the angular boundaries for integration
             call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
@@ -1425,7 +1426,7 @@ module scattdata_class
 
     end subroutine integrate_freegas_leg
 
-    pure function calc_sab(A, kT, Ein, Eout, mu) result(sab)
+    function calc_sab(A, kT, Ein, Eout, mu) result(sab)
       real(8), intent(in) :: A    ! Atomic-weight-ratio of target
       real(8), intent(in) :: kT   ! Target Temperature (MeV)
       real(8), intent(in) :: Ein  ! Incoming energy of neutron
