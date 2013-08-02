@@ -56,6 +56,9 @@ module scattdata_class
     type(DistEnergy), pointer :: edist => NULL() ! My reaction's combined dist
     type(DistAngle),  pointer :: adist => NULL() ! My reaction's angle dist
     real(8)              :: freegas_cutoff = ZERO ! Free gas cutoff energy
+    real(8)              :: kT         = ZERO ! kT of library
+    integer              :: NEout      =  0   ! Number of outgoing E pts to
+                                              ! use for freegas integration
     
     ! Type-Bound procedures
     contains
@@ -119,6 +122,10 @@ module scattdata_class
       this % rxn => rxn
       ! Store the atomic weight ratio
       this % awr = nuc % awr
+      ! Store library kT
+      this % kT = nuc % kT
+      ! Set number of Eout pts to use when integrating Free Gas
+      this % NEout = FREEGAS_EOUT_PTS
 
       ! Set freegas cutoff; 
       ! only do if we are dealing with elastic reactions for now.
@@ -266,8 +273,11 @@ module scattdata_class
       this % scatt_type = -1
       this % order      =  0
       this % groups     =  0
-      this % awr        = ZERO
+      this % awr        =  ZERO
       this % freegas_cutoff = ZERO
+      this % kT         =  ZERO
+      this % NEout      =  0
+
       ! Reset pointers
       nullify(this % rxn)
       nullify(this % edist)
@@ -517,7 +527,7 @@ module scattdata_class
       ! 3) integrate according to scatt_type
       
       ! 1) convert from CM to Lab, if necessary
-      if (this % rxn % scatter_in_cm) then
+      if ((this % rxn % scatter_in_cm) .and. (Ein >= this % freegas_cutoff)) then
         call cm2lab(Ein, this % rxn % Q_value, this % awr, this % mu, &
           distro_int, distro_lab)
       else
@@ -528,12 +538,18 @@ module scattdata_class
       case (SCATT_TYPE_LEGENDRE)
         if ((associated(this % adist)) .and. &
           (.not. associated(this % edist))) then
-          ! 2) calculate the angular boundaries for integration
-          call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
-            this % E_bins, this % mu, interp, vals, bins, temp_Enorm) 
-          ! 3) integrate according to scatt_type
-          call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
-            interp, vals, bins, this % order, result_distro)
+          if (Ein < this % freegas_cutoff) then
+            call integrate_freegas_leg(Ein, this % awr, this % kT, &
+              distro_lab(:, 1), this % mu, this % E_bins, this % order, &
+              this % NEout, result_distro)
+          else
+            ! 2) calculate the angular boundaries for integration
+            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
+              this % E_bins, this % mu, interp, vals, bins, temp_Enorm) 
+            ! 3) integrate according to scatt_type
+            call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
+              interp, vals, bins, this % order, result_distro)
+          end if
         else if ((associated(this % adist)) .and. &
           (associated(this % edist))) then
           ! Here, we have angular info in adist, but it goes to a single energy
@@ -1327,5 +1343,32 @@ module scattdata_class
 ! distribution while the FILE6 version does the same for a combined energy-angle
 ! distribution
 !===============================================================================
+
+!===============================================================================
+! INTEGRATE_FREEGAS_LEG Finds Legendre moments of the energy-angle 
+! distribution of an elastic collision using the free-gas scattering kernel.
+!===============================================================================
+
+    subroutine integrate_freegas_leg(Ein, awr, kT, fEmu, mu, E_bins, order, &
+      NEout, distro)
+
+      real(8), intent(in)  :: Ein            ! Incoming energy of neutron
+      real(8), intent(in)  :: awr            ! Atomic-weight-ratio of target
+      real(8), intent(in)  :: kt             ! Target Temperature (MeV)
+      real(8), intent(in)  :: fEmu(:)        ! Energy-angle distro to act on
+      real(8), intent(in)  :: mu(:)          ! fEmu angular grid
+      real(8), intent(in)  :: E_bins(:)      ! Energy group boundaries
+      integer, intent(in)  :: order          ! Number of moments to find
+      integer, intent(in)  :: NEout          ! Number of outgoing energy points
+      real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
+      
+      integer :: g                           ! outgoing energy group index
+      integer :: imu                         ! angle bin index
+      real(8) :: flo, fhi                    ! pdf low and high values
+
+
+      
+    end subroutine integrate_freegas_leg
+
 
 end module scattdata_class
