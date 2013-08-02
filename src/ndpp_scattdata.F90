@@ -1349,26 +1349,99 @@ module scattdata_class
 ! distribution of an elastic collision using the free-gas scattering kernel.
 !===============================================================================
 
-    subroutine integrate_freegas_leg(Ein, awr, kT, fEmu, mu, E_bins, order, &
+    subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
       NEout, distro)
 
-      real(8), intent(in)  :: Ein            ! Incoming energy of neutron
-      real(8), intent(in)  :: awr            ! Atomic-weight-ratio of target
-      real(8), intent(in)  :: kt             ! Target Temperature (MeV)
-      real(8), intent(in)  :: fEmu(:)        ! Energy-angle distro to act on
-      real(8), intent(in)  :: mu(:)          ! fEmu angular grid
-      real(8), intent(in)  :: E_bins(:)      ! Energy group boundaries
-      integer, intent(in)  :: order          ! Number of moments to find
-      integer, intent(in)  :: NEout          ! Number of outgoing energy points
-      real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
+      real(8), intent(in)  :: Ein         ! Incoming energy of neutron
+      real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
+      real(8), intent(in)  :: kT          ! Target Temperature (MeV)
+      real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
+      real(8), intent(in)  :: mu(:)       ! fEmu angular grid
+      real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+      integer, intent(in)  :: order       ! Number of moments to find
+      integer, intent(in)  :: NEout       ! Number of outgoing energy points
+      real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
       
-      integer :: g                           ! outgoing energy group index
-      integer :: imu                         ! angle bin index
-      real(8) :: flo, fhi                    ! pdf low and high values
+      integer :: g             ! outgoing energy group index
+      integer :: imu           ! angle bin index
+      integer :: iE            ! Outgoing energy index
+      real(8) :: dE            ! delta Energy (outgoing)
+      integer :: NEout_per_grp ! # of Eout pts per group
+      real(8), allocatable :: fEmu_int(:,:) ! Integrated (over Eout) fEmu
+      real(8) :: leading_term  ! Constants in front of Free Gas formula
+      real(8) :: const_term    ! Constants in front of Free Gas formula
+      real(8) :: Eout          ! Value of outgoing energy
+      
+      allocate(fEmu_int(size(mu), size(E_bins) - 1))
+      !fEmu_int = ZERO
+
+      ! I really should be using gaussian quadrature for Eout, and splitting
+      ! the problem to above kT and below kT
+      dE = E_bins(size(E_bins)) - E_bins(1)
+      NEout_per_grp = int(ceiling(real(dE, 8) / real(NEout, 8)))
+      const_term = ((A + ONE) / A) ** 2 / kT
+      do g = 1, size(E_bins) - 1
+        dE = (E_bins(g + 1) - E_bins(g)) / real(NEout_per_grp, 8)
+        ! Do the 1st point
+        Eout = E_bins(g)
+        leading_term = const_term * sqrt(Eout / Ein)
+        do imu = 1, size(mu)
+          fEmu_int(imu, g) = leading_term * fEmu(imu) * &
+            calc_sab(A, kT, Ein, Eout, mu(imu))
+        end do
+        ! Do the intermediate points
+        do iE = 2, NEout_per_grp - 1
+          Eout = Eout + dE
+          leading_term = TWO * const_term * sqrt(Eout / Ein)
+          do imu = 1, size(mu)
+            fEmu_int(imu, g) = fEmu_int(imu, g) + &
+              leading_term * fEmu(imu) * calc_sab(A, kT, Ein, Eout, mu(imu))
+          end do
+        end do
+        ! Do the last point
+        Eout = E_bins(g + 1)
+        leading_term = const_term * sqrt(Eout / Ein)
+        do imu = 1, size(mu)
+          fEmu_int(imu, g) = fEmu_int(imu, g) + &
+            leading_term * fEmu(imu) * calc_sab(A, kT, Ein, Eout, mu(imu))
+        end do
+        ! The trapezoidal integration last terms (dE / 2) will be done
+        ! after the legendre moments are calculated; there will typically be
+        ! less moments than mu pts, therefore this will be more efficient
+        !fEmu_int(:, g) = dE * 0.5_8 * fEmu_int(:, g)
+        
+        ! Now take the legendre moments of this distribution
+        do imu = 1, size(mu) - 1
+          distro(:, g) = distro(:, g) + &
+            calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
+              fEmu_int(imu, g), fEmu_int(imu + 1, g))
+        end do
+        ! Do the trapezoidal integration dE/2 term
+        distro(:, g) = distro(:, g) * dE * 0.5_8
+      end do
 
 
-      
+
     end subroutine integrate_freegas_leg
+
+    pure function calc_sab(A, kT, Ein, Eout, mu) result(sab)
+      real(8), intent(in) :: A    ! Atomic-weight-ratio of target
+      real(8), intent(in) :: kT   ! Target Temperature (MeV)
+      real(8), intent(in) :: Ein  ! Incoming energy of neutron
+      real(8), intent(in) :: Eout ! Outgoing energy of neutron
+      real(8), intent(in) :: mu   ! Angle in question
+      
+      real(8) :: sab   ! The result of this function
+      real(8) :: alpha ! Momentum Transfer
+      real(8) :: beta  ! Energy Transfer
+
+      alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (A * kT)
+      beta = (Eout - Ein) / kT
+      sab = exp((-(alpha + beta) ** 2) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))
+
+    end function calc_sab
+      
+
 
 
 end module scattdata_class
