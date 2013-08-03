@@ -1367,32 +1367,56 @@ module scattdata_class
       integer :: imu           ! angle bin index
       integer :: iE            ! Outgoing energy index
       real(8) :: dE            ! delta Energy (outgoing)
-      integer :: NEout_per_grp ! # of Eout pts per group
       real(8), allocatable :: fEmu_int(:,:) ! Integrated (over Eout) fEmu
       real(8) :: leading_term  ! Constants in front of Free Gas formula
       real(8) :: const_term    ! Constants in front of Free Gas formula
       real(8) :: Eout          ! Value of outgoing energy
+      real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
+      real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
+                                      ! for this group
       
       allocate(fEmu_int(size(mu), size(E_bins) - 1))
       !fEmu_int = ZERO
 
-      ! I really should be using gaussian quadrature for Eout, and splitting
-      ! the problem to above kT and below kT
-      dE = E_bins(size(E_bins)) - E_bins(1)
-      !NEout_per_grp = int(ceiling(real(dE, 8) / real(NEout, 8)))
-      NEout_per_grp = NEout
+      ! Calculate the lower and upper bounds of integration
+      call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
+      
       const_term = ((A + ONE) / A) ** 2 / kT
       do g = 1, size(E_bins) - 1
-        dE = (E_bins(g + 1) - E_bins(g)) / real(NEout_per_grp, 8)
+        if (Eout_hi <= E_bins(g)) then
+          ! The E pts are all outside this group
+          distro(:, g) = ZERO
+          cycle
+        else if (Eout_lo >= E_bins(g + 1)) then
+          ! The E pts are all outside this group
+          distro(:, g) = ZERO
+          cycle
+        end if
+        ! Set bounds of integration for this group
+        if (Eout_lo > E_bins(g)) then
+          Eout_lo_g = Eout_lo
+        else
+          Eout_lo_g = E_bins(g)
+        end if
+        if (Eout_hi < E_bins(g + 1)) then
+          Eout_hi_g = Eout_hi
+        else
+          Eout_hi_g = E_bins(g + 1)
+        end if
+
+        !!! This probably should be lethargy based
+        !!! Remember that doing so changes my 
+        !!! Trapezoidal integration (uneven dE)
+        dE = (Eout_hi_g - Eout_lo_g) / real(NEout, 8)
         ! Do the 1st point
-        Eout = E_bins(g)
+        Eout = Eout_lo_g
         leading_term = const_term * sqrt(Eout / Ein)
         do imu = 1, size(mu)
           fEmu_int(imu, g) = leading_term * fEmu(imu) * &
             calc_sab(A, kT, Ein, Eout, mu(imu))
         end do
         ! Do the intermediate points
-        do iE = 2, NEout_per_grp - 1
+        do iE = 2, NEout - 1
           Eout = Eout + dE
           leading_term = TWO * const_term * sqrt(Eout / Ein)
           do imu = 1, size(mu)
@@ -1401,7 +1425,7 @@ module scattdata_class
           end do
         end do
         ! Do the last point
-        Eout = E_bins(g + 1)
+        Eout = Eout_hi_g
         leading_term = const_term * sqrt(Eout / Ein)
         do imu = 1, size(mu)
           fEmu_int(imu, g) = fEmu_int(imu, g) + &
@@ -1426,7 +1450,26 @@ module scattdata_class
 
     end subroutine integrate_freegas_leg
 
-    function calc_sab(A, kT, Ein, Eout, mu) result(sab)
+    pure subroutine calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
+      real(8), intent(in) :: A    ! Atomic-weight-ratio of target
+      real(8), intent(in) :: kT   ! Target Temperature (MeV)
+      real(8), intent(in) :: Ein  ! Incoming energy of neutron
+      real(8), intent(out) :: Eout_lo ! Low bound of Eout
+      real(8), intent(out) :: Eout_hi ! High bound of Eout
+
+      ! I Kinda made this up
+      Eout_lo = min(Ein - 32.0_8 * kT / A, ZERO)
+      Eout_hi = Ein + 32.0_8 * kT / A
+      !!! These are wrong as the bounds do not
+      !!! approach alphaE as Ein grows larger than kT
+
+      !!! To do this right, I just need to set what my 
+      !!! minimum value of sab is, then solve for what
+      !!! alpha and beta achieve that (then convert to Eout)
+
+    end subroutine calc_FG_Eout_bounds
+
+    pure function calc_sab(A, kT, Ein, Eout, mu) result(sab)
       real(8), intent(in) :: A    ! Atomic-weight-ratio of target
       real(8), intent(in) :: kT   ! Target Temperature (MeV)
       real(8), intent(in) :: Ein  ! Incoming energy of neutron
@@ -1439,7 +1482,12 @@ module scattdata_class
 
       alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (A * kT)
       beta = (Eout - Ein) / kT
+      if (alpha == ZERO) then
+        alpha = 1.0E-8_8
+      end if
       sab = exp((-(alpha + beta) ** 2) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))
+      ! Another option for sab: (From ENDF Manual)
+!       sab = exp(-0.5_8 * beta) * exp((-(alpha**2 + beta**2)) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))
 
     end function calc_sab
       
