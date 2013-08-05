@@ -1374,6 +1374,7 @@ module scattdata_class
       real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
       real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
                                       ! for this group
+      logical :: EEmatch = .false.    ! Ein matches Eout
       
       allocate(fEmu_int(size(mu), size(E_bins) - 1))
       !fEmu_int = ZERO
@@ -1392,6 +1393,7 @@ module scattdata_class
           distro(:, g) = ZERO
           cycle
         end if
+
         ! Set bounds of integration for this group
         if (Eout_lo > E_bins(g)) then
           Eout_lo_g = Eout_lo
@@ -1404,12 +1406,15 @@ module scattdata_class
           Eout_hi_g = E_bins(g + 1)
         end if
 
-        !!! This probably should be lethargy based
+        !!! Should this be lethargy based instead?
         !!! Remember that doing so changes my 
         !!! Trapezoidal integration (uneven dE)
         dE = (Eout_hi_g - Eout_lo_g) / real(NEout, 8)
         ! Do the 1st point
         Eout = Eout_lo_g
+        if (abs(Ein - Eout) < 1.0E-10_8) then
+          EEmatch = .true.
+        end if
         leading_term = const_term * sqrt(Eout / Ein)
         do imu = 1, size(mu)
           fEmu_int(imu, g) = leading_term * fEmu(imu) * &
@@ -1418,6 +1423,9 @@ module scattdata_class
         ! Do the intermediate points
         do iE = 2, NEout - 1
           Eout = Eout + dE
+          if (abs(Ein - Eout) < 1.0E-10_8) then 
+            EEmatch = .true.
+          end if
           leading_term = TWO * const_term * sqrt(Eout / Ein)
           do imu = 1, size(mu)
             fEmu_int(imu, g) = fEmu_int(imu, g) + &
@@ -1426,16 +1434,54 @@ module scattdata_class
         end do
         ! Do the last point
         Eout = Eout_hi_g
+        if (abs(Ein - Eout) < 1.0E-10_8) then 
+          EEmatch = .true.
+        end if
         leading_term = const_term * sqrt(Eout / Ein)
         do imu = 1, size(mu)
           fEmu_int(imu, g) = fEmu_int(imu, g) + &
             leading_term * fEmu(imu) * calc_sab(A, kT, Ein, Eout, mu(imu))
         end do
+
+        ! In calc_sab, we set sab to 0 if Ein~~Eout.  Now I want to go back and interpolate
+        ! between the two values next to the offending point and put that in its place
+        if (EEmatch) then
+          if ((abs(Ein - Eout_lo_g) < 1.0E-10_8) .or. &
+            (abs(Ein - Eout_hi_g) < 1.0E-10_8)) then 
+            ! We had an edge piece that needs correction, the leading term is NOT
+            ! to be multiplied by two, so divide it out now
+            const_term = 0.5_8 * const_term
+          end if
+
+          ! Do the lower point
+          Eout = Ein - dE
+          if (Eout < ZERO) then
+            Eout = ZERO
+          end if
+
+          ! the 0.5 for interpolation is cancelled out with the 2.0 multiplies
+          leading_term = const_term * sqrt(Eout / Ein)
+          do imu = 1, size(mu)
+            fEmu_int(imu, g) = fEmu_int(imu, g) + leading_term * fEmu(imu) * &
+              calc_sab(A, kT, Ein, Eout, mu(imu))
+          end do
+
+          ! Do the upper term
+          Eout = Ein + dE
+          leading_term = const_term * sqrt(Eout / Ein)
+          ! the 0.5 for interpolation is cancelled out with the 2.0 multiplies
+          do imu = 1, size(mu)
+            fEmu_int(imu, g) = fEmu_int(imu, g) + leading_term * fEmu(imu) * &
+              calc_sab(A, kT, Ein, Eout, mu(imu))
+          end do
+
+        end if
+
         ! The trapezoidal integration last terms (dE / 2) will be done
         ! after the legendre moments are calculated; there will typically be
         ! less moments than mu pts, therefore this will be more efficient
         !fEmu_int(:, g) = dE * 0.5_8 * fEmu_int(:, g)
-        
+
         ! Now take the legendre moments of this distribution
         do imu = 1, size(mu) - 1
           distro(:, g) = distro(:, g) + &
@@ -1444,6 +1490,11 @@ module scattdata_class
         end do
         ! Do the trapezoidal integration dE/2 term
         distro(:, g) = distro(:, g) * dE * 0.5_8
+
+        ! We should normalize these to account for numerical error build up
+        Eout = distro(1, g) ! Eout will store the normalization constant
+        distro(:, g) = distro(:, g) / Eout
+
       end do
 
 
@@ -1457,15 +1508,12 @@ module scattdata_class
       real(8), intent(out) :: Eout_lo ! Low bound of Eout
       real(8), intent(out) :: Eout_hi ! High bound of Eout
 
-      ! I Kinda made this up
-      Eout_lo = min(Ein - 32.0_8 * kT / A, ZERO)
-      Eout_hi = Ein + 32.0_8 * kT / A
-      !!! These are wrong as the bounds do not
-      !!! approach alphaE as Ein grows larger than kT
+      real(8) :: alpha 
 
-      !!! To do this right, I just need to set what my 
-      !!! minimum value of sab is, then solve for what
-      !!! alpha and beta achieve that (then convert to Eout)
+      alpha = ((A - ONE) / (A + ONE))**2
+
+      Eout_lo = 0.5_8 * alpha * Ein
+      Eout_hi = Ein + (Ein - Eout_lo) + kT * A
 
     end subroutine calc_FG_Eout_bounds
 
@@ -1482,16 +1530,14 @@ module scattdata_class
 
       alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (A * kT)
       beta = (Eout - Ein) / kT
-      if (alpha == ZERO) then
-        alpha = 1.0E-8_8
+      if (abs(Ein - Eout) < 1.0E-10_8) then
+        sab = ZERO
+      else
+        sab = exp((-(alpha + beta) ** 2) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))  
       end if
-      sab = exp((-(alpha + beta) ** 2) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))
       ! Another option for sab: (From ENDF Manual)
 !       sab = exp(-0.5_8 * beta) * exp((-(alpha**2 + beta**2)) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))
 
     end function calc_sab
-      
-
-
 
 end module scattdata_class
