@@ -1529,14 +1529,16 @@ module scattdata_class
       real(8) :: beta  ! Energy Transfer
 
       alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (A * kT)
+      if (alpha < 1.0E-6_8) alpha = 1.0E-6_8 ! From NJOY99 sigl
       beta = (Eout - Ein) / kT
+      sab = -(alpha + beta) ** 2) / (4.0_8 * alpha) ! Temp storage
       if (abs(Ein - Eout) < 1.0E-10_8) then
         sab = ZERO
+      else if (sab < -225.0_8) then ! A test from NJOY99's sigl subroutine
+        sab = ZERO
       else
-        sab = exp((-(alpha + beta) ** 2) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))  
+        sab = exp((sab / (sqrt(4.0_8 * PI * alpha))  
       end if
-      ! Another option for sab: (From ENDF Manual)
-!       sab = exp(-0.5_8 * beta) * exp((-(alpha**2 + beta**2)) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))
 
     end function calc_sab
 
