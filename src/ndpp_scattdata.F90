@@ -1366,31 +1366,34 @@ module scattdata_class
       integer :: g             ! outgoing energy group index
       integer :: imu           ! angle bin index
       integer :: iE            ! Outgoing energy index
-      real(8) :: dE            ! delta Energy (outgoing)
+      real(8) :: du            ! delta lethargy (outgoing)
       real(8), allocatable :: fEmu_int(:,:) ! Integrated (over Eout) fEmu
-      real(8) :: leading_term  ! Constants in front of Free Gas formula
-      real(8) :: const_term    ! Constants in front of Free Gas formula
-      real(8) :: Eout          ! Value of outgoing energy
+      real(8) :: Eout, Eout_prev  ! Value of outgoing energy
       real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
       real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
                                       ! for this group
-      logical :: EEmatch = .false.    ! Ein matches Eout
+      real(8) :: p0_1g_norm
+      real(8), allocatable :: sabs(:,:)
+!       real(8), allocatable :: fEl_int(:, :, :)
       
       allocate(fEmu_int(size(mu), size(E_bins) - 1))
-      !fEmu_int = ZERO
+      fEmu_int = ZERO
+!       allocate(fEl_int(size(distro, dim = 1), NEout, size(E_bins) - 1))
+!       fEl_int = ZERO
+      distro = ZERO
+      p0_1g_norm = ZERO
+      allocate(sabs(size(mu), NEout))
 
       ! Calculate the lower and upper bounds of integration
       call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
-      
-      const_term = ((A + ONE) / A) ** 2 / kT
+
       do g = 1, size(E_bins) - 1
+        ! First we find our energy ranges of interest
         if (Eout_hi <= E_bins(g)) then
           ! The E pts are all outside this group
-          distro(:, g) = ZERO
           cycle
         else if (Eout_lo >= E_bins(g + 1)) then
           ! The E pts are all outside this group
-          distro(:, g) = ZERO
           cycle
         end if
 
@@ -1405,82 +1408,38 @@ module scattdata_class
         else
           Eout_hi_g = E_bins(g + 1)
         end if
+!         Eout_lo_g = E_bins(g)
+        if (Eout_lo_g == ZERO) Eout_lo_g = 1E-12_8
+!         Eout_hi_g = E_bins(g + 1)
 
-        !!! Should this be lethargy based instead?
-        !!! Remember that doing so changes my 
-        !!! Trapezoidal integration (uneven dE)
-        dE = (Eout_hi_g - Eout_lo_g) / real(NEout, 8)
-        ! Do the 1st point
-        Eout = Eout_lo_g
-        if (abs(Ein - Eout) < 1.0E-10_8) then
-          EEmatch = .true.
-        end if
-        leading_term = const_term * sqrt(Eout / Ein)
-        do imu = 1, size(mu)
-          fEmu_int(imu, g) = leading_term * fEmu(imu) * &
-            calc_sab(A, kT, Ein, Eout, mu(imu))
-        end do
-        ! Do the intermediate points
-        do iE = 2, NEout - 1
-          Eout = Eout + dE
-          if (abs(Ein - Eout) < 1.0E-10_8) then 
-            EEmatch = .true.
-          end if
-          leading_term = TWO * const_term * sqrt(Eout / Ein)
+!       Enable the next line for equi-lethargy pts
+        du = log(Eout_hi_g / Eout_lo_g) / real(NEout - 1, 8)
+!       Enable the next line for equi-energy pts
+!         du = (Eout_hi_g - Eout_lo_g) / real(NEout - 1, 8)
+
+        ! First find our sab array   
+        do iE = 1, NEout
+!       Enable the next line for equi-lethargy pts          
+          Eout = Eout_lo_g * exp(du * real(iE - 1, 8))
+!       Enable the next line for equi-energy pts          
+!           Eout = Eout_lo_g + real(iE - 1, 8) * du
           do imu = 1, size(mu)
-            fEmu_int(imu, g) = fEmu_int(imu, g) + &
-              leading_term * fEmu(imu) * calc_sab(A, kT, Ein, Eout, mu(imu))
-          end do
-        end do
-        ! Do the last point
-        Eout = Eout_hi_g
-        if (abs(Ein - Eout) < 1.0E-10_8) then 
-          EEmatch = .true.
-        end if
-        leading_term = const_term * sqrt(Eout / Ein)
-        do imu = 1, size(mu)
-          fEmu_int(imu, g) = fEmu_int(imu, g) + &
-            leading_term * fEmu(imu) * calc_sab(A, kT, Ein, Eout, mu(imu))
-        end do
-
-        ! In calc_sab, we set sab to 0 if Ein~~Eout.  Now I want to go back and interpolate
-        ! between the two values next to the offending point and put that in its place
-        if (EEmatch) then
-          if ((abs(Ein - Eout_lo_g) < 1.0E-10_8) .or. &
-            (abs(Ein - Eout_hi_g) < 1.0E-10_8)) then 
-            ! We had an edge piece that needs correction, the leading term is NOT
-            ! to be multiplied by two, so divide it out now
-            const_term = 0.5_8 * const_term
-          end if
-
-          ! Do the lower point
-          Eout = Ein - dE
-          if (Eout < ZERO) then
-            Eout = ZERO
-          end if
-
-          ! the 0.5 for interpolation is cancelled out with the 2.0 multiplies
-          leading_term = const_term * sqrt(Eout / Ein)
-          do imu = 1, size(mu)
-            fEmu_int(imu, g) = fEmu_int(imu, g) + leading_term * fEmu(imu) * &
+            sabs(imu, iE) = fEmu(imu) * &
               calc_sab(A, kT, Ein, Eout, mu(imu))
           end do
+        end do
 
-          ! Do the upper term
-          Eout = Ein + dE
-          leading_term = const_term * sqrt(Eout / Ein)
-          ! the 0.5 for interpolation is cancelled out with the 2.0 multiplies
-          do imu = 1, size(mu)
-            fEmu_int(imu, g) = fEmu_int(imu, g) + leading_term * fEmu(imu) * &
-              calc_sab(A, kT, Ein, Eout, mu(imu))
-          end do
-
-        end if
-
-        ! The trapezoidal integration last terms (dE / 2) will be done
-        ! after the legendre moments are calculated; there will typically be
-        ! less moments than mu pts, therefore this will be more efficient
-        !fEmu_int(:, g) = dE * 0.5_8 * fEmu_int(:, g)
+        ! Integrate over Eout
+        Eout_prev = Eout_lo_g
+        do iE = 1, NEout - 1
+!       Enable the next line for equi-lethargy pts
+          Eout = Eout_prev * exp(du)
+!       Enable the next line for equi-energy pts
+!           Eout = Eout_prev + du
+          fEmu_int(:, g) = fEmu_int(:, g) + (Eout - Eout_prev) * &
+            (sabs(:, iE + 1) + sabs(:, iE))
+          Eout_prev = Eout
+        end do
 
         ! Now take the legendre moments of this distribution
         do imu = 1, size(mu) - 1
@@ -1488,16 +1447,12 @@ module scattdata_class
             calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
               fEmu_int(imu, g), fEmu_int(imu + 1, g))
         end do
-        ! Do the trapezoidal integration dE/2 term
-        distro(:, g) = distro(:, g) * dE * 0.5_8
-
-        ! We should normalize these to account for numerical error build up
-        Eout = distro(1, g) ! Eout will store the normalization constant
-        distro(:, g) = distro(:, g) / Eout
+        
+        p0_1g_norm = p0_1g_norm + distro(1, g)
 
       end do
 
-
+      distro = distro / p0_1g_norm
 
     end subroutine integrate_freegas_leg
 
@@ -1512,7 +1467,7 @@ module scattdata_class
 
       alpha = ((A - ONE) / (A + ONE))**2
 
-      Eout_lo = 0.5_8 * alpha * Ein
+      Eout_lo = 0.05_8 * alpha * Ein
       Eout_hi = Ein + (Ein - Eout_lo) + kT * A
 
     end subroutine calc_FG_Eout_bounds
@@ -1527,16 +1482,31 @@ module scattdata_class
       real(8) :: sab   ! The result of this function
       real(8) :: alpha ! Momentum Transfer
       real(8) :: beta  ! Energy Transfer
+      real(8) :: lterm 
+
+      real(8), parameter :: alpha_min = 1.0E-6_8
+      real(8), parameter :: sab_min   = -225.0_8
+      real(8), parameter :: lterm_min = 1.0E-10_8
 
       alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (A * kT)
+!       if (alpha < alpha_min) then
+!         alpha = alpha_min
+!       end if
       beta = (Eout - Ein) / kT
-      if (abs(Ein - Eout) < 1.0E-10_8) then
-        sab = ZERO
-      else
-        sab = exp((-(alpha + beta) ** 2) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))  
-      end if
-      ! Another option for sab: (From ENDF Manual)
-!       sab = exp(-0.5_8 * beta) * exp((-(alpha**2 + beta**2)) / (4.0_8 * alpha) ) / (sqrt(4.0_8 * PI * alpha))
+      lterm = 0.5_8 * sqrt(Eout / Ein) / kT * ((A + ONE) / A) ** 2
+
+      sab = -(alpha + beta)**2 / (4.0_8 * alpha) ! The sab exp argument
+
+!       if (sab > sab_min) then
+        sab = exp(sab) / (sqrt(4.0_8 * PI * alpha))  
+!       else
+!         sab = ZERO
+!       end if
+
+      sab = lterm * sab
+!       if (sab < lterm_min) then
+!         sab = ZERO
+!       end if
 
     end function calc_sab
 

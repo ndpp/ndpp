@@ -150,18 +150,31 @@ module ndpp_scatt
       integer :: groups, order                   ! # Groups, # Orders
       type(ScattData), pointer :: mySD => NULL() ! Current working ScattData object
       real(8) :: norm_tot                        ! Sum of all normalization consts
-      
+      integer :: iE_print                 ! iE range to print status of
+      integer :: iE_pct, last_iE_pct      ! Current and previous pct complete
+
+
       groups = rxn_data(1) % groups
       order = rxn_data(1) % order
       NE = size(E_grid)
       Nrxn = size(rxn_data)
+      iE_print = NE / 20
+      last_iE_pct = -1
       
       ! Allocate the scatt_mat according to the groups, order and number of E pts
-      
       allocate(scatt_mat(order, groups, NE))
-      
+
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
       do iE = 1, NE
+        if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
+          iE_pct = 100 * iE / NE
+          if (iE_pct /= last_iE_pct) then
+            message = "    Evaluation " // &
+              trim(to_str(100 * iE / NE)) // "% Complete"
+            call write_message(7)
+          end if
+          last_iE_pct = iE_pct 
+        end if
         if (E_grid(iE) <= rxn_data(1) % E_bins(size(rxn_data(1) % E_bins))) then
           scatt_mat(:, :, iE) = ZERO
           norm_tot = ZERO
