@@ -1367,22 +1367,23 @@ module scattdata_class
       integer :: imu           ! angle bin index
       integer :: iE            ! Outgoing energy index
       real(8) :: du            ! delta lethargy (outgoing)
-      real(8), allocatable :: fEmu_int(:,:) ! Integrated (over Eout) fEmu
+      real(8), allocatable :: fEEl(:,:) ! function of Ein, Eout and legendre order l
       real(8) :: Eout, Eout_prev  ! Value of outgoing energy
       real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
       real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
                                       ! for this group
       real(8) :: p0_1g_norm
-      real(8), allocatable :: sabs(:,:)
-!       real(8), allocatable :: fEl_int(:, :, :)
+      real(8), allocatable :: mymu(:)
+      real(8) :: beta
+      real(8) :: sab_prev, sab
+      integer :: i
+      real(8) :: interp, fEmu_val
       
-      allocate(fEmu_int(size(mu), size(E_bins) - 1))
-      fEmu_int = ZERO
-!       allocate(fEl_int(size(distro, dim = 1), NEout, size(E_bins) - 1))
-!       fEl_int = ZERO
+      allocate(fEEl(order, NEout))
+      fEEl = ZERO
       distro = ZERO
       p0_1g_norm = ZERO
-      allocate(sabs(size(mu), NEout))
+      allocate(mymu(FREEGAS_MU_PTS))
 
       ! Calculate the lower and upper bounds of integration
       call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
@@ -1408,44 +1409,80 @@ module scattdata_class
         else
           Eout_hi_g = E_bins(g + 1)
         end if
-!         Eout_lo_g = E_bins(g)
-        if (Eout_lo_g == ZERO) Eout_lo_g = 1E-12_8
-!         Eout_hi_g = E_bins(g + 1)
 
-!       Enable the next line for equi-lethargy pts
+        ! Avoid a potential division by zero error
+        if (Eout_lo_g == ZERO) Eout_lo_g = 1E-13_8
+
+        ! Set the spacing to use for my Eout points
         du = log(Eout_hi_g / Eout_lo_g) / real(NEout - 1, 8)
-!       Enable the next line for equi-energy pts
-!         du = (Eout_hi_g - Eout_lo_g) / real(NEout - 1, 8)
+
+        ! We will do this double integration by integrating over 
+        ! angle first (since sab varies more rapidly over angle than energy)
+        ! So, for each Eout, we set Eout, calculate beta, find the mu range of 
+        ! interest, then calculate sab as a function of mu, integrate
+        ! over this range for each legendre, and then store these in fEEl
 
         ! First find our sab array   
         do iE = 1, NEout
-!       Enable the next line for equi-lethargy pts          
+          ! Find our Eout
           Eout = Eout_lo_g * exp(du * real(iE - 1, 8))
-!       Enable the next line for equi-energy pts          
-!           Eout = Eout_lo_g + real(iE - 1, 8) * du
-          do imu = 1, size(mu)
-            sabs(imu, iE) = fEmu(imu) * &
-              calc_sab(A, kT, Ein, Eout, mu(imu))
+          
+          ! Find beta
+          beta = (Eout - Ein) / kT
+
+          ! Now lets find the values of mu to
+          ! do the integration over
+          ! We do this because s(a,b) can look very much
+          ! like a delta function as Ein >> kT and so
+          ! we need to focus the Mu points to the region with
+          ! non-negligible values.
+          ! Note that non-negligible is defined by
+          ! SAB_THRESHOLD in the constants module.
+          call find_FG_mu(A, kT, Ein, Eout, beta, mymu)
+
+          ! Now lets find sabs over this range
+          ! Find fEmu pt corresponding to mymu(1)
+          if (mymu(1) <= mu(1)) then
+              i = 1
+            else if (mymu(1) >= mu(size(mu))) then
+              i = size(mu) - 1
+            else
+              i = binary_search(mu, size(mu), mymu(1))
+            end if
+          interp = (mymu(1) - mu(i)) / (mu(i + 1) - mu(i))
+          fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
+          ! Now calculate sab value
+          sab_prev = fEmu_val * &
+              calc_sab(A, kT, Ein, Eout, beta, mymu(1))
+          do imu = 2, size(mymu)
+            ! Find fEmu pt corresponding to mymu(imu)
+            if (mymu(imu) <= mu(1)) then
+              i = 1
+            else if (mymu(imu) >= mu(size(mu))) then
+              i = size(mu) - 1
+            else
+              i = binary_search(mu, size(mu), mymu(imu))
+            end if
+            interp = (mymu(imu) - mu(i)) / (mu(i + 1) - mu(i))
+            fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
+            ! Now calculate sab value
+            sab = fEmu_val * &
+              calc_sab(A, kT, Ein, Eout, beta, mymu(imu))
+
+            fEEl(:, iE) = fEEl(:, iE) + &
+              calc_int_pn_tablelin(order, mymu(imu - 1), mymu(imu), sab_prev, sab)
+
+            sab_prev = sab
           end do
         end do
 
         ! Integrate over Eout
         Eout_prev = Eout_lo_g
         do iE = 1, NEout - 1
-!       Enable the next line for equi-lethargy pts
           Eout = Eout_prev * exp(du)
-!       Enable the next line for equi-energy pts
-!           Eout = Eout_prev + du
-          fEmu_int(:, g) = fEmu_int(:, g) + (Eout - Eout_prev) * &
-            (sabs(:, iE + 1) + sabs(:, iE))
+          distro(:, g) = distro(:, g) + (Eout - Eout_prev) * &
+            (fEEl(:, iE + 1) + fEEl(:, iE))
           Eout_prev = Eout
-        end do
-
-        ! Now take the legendre moments of this distribution
-        do imu = 1, size(mu) - 1
-          distro(:, g) = distro(:, g) + &
-            calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
-              fEmu_int(imu, g), fEmu_int(imu + 1, g))
         end do
         
         p0_1g_norm = p0_1g_norm + distro(1, g)
@@ -1467,47 +1504,214 @@ module scattdata_class
 
       alpha = ((A - ONE) / (A + ONE))**2
 
-      Eout_lo = 0.05_8 * alpha * Ein
-      Eout_hi = Ein + (Ein - Eout_lo) + kT * A
+      Eout_lo = 0.05_8 * alpha * kT * Ein
+      Eout_hi = Ein + 4.0_8 * kT * (A + ONE) / A
 
     end subroutine calc_FG_Eout_bounds
 
-    pure function calc_sab(A, kT, Ein, Eout, mu) result(sab)
+    pure function calc_sab(A, kT, Ein, Eout, beta, mu) result(sab)
       real(8), intent(in) :: A    ! Atomic-weight-ratio of target
       real(8), intent(in) :: kT   ! Target Temperature (MeV)
       real(8), intent(in) :: Ein  ! Incoming energy of neutron
       real(8), intent(in) :: Eout ! Outgoing energy of neutron
+      real(8), intent(in) :: beta ! Energy Transfer
       real(8), intent(in) :: mu   ! Angle in question
       
       real(8) :: sab   ! The result of this function
       real(8) :: alpha ! Momentum Transfer
-      real(8) :: beta  ! Energy Transfer
       real(8) :: lterm 
 
       real(8), parameter :: alpha_min = 1.0E-6_8
       real(8), parameter :: sab_min   = -225.0_8
       real(8), parameter :: lterm_min = 1.0E-10_8
 
+
       alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (A * kT)
-!       if (alpha < alpha_min) then
-!         alpha = alpha_min
-!       end if
-      beta = (Eout - Ein) / kT
+      if (alpha < alpha_min) then
+        alpha = alpha_min
+      end if
       lterm = 0.5_8 * sqrt(Eout / Ein) / kT * ((A + ONE) / A) ** 2
 
       sab = -(alpha + beta)**2 / (4.0_8 * alpha) ! The sab exp argument
 
-!       if (sab > sab_min) then
-        sab = exp(sab) / (sqrt(4.0_8 * PI * alpha))  
-!       else
-!         sab = ZERO
-!       end if
+      if (sab < sab_min) then
+        sab = ZERO
+      else
+        sab = lterm * exp(sab) / (sqrt(4.0_8 * PI * alpha))  
+      end if
 
-      sab = lterm * sab
-!       if (sab < lterm_min) then
-!         sab = ZERO
-!       end if
+      if (sab < lterm_min) then
+        sab = ZERO
+      end if
 
     end function calc_sab
+
+    pure function brent_mu(awr, kT, Ein, Eout, beta, thresh, lo, hi, tol) result(mu_val)
+      real(8), intent(in) :: awr    ! Atomic-weight-ratio of target
+      real(8), intent(in) :: kT   ! Target Temperature (MeV)
+      real(8), intent(in) :: Ein  ! Incoming energy of neutron
+      real(8), intent(in) :: Eout ! Outgoing energy of neutron
+      real(8), intent(in) :: beta ! Energy Transfer
+      real(8), intent(in) :: thresh ! SAB Threshold to search for
+      real(8), intent(in) :: lo   ! Low mu value boundary
+      real(8), intent(in) :: hi   ! High mu value boundary
+      real(8), intent(in) :: tol  ! Error tolerance
+
+      real(8) :: mu_val
+      real(8) :: a, b, c, d, fa, fb, fc, s, fs
+      real(8) :: tmpval
+      integer :: i     ! Iteration counter
+      logical :: mflag ! Method flag
+
+      a = lo
+      b = hi
+      c = ZERO
+      d = INFINITY
+
+      fa = calc_sab(awr, kT, Ein, Eout, beta, a) - thresh
+      fb = calc_sab(awr, kT, Ein, Eout, beta, b) - thresh
+
+      fc = ZERO
+      s  = ZERO
+      fs = ZERO
+
+      ! Check the bounds, exit if we are not in bounds
+      if (fa * fb >= ZERO) then
+        if (fa < fb) then
+          mu_val = a
+        else
+          mu_val = b
+        end if
+        return
+      end if
+
+      ! Now, we will switch a and b if abs(fa) < abs(fb)
+      if (abs(fa) < abs(fb)) then
+        tmpval = a
+        a = b
+        b = tmpval
+        tmpval = fa
+        fa = fb
+        fb = tmpval
+      end if
+
+      ! Set up our initial run through
+
+      c = a
+      fc = fa
+      mflag = .true.
+      i = 0
+
+      do while ((fb /= ZERO) .and. (abs(a - b) > tol))
+        if ((fa /= fc) .and. (fb /= fc)) then
+          ! Inverse quadratic interpolation
+          s = a * fb * fc / (fa - fb) / (fa - fc) + b * fa * fc / (fb - fa) / &
+            (fb - fc) + c * fa * fb / (fc - fa) / (fc - fb)
+        else
+          ! Secant Rule
+          s = b - fb * (b - a) / (fb - fa)
+        end if
+
+        tmpval = (3.0_8 * a + b) * 0.25_8
+        if ((.not. (((s > tmpval) .and. (s < b)) .or. &
+          ((s < tmpval) .and. (s > b)))) .or. &
+          (mflag .and. (abs(s - b) >= (0.5_8 * abs(b - c)))) .or. &
+          (.not. mflag .and. (abs(s - b) >= (abs(c - d) * 0.5_8)))) then
+            s = 0.5_8 * (a + b)
+            mflag = .true.
+        else
+          if ((mflag .and. (abs(b - c) < tol)) .or. &
+            (.not. mflag .and. (abs(c - d) < tol))) then
+            s = (a + b) * 0.5_8
+            mflag = .true.
+          else
+              mflag = .false.
+          end if          
+        end if
+
+        fs = calc_sab(awr, kT, Ein, Eout, beta, s) - thresh
+        d = c
+        c = b
+        fc = fb
+
+        if (fa * fs < ZERO) then
+          b = s
+          fb = fs
+        else 
+          a = s
+          fa = fs
+        end if
+
+        ! Now swap a and b if we need to again
+        if (abs(fa) < abs(fb)) then
+          tmpval = a
+          a = b
+          b = tmpval
+          tmpval = fa
+          fa = fb
+          fb = tmpval
+        end if
+
+        i = i + 1
+      end do
+
+      mu_val =  b
+
+    end function brent_mu
+
+    subroutine find_FG_mu(A, kT, Ein, Eout, beta, mu)
+      real(8), intent(in) :: A    ! Atomic-weight-ratio of target
+      real(8), intent(in) :: kT   ! Target Temperature (MeV)
+      real(8), intent(in) :: Ein  ! Incoming energy of neutron
+      real(8), intent(in) :: Eout ! Outgoing energy of neutron
+      real(8), intent(in) :: beta ! Energy Transfer
+      real(8), intent(inout) :: mu(:) ! Angle points to analyze
+
+      real(8) :: mu_max    ! mu which gives the peak of sab(mu)
+      real(8) :: alpha_max ! Value of alpha corresponding to mu_max
+      real(8) :: sab_max   ! Maximum sab value in [-1,1]
+      real(8) :: sab_minthresh ! Minimum value of sab to consider
+      real(8) :: mu_lo, mu_hi, dmu ! Low, hi mu pts and delta-mu
+      integer :: imu       ! mu loop index
+
+      ! Calculate the alpha corresponding to the max of s(a,b)
+      ! This was derived by ds(a,b)/da = 0
+      alpha_max = sqrt(beta * beta + ONE) - ONE
+      ! Find the mu values corresponding to alpha_max
+      mu_max = (Ein + Eout - alpha_max * A * kT) / (TWO * sqrt(Ein * Eout))
+      
+      ! Now that I have mu_max, lets chack the values to the left and right
+      ! side to try and find when we can start inspecting sab
+
+      ! First, if mu_max is outside of [-1,1], then this is a relatively
+      ! flat profile and we should be integrating all of the range
+      if (abs(mu_max) > ONE) then
+        mu_lo = -ONE
+        mu_hi = ONE
+      else
+        ! Lets first start checking the low side.
+        ! Our threshold is based on the value of sab
+        ! at the maximum, so lets find the maximum value
+        sab_max = calc_sab(A, kT, Ein, Eout, beta, mu_max)
+        sab_minthresh = sab_max * SAB_THRESHOLD
+        if (calc_sab(A, kT, Ein, Eout, beta, -ONE) > sab_minthresh) then
+          mu_lo = -ONE
+        else
+          mu_lo = brent_mu(A, kT, Ein, Eout, beta, sab_minthresh, -ONE, mu_max, 1.0E-5_8)
+        end if
+        if (calc_sab(A, kT, Ein, Eout, beta, ONE) > sab_minthresh) then
+          mu_hi = ONE
+        else
+          mu_hi = brent_mu(A, kT, Ein, Eout, beta, sab_minthresh, mu_max, ONE, 1.0E-5_8)
+        end if                 
+      end if
+
+      dmu = (mu_hi - mu_lo) / (real(size(mu) - 1, 8))
+      mu(1) = mu_lo
+      do imu = 2, size(mu)
+        mu(imu) = mu(imu - 1) + dmu
+      end do
+
+    end subroutine find_FG_mu
 
 end module scattdata_class

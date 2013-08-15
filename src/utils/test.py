@@ -5,6 +5,7 @@ import numpy as np
 from mayavi import mlab
 
 h1 = ndpp.NDPP_lib('./1001.70c.g60','binary')
+h1 = ndpp.NDPP_lib('./2004.70c.g60','binary')
 #~ h1 = ndpp.NDPP_lib('./1001.70c.g3','binary')
 #~ h1 = ndpp.NDPP_lib('./1002.84c.g1','binary')
 #~ h1 = ndpp.NDPP_lib('./8016.70c.g1','binary')

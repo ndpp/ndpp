@@ -86,8 +86,9 @@ module constants
   
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS  
-  integer, parameter :: MAX_LEGENDRE_ORDER   = 10, & ! Max Lab Legendre Order
-                        FREEGAS_EOUT_PTS     = 10001  ! Number of Eout pts for FreeGas
+  integer, parameter :: MAX_LEGENDRE_ORDER   = 10,   & ! Max Lab Legendre Order
+                        FREEGAS_EOUT_PTS     = 501, & ! Number of Eout pts for FreeGas
+                        FREEGAS_MU_PTS       = 501    ! Number of mu pts for FreeGas
                                                      
   ! Number of equiprobable bins
   integer, parameter :: NUM_EP = 32
@@ -98,6 +99,10 @@ module constants
   ! linear interpolation
   logical, parameter :: INTERP_NEAREST = .false.
 !~   logical, parameter :: INTERP_NEAREST = .true.
+
+  real(8), parameter :: SAB_THRESHOLD = 1.0E-3_8 ! Fraction of 
+  ! maximum s(alpha,beta) value to use as cutoff for determining
+  ! the range of integration
   
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
