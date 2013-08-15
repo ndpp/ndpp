@@ -1345,6 +1345,8 @@ module scattdata_class
 ! distribution
 !===============================================================================
 
+!!! NOT YET IMPLEMENTED
+
 !===============================================================================
 ! INTEGRATE_FREEGAS_LEG Finds Legendre moments of the energy-angle 
 ! distribution of an elastic collision using the free-gas scattering kernel.
@@ -1372,13 +1374,27 @@ module scattdata_class
       real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
       real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
                                       ! for this group
-      real(8) :: p0_1g_norm
-      real(8), allocatable :: mymu(:)
-      real(8) :: beta
-      real(8) :: sab_prev, sab
-      integer :: i
-      real(8) :: interp, fEmu_val
+      real(8) :: p0_1g_norm           ! normalization constant so that P0 = 1.0
+      real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
+      real(8) :: beta                 ! normalized energy transfer
+      real(8) :: sab_prev, sab        ! previous (last mu) and current values of S(a,b)
+      integer :: i                    ! Global mu index
+      real(8) :: interp, fEmu_val     ! interpolation fraction and interpolated value
+                                      ! of the angular distribution
       
+      ! This routine will proceed as follows:
+      ! 1) Find the outgoing energy boundaries of interest
+      ! 2) For each group:
+      !   2.a) for each Eout point:
+      !     2.a.i)   Find the angular boundaries to numerically integrate over
+      !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
+      !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
+      !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
+
+      !!! Other papers have used a Gaussian quadrature for Eout integration.
+      !!! This would be incredibly nice as I would save tremendously on the
+      !!! number of points.
+
       allocate(fEEl(order, NEout))
       fEEl = ZERO
       distro = ZERO
@@ -1458,7 +1474,8 @@ module scattdata_class
             end if
           interp = (mymu(1) - mu(i)) / (mu(i + 1) - mu(i))
           fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
-          ! Now calculate sab value
+          
+          ! Now calculate sab value, one at a time, integrating over mu as we go.
           sab_prev = fEmu_val * &
               calc_sab(A, kT, Ein, Eout, beta, mymu(1))
           do imu = 2, size(mymu)
@@ -1491,13 +1508,26 @@ module scattdata_class
           Eout_prev = Eout
         end do  
         
+        ! Tally the normalization constant.
         p0_1g_norm = p0_1g_norm + distro(1, g)
 
       end do
 
+      ! And normalize
       distro = distro / p0_1g_norm
-
     end subroutine integrate_freegas_leg
+
+!===============================================================================
+! CALC_FG_EOUT_BOUNDS determines the outgoing energy (Eout) integration bounds
+! to use such that the negligible 'tails' of the S(a,b) distribution can
+! be ignored, saving computational time. 
+!!! The following is not yet incorporated
+! This is done, in summary, by noting that, ona log-log plot, the f(Ein,Eout)
+! looks like a trapezoid, i.e., the tails are nearly linear (on a log scale).  
+! So, we can find the slope by taking two points we know are in each tail,
+! and then extrapolating the line to find where our chosen threshold
+! meets the 'trapezoid edges.'
+!===============================================================================
 
     pure subroutine calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
       real(8), intent(in) :: A    ! Atomic-weight-ratio of target
@@ -1506,14 +1536,28 @@ module scattdata_class
       real(8), intent(out) :: Eout_lo ! Low bound of Eout
       real(8), intent(out) :: Eout_hi ! High bound of Eout
 
-      real(8) :: alpha
+      real(8) :: alpha            ! Multiplicative factor which represents
+                                  ! maximum energy loss in a pure TAR collision.
 
       alpha = ((A - ONE) / (A + ONE))**2
 
+      ! alpha*Ein is the minimum Eout of a TAR elastic collision.
+      ! Let's take 5% of that energy, to give room for the fact that
+      ! the target is not at rest and this isn't a hard boundary anymore.
+      ! This... is willy nilly.
       Eout_lo = 0.05_8 * alpha * Ein
+
+      ! The only way for upscatter to occur is with the target nuclide having
+      ! a large maxwellian energy. So, add on larger than the mean to Ein.
+      ! Again, this is willy nilly.
       Eout_hi = 4.0_8 * kT * (A + ONE) / A + Ein
 
     end subroutine calc_FG_Eout_bounds
+
+!===============================================================================
+! CALC_SAB calculates the value of S(a,b) for the free-gas scattering kernel.
+! Note that beta is provided, but alpha is calculated within the function.
+!===============================================================================
 
     pure function calc_sab(A, kT, Ein, Eout, beta, mu) result(sab)
       real(8), intent(in) :: A    ! Atomic-weight-ratio of target
@@ -1525,31 +1569,42 @@ module scattdata_class
       
       real(8) :: sab   ! The result of this function
       real(8) :: alpha ! Momentum Transfer
-      real(8) :: lterm 
+      real(8) :: lterm ! The leading term from the rest of the integral with S(a,b)
+                       ! calculated in this routine to save FLOPs elsewhere.
 
+      ! These are limits used by NJOY99 to help with numerical stability.
       real(8), parameter :: alpha_min = 1.0E-6_8
       real(8), parameter :: sab_min   = -225.0_8
       real(8), parameter :: lterm_min = 1.0E-10_8
 
+      ! Find the leading term (the part not inside S(a,b), but still in eqn)
+      lterm = 0.5_8 * sqrt(Eout / Ein) / kT * ((A + ONE) / A) ** 2
 
+      ! Calculate momentum transfer, alpha
       alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (A * kT)
       if (alpha < alpha_min) then
         alpha = alpha_min
       end if
-      lterm = 0.5_8 * sqrt(Eout / Ein) / kT * ((A + ONE) / A) ** 2
 
+      ! Find the argument to the exponent in S(a,b), for testing against
+      ! sab_min
       sab = -(alpha + beta)**2 / (4.0_8 * alpha) ! The sab exp argument
 
       if (sab < sab_min) then
         sab = ZERO
       else
+        ! We have an acceptable value, plug in and move on.
         sab = lterm * exp(sab) / (sqrt(4.0_8 * PI * alpha))  
         if (sab < lterm_min) then
           sab = ZERO
         end if
       end if
-
     end function calc_sab
+
+!===============================================================================
+! BRENT_MU uses Brents method of root finding to determine where the S(a,b)
+! function crosses the provided threshold.
+!===============================================================================
 
     pure function brent_mu(awr, kT, Ein, Eout, beta, thresh, lo, hi, tol) result(mu_val)
       real(8), intent(in) :: awr    ! Atomic-weight-ratio of target
@@ -1664,6 +1719,15 @@ module scattdata_class
 
     end function brent_mu
 
+!===============================================================================
+! FIND_FG_MU calculates the angular boundaries (for a given Ein, Eout pair) to
+! use for the integration over the change in angle ($\mu$) variable.  This is 
+! needed because S(a,b) approaches a delta function as the incoming energy
+! increases (to the order of eV - keV).  Delta functions, obviously, are very
+! difficult to numerically integrate, so this routine puts the angular points
+! where they are needed, saving FLOPs.
+!===============================================================================
+
     pure subroutine find_FG_mu(A, kT, Ein, Eout, beta, mu)
       real(8), intent(in) :: A    ! Atomic-weight-ratio of target
       real(8), intent(in) :: kT   ! Target Temperature (MeV)
@@ -1711,6 +1775,7 @@ module scattdata_class
         end if                 
       end if
 
+      ! Now set the angular grid.
       dmu = (mu_hi - mu_lo) / (real(size(mu) - 1, 8))
       mu(1) = mu_lo
       do imu = 2, size(mu)
