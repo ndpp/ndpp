@@ -1476,14 +1476,14 @@ module scattdata_class
           end do
         end do
 
-        ! Integrate over Eout
+        ! Integrate over Eout (0.5 multiplier not included since we are normalizing)
         Eout_prev = Eout_lo_g
         do iE = 1, NEout - 1
           Eout = Eout_prev * exp(du)
           distro(:, g) = distro(:, g) + (Eout - Eout_prev) * &
             (fEEl(:, iE + 1) + fEEl(:, iE))
           Eout_prev = Eout
-        end do
+        end do  
         
         p0_1g_norm = p0_1g_norm + distro(1, g)
 
@@ -1504,7 +1504,7 @@ module scattdata_class
 
       alpha = ((A - ONE) / (A + ONE))**2
 
-      Eout_lo = 0.05_8 * alpha * kT * Ein
+      Eout_lo = 0.05_8 * alpha * Ein
       Eout_hi = Ein + 4.0_8 * kT * (A + ONE) / A
 
     end subroutine calc_FG_Eout_bounds
@@ -1538,10 +1538,9 @@ module scattdata_class
         sab = ZERO
       else
         sab = lterm * exp(sab) / (sqrt(4.0_8 * PI * alpha))  
-      end if
-
-      if (sab < lterm_min) then
-        sab = ZERO
+        if (sab < lterm_min) then
+          sab = ZERO
+        end if
       end if
 
     end function calc_sab
@@ -1659,7 +1658,7 @@ module scattdata_class
 
     end function brent_mu
 
-    subroutine find_FG_mu(A, kT, Ein, Eout, beta, mu)
+    pure subroutine find_FG_mu(A, kT, Ein, Eout, beta, mu)
       real(8), intent(in) :: A    ! Atomic-weight-ratio of target
       real(8), intent(in) :: kT   ! Target Temperature (MeV)
       real(8), intent(in) :: Ein  ! Incoming energy of neutron
