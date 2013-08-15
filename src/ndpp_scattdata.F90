@@ -1509,6 +1509,150 @@ module scattdata_class
 
     end subroutine calc_FG_Eout_bounds
 
+    
+    pure function calc_FG_sigs0(awr, kT, Ein, Eout) result(sigs0)
+      real(8), intent(in) :: awr    ! Atomic-weight-ratio of target
+      real(8), intent(in) :: kT   ! Target Temperature (MeV)
+      real(8), intent(in) :: Ein  ! Incoming energy of neutron
+      real(8), intent(in) :: Eout ! Outgoing energy of neutron
+
+      real(8) :: sigs0
+
+      real(8) :: eta, rho
+
+      eta = (awr + ONE) / (TWO * sqrt(awr))
+      rho = (awr - ONE) / (TWO * sqrt(awr))
+
+      if (Eout < Ein) then
+        sigs0 = exp((Ein - Eout) / kT) * &
+          (erf(eta * sqrt(Ein / kT) - rho * sqrt(Eout / kT)) - &
+          erf(eta * sqrt(Ein / kT) + rho * sqrt(Eout / kT))) + &
+          erf(eta * sqrt(Eout / kT) - rho * sqrt(Ein / kT)) + &
+          erf(eta * sqrt(Eout / kT) + rho * sqrt(Ein / kT))
+      else
+        sigs0 = exp((Ein - Eout) / kT) * &
+          (erf(eta * sqrt(Ein / kT) - rho * sqrt(Eout / kT)) + &
+          erf(eta * sqrt(Ein / kT) + rho * sqrt(Eout / kT))) + &
+          erf(eta * sqrt(Eout / kT) - rho * sqrt(Ein / kT)) - &
+          erf(eta * sqrt(Eout / kT) + rho * sqrt(Ein / kT))
+      end if
+      sigs0 = sigs0 * eta * eta/ (TWO * Ein)
+    end function calc_FG_sigs0
+
+    ! This and brent_mu should be generalized to take a function pointer
+    
+    pure function brent_Eout(awr, kT, Ein, Eout, thresh, lo, hi, tol) result(Eout_val)
+      real(8), intent(in) :: awr    ! Atomic-weight-ratio of target
+      real(8), intent(in) :: kT   ! Target Temperature (MeV)
+      real(8), intent(in) :: Ein  ! Incoming energy of neutron
+      real(8), intent(in) :: Eout ! Outgoing energy of neutron
+      real(8), intent(in) :: thresh ! P0 moment threshold to search for
+      real(8), intent(in) :: lo   ! Low Eout value boundary
+      real(8), intent(in) :: hi   ! High Eout value boundary
+      real(8), intent(in) :: tol  ! Error tolerance
+
+      real(8) :: Eout_val
+      real(8) :: a, b, c, d, fa, fb, fc, s, fs
+      real(8) :: tmpval
+      integer :: i     ! Iteration counter
+      logical :: mflag ! Method flag
+
+      a = lo
+      b = hi
+      c = ZERO
+      d = INFINITY
+
+      fa = calc_FG_sigs0(awr, kT, Ein, Eout) - thresh
+      fb = calc_FG_sigs0(awr, kT, Ein, Eout) - thresh
+
+      fc = ZERO
+      s  = ZERO
+      fs = ZERO
+
+      ! Check the bounds, exit if we are not in bounds
+      if (fa * fb >= ZERO) then
+        if (fa < fb) then
+          Eout_val = a
+        else
+          Eout_val = b
+        end if
+        return
+      end if
+
+      ! Now, we will switch a and b if abs(fa) < abs(fb)
+      if (abs(fa) < abs(fb)) then
+        tmpval = a
+        a = b
+        b = tmpval
+        tmpval = fa
+        fa = fb
+        fb = tmpval
+      end if
+
+      ! Set up our initial run through
+
+      c = a
+      fc = fa
+      mflag = .true.
+      i = 0
+
+      do while ((fb /= ZERO) .and. (abs(a - b) > tol))
+        if ((fa /= fc) .and. (fb /= fc)) then
+          ! Inverse quadratic interpolation
+          s = a * fb * fc / (fa - fb) / (fa - fc) + b * fa * fc / (fb - fa) / &
+            (fb - fc) + c * fa * fb / (fc - fa) / (fc - fb)
+        else
+          ! Secant Rule
+          s = b - fb * (b - a) / (fb - fa)
+        end if
+
+        tmpval = (3.0_8 * a + b) * 0.25_8
+        if ((.not. (((s > tmpval) .and. (s < b)) .or. &
+          ((s < tmpval) .and. (s > b)))) .or. &
+          (mflag .and. (abs(s - b) >= (0.5_8 * abs(b - c)))) .or. &
+          (.not. mflag .and. (abs(s - b) >= (abs(c - d) * 0.5_8)))) then
+            s = 0.5_8 * (a + b)
+            mflag = .true.
+        else
+          if ((mflag .and. (abs(b - c) < tol)) .or. &
+            (.not. mflag .and. (abs(c - d) < tol))) then
+            s = (a + b) * 0.5_8
+            mflag = .true.
+          else
+              mflag = .false.
+          end if          
+        end if
+
+        fs = calc_FG_sigs0(awr, kT, Ein, Eout) - thresh
+        d = c
+        c = b
+        fc = fb
+
+        if (fa * fs < ZERO) then
+          b = s
+          fb = fs
+        else 
+          a = s
+          fa = fs
+        end if
+
+        ! Now swap a and b if we need to again
+        if (abs(fa) < abs(fb)) then
+          tmpval = a
+          a = b
+          b = tmpval
+          tmpval = fa
+          fa = fb
+          fb = tmpval
+        end if
+
+        i = i + 1
+      end do
+
+      Eout_val =  b
+
+    end function brent_Eout
+
     pure function calc_sab(A, kT, Ein, Eout, beta, mu) result(sab)
       real(8), intent(in) :: A    ! Atomic-weight-ratio of target
       real(8), intent(in) :: kT   ! Target Temperature (MeV)
