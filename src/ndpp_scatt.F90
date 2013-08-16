@@ -166,14 +166,16 @@ module ndpp_scatt
 
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
       do iE = 1, NE
-        if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
-          iE_pct = 100 * iE / NE
-          if (iE_pct /= last_iE_pct) then
-            message = "    Evaluation " // &
-              trim(to_str(100 * iE / NE)) // "% Complete"
-            call write_message(7)
+        if (iE_print > 0) then
+          if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
+            iE_pct = 100 * iE / NE
+            if (iE_pct /= last_iE_pct) then
+              message = "    Evaluation " // &
+                trim(to_str(100 * iE / NE)) // "% Complete"
+              call write_message(7)
+            end if
+            last_iE_pct = iE_pct 
           end if
-          last_iE_pct = iE_pct 
         end if
         if (E_grid(iE) <= rxn_data(1) % E_bins(size(rxn_data(1) % E_bins))) then
           scatt_mat(:, :, iE) = ZERO

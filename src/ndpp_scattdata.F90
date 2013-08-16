@@ -390,7 +390,7 @@ module scattdata_class
         sigS_array => rxn % sigma
       end if
       
-      ! Get sigS
+      ! Get sigS and the integrated distro
       if ((Ein < nuc % energy(rxn % threshold)) .or. &
         (Ein > this % E_bins(size(this % E_bins)))) then
         ! This is a catch-all, our energy was below the threshold or above the
@@ -1396,7 +1396,7 @@ module scattdata_class
       !!! number of points.
 
       allocate(fEEl(order, NEout))
-      fEEl = ZERO
+      
       distro = ZERO
       p0_1g_norm = ZERO
       allocate(mymu(FREEGAS_MU_PTS))
@@ -1405,6 +1405,7 @@ module scattdata_class
       call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
 
       do g = 1, size(E_bins) - 1
+        fEEl = ZERO
         ! First we find our energy ranges of interest
         if (Eout_hi <= E_bins(g)) then
           ! The E pts are all outside this group
@@ -1427,7 +1428,7 @@ module scattdata_class
         end if
 
         ! Avoid a potential division by zero error
-        if (Eout_lo_g == ZERO) Eout_lo_g = 1E-13_8
+        if (Eout_lo_g == ZERO) Eout_lo_g = 1E-100_8
 
         ! Set the spacing to use for my Eout points
         du = log(Eout_hi_g / Eout_lo_g) / real(NEout - 1, 8)
@@ -1445,7 +1446,7 @@ module scattdata_class
 
           ! Skip all of this if Eout is close to Ein
           ! To fight a known numerical stability issue
-          if (abs(Ein - Eout) / Ein < 1.0E-6_8) then
+          if ((abs(Ein - Eout) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
             fEEl(:, iE) = fEEl(:, iE - 1)
             cycle
           end if            
@@ -1506,7 +1507,7 @@ module scattdata_class
           distro(:, g) = distro(:, g) + (Eout - Eout_prev) * &
             (fEEl(:, iE + 1) + fEEl(:, iE))
           Eout_prev = Eout
-        end do  
+        end do        
         
         ! Tally the normalization constant.
         p0_1g_norm = p0_1g_norm + distro(1, g)
@@ -1575,10 +1576,10 @@ module scattdata_class
       ! These are limits used by NJOY99 to help with numerical stability.
       real(8), parameter :: alpha_min = 1.0E-6_8
       real(8), parameter :: sab_min   = -225.0_8
-      real(8), parameter :: lterm_min = 1.0E-10_8
+      real(8), parameter :: lterm_min = 2.0E-10_8
 
       ! Find the leading term (the part not inside S(a,b), but still in eqn)
-      lterm = 0.5_8 * sqrt(Eout / Ein) / kT * ((A + ONE) / A) ** 2
+      lterm = sqrt(Eout / Ein) / kT * ((A + ONE) / A) ** 2
 
       ! Calculate momentum transfer, alpha
       alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (A * kT)
@@ -1603,7 +1604,7 @@ module scattdata_class
 
 !===============================================================================
 ! BRENT_MU uses Brents method of root finding to determine where the S(a,b)
-! function crosses the provided threshold.
+! function crosses the provided threshold as a function of mu.
 !===============================================================================
 
     pure function brent_mu(awr, kT, Ein, Eout, beta, thresh, lo, hi, tol) result(mu_val)
