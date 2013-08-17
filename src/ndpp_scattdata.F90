@@ -539,12 +539,11 @@ module scattdata_class
         if ((associated(this % adist)) .and. &
           (.not. associated(this % edist))) then
           if (Ein < this % freegas_cutoff) then
-            call integrate_freegas_leg(Ein, this % awr, this % kT, &
+            call integrate_freegas_leg2(Ein, this % awr, this % kT, &
               distro_lab(:, 1), this % mu, this % E_bins, this % order, &
               this % NEout, result_distro)
             temp_Enorm = ONE
           else
-            ! 2) calculate the angular boundaries for integration
             call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
               this % E_bins, this % mu, interp, vals, bins, temp_Enorm) 
             ! 3) integrate according to scatt_type
@@ -1518,6 +1517,174 @@ module scattdata_class
       distro = distro / p0_1g_norm
     end subroutine integrate_freegas_leg
 
+
+    subroutine integrate_freegas_leg2(Ein, A, kT, fEmu, mu, E_bins, order, &
+      NEout, distro)
+
+      real(8), intent(in)  :: Ein         ! Incoming energy of neutron
+      real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
+      real(8), intent(in)  :: kT          ! Target Temperature (MeV)
+      real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
+      real(8), intent(in)  :: mu(:)       ! fEmu angular grid
+      real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+      integer, intent(in)  :: order       ! Number of moments to find
+      integer, intent(in)  :: NEout       ! Number of outgoing energy points
+      real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
+      
+      integer :: g             ! outgoing energy group index
+      integer :: imu           ! angle bin index
+      integer :: iE            ! Outgoing energy index
+      real(8) :: du            ! delta lethargy (outgoing)
+      real(8), allocatable :: fEEl(:,:) ! function of Ein, Eout and legendre order l
+      real(8) :: Eout, Eout_prev  ! Value of outgoing energy
+      real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
+      real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
+                                      ! for this group
+      real(8) :: p0_1g_norm           ! normalization constant so that P0 = 1.0
+      real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
+      real(8) :: beta                 ! normalized energy transfer
+      real(8) :: sab_prev, sab        ! previous (last mu) and current values of S(a,b)
+      integer :: i                    ! Global mu index
+      real(8) :: interp, fEmu_val     ! interpolation fraction and interpolated value
+                                      ! of the angular distribution
+      integer :: NEout_g        ! Number of Eout pts
+      
+      ! This routine will proceed as follows:
+      ! 1) Find the outgoing energy boundaries of interest
+      ! 2) For each group:
+      !   2.a) for each Eout point:
+      !     2.a.i)   Find the angular boundaries to numerically integrate over
+      !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
+      !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
+      !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
+
+      !!! Other papers have used a Gaussian quadrature for Eout integration.
+      !!! This would be incredibly nice as I would save tremendously on the
+      !!! number of points.
+      
+      NEout_g = int(ceiling(real(NEout) / real(size(E_bins) - 1)))    
+      allocate(fEEl(order, NEout_g))
+      distro = ZERO
+      p0_1g_norm = ZERO
+      allocate(mymu(FREEGAS_MU_PTS))
+
+      ! Calculate the lower and upper bounds of integration
+      call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
+
+      do g = 1, size(E_bins) - 1
+        fEEl = ZERO
+        ! First we find our energy ranges of interest
+        if (Eout_hi <= E_bins(g)) then
+          ! The E pts are all outside this group
+          cycle
+        else if (Eout_lo >= E_bins(g + 1)) then
+          ! The E pts are all outside this group
+          cycle
+        end if
+
+        ! Set bounds of integration for this group
+        if (Eout_lo > E_bins(g)) then
+          Eout_lo_g = Eout_lo
+        else
+          Eout_lo_g = E_bins(g)
+        end if
+        if (Eout_hi < E_bins(g + 1)) then
+          Eout_hi_g = Eout_hi
+        else
+          Eout_hi_g = E_bins(g + 1)
+        end if
+
+        ! Avoid a potential division by zero error
+        if (Eout_lo_g == ZERO) Eout_lo_g = 1E-100_8
+
+        ! Set the spacing to use for my Eout points
+        du = log(Eout_hi_g / Eout_lo_g) / real(NEout_g - 1, 8)
+
+        ! We will do this double integration by integrating over 
+        ! angle first (since sab varies more rapidly over angle than energy)
+        ! So, for each Eout, we set Eout, calculate beta, find the mu range of 
+        ! interest, then calculate sab as a function of mu, integrate
+        ! over this range for each legendre, and then store these in fEEl
+
+        ! First find our sab array   
+        do iE = 1, NEout_g
+          ! Find our Eout
+          Eout = Eout_lo_g * exp(du * real(iE - 1, 8))
+
+          ! Skip all of this if Eout is close to Ein
+          ! To fight a known numerical stability issue
+          if ((abs(Ein - Eout) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
+            fEEl(:, iE) = fEEl(:, iE - 1)
+            cycle
+          end if            
+          
+          ! Find beta
+          beta = (Eout - Ein) / kT
+
+          ! Now lets find the values of mu to
+          ! do the integration over
+          ! We do this because s(a,b) can look very much
+          ! like a delta function as Ein >> kT and so
+          ! we need to focus the Mu points to the region with
+          ! non-negligible values.
+          ! Note that non-negligible is defined by
+          ! SAB_THRESHOLD in the constants module.
+          call find_FG_mu(A, kT, Ein, Eout, beta, mymu)
+
+          ! Now lets find sabs over this range
+          ! Find fEmu pt corresponding to mymu(1)
+          if (mymu(1) <= mu(1)) then
+              i = 1
+            else if (mymu(1) >= mu(size(mu))) then
+              i = size(mu) - 1
+            else
+              i = binary_search(mu, size(mu), mymu(1))
+            end if
+          interp = (mymu(1) - mu(i)) / (mu(i + 1) - mu(i))
+          fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
+          
+          ! Now calculate sab value, one at a time, integrating over mu as we go.
+          sab_prev = fEmu_val * &
+              calc_sab(A, kT, Ein, Eout, beta, mymu(1))
+          do imu = 2, size(mymu)
+            ! Find fEmu pt corresponding to mymu(imu)
+            if (mymu(imu) <= mu(1)) then
+              i = 1
+            else if (mymu(imu) >= mu(size(mu))) then
+              i = size(mu) - 1
+            else
+              i = binary_search(mu, size(mu), mymu(imu))
+            end if
+            interp = (mymu(imu) - mu(i)) / (mu(i + 1) - mu(i))
+            fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
+            ! Now calculate sab value
+            sab = fEmu_val * &
+              calc_sab(A, kT, Ein, Eout, beta, mymu(imu))
+            fEEl(:, iE) = fEEl(:, iE) + &
+              calc_int_pn_tablelin(order, mymu(imu - 1), mymu(imu), sab_prev, sab)
+
+            sab_prev = sab
+          end do
+        end do
+
+        ! Integrate over Eout (0.5 multiplier not included since we are normalizing)
+        Eout_prev = Eout_lo_g
+        do iE = 1, NEout_g - 1
+          Eout = Eout_prev * exp(du)
+          distro(:, g) = distro(:, g) + (Eout - Eout_prev) * &
+            (fEEl(:, iE + 1) + fEEl(:, iE))
+          Eout_prev = Eout
+        end do        
+        
+        ! Tally the normalization constant.
+        p0_1g_norm = p0_1g_norm + distro(1, g)
+
+      end do
+
+      ! And normalize
+      distro = distro / p0_1g_norm
+    end subroutine integrate_freegas_leg2
+
 !===============================================================================
 ! CALC_FG_EOUT_BOUNDS determines the outgoing energy (Eout) integration bounds
 ! to use such that the negligible 'tails' of the S(a,b) distribution can
@@ -1546,12 +1713,12 @@ module scattdata_class
       ! Let's take 5% of that energy, to give room for the fact that
       ! the target is not at rest and this isn't a hard boundary anymore.
       ! This... is willy nilly.
-      Eout_lo = 0.05_8 * alpha * Ein
+      Eout_lo = 0.01_8 * alpha * Ein
 
       ! The only way for upscatter to occur is with the target nuclide having
       ! a large maxwellian energy. So, add on larger than the mean to Ein.
       ! Again, this is willy nilly.
-      Eout_hi = 4.0_8 * kT * (A + ONE) / A + Ein
+      Eout_hi = 8.0_8 * kT * (A + ONE) / A + Ein
 
     end subroutine calc_FG_Eout_bounds
 
