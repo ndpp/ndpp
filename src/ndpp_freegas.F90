@@ -1,0 +1,824 @@
+module freegas
+  
+  use constants
+  use error,            only: fatal_error, warning
+  use global,           only: nuclides, message
+  use legendre
+  use search,           only: binary_search
+  use string,           only: to_str
+  
+  implicit none
+
+  contains
+
+!===============================================================================
+! INTEGRATE_FREEGAS_LEG Finds Legendre moments of the energy-angle 
+! distribution of an elastic collision using the free-gas scattering kernel.
+!===============================================================================
+
+  subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
+    NEout, distro)
+
+    real(8), intent(in)  :: Ein         ! Incoming energy of neutron
+    real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
+    real(8), intent(in)  :: kT          ! Target Temperature (MeV)
+    real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
+    real(8), intent(in)  :: mu(:)       ! fEmu angular grid
+    real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+    integer, intent(in)  :: order       ! Number of moments to find
+    integer, intent(in)  :: NEout       ! Number of outgoing energy points
+    real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
+    
+    integer :: g             ! outgoing energy group index
+    integer :: imu           ! angle bin index
+    integer :: iE            ! Outgoing energy index
+    real(8) :: du            ! delta lethargy (outgoing)
+    real(8), allocatable :: fEEl(:,:) ! function of Ein, Eout and legendre order l
+    real(8) :: Eout, Eout_prev  ! Value of outgoing energy
+    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
+    real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
+                                    ! for this group
+    real(8) :: p0_1g_norm           ! normalization constant so that P0 = 1.0
+    real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
+    real(8) :: beta                 ! normalized energy transfer
+    real(8) :: sab_prev, sab        ! previous (last mu) and current values of S(a,b)
+    integer :: i                    ! Global mu index
+    real(8) :: interp, fEmu_val     ! interpolation fraction and interpolated value
+                                    ! of the angular distribution
+    integer :: NEout_g        ! Number of Eout pts
+    
+    ! This routine will proceed as follows:
+    ! 1) Find the outgoing energy boundaries of interest
+    ! 2) For each group:
+    !   2.a) for each Eout point:
+    !     2.a.i)   Find the angular boundaries to numerically integrate over
+    !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
+    !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
+    !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
+
+    !!! Other papers have used a Gaussian quadrature for Eout integration.
+    !!! This would be incredibly nice as I would save tremendously on the
+    !!! number of points.
+    
+    NEout_g = int(ceiling(real(NEout) / real(size(E_bins) - 1)))    
+    allocate(fEEl(order, NEout_g))
+    distro = ZERO
+    p0_1g_norm = ZERO
+    allocate(mymu(FREEGAS_MU_PTS))
+
+    ! Calculate the lower and upper bounds of integration
+    call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
+
+    do g = 1, size(E_bins) - 1
+      fEEl = ZERO
+      ! First we find our energy ranges of interest
+      if (Eout_hi <= E_bins(g)) then
+        ! The E pts are all outside this group
+        cycle
+      else if (Eout_lo >= E_bins(g + 1)) then
+        ! The E pts are all outside this group
+        cycle
+      end if
+
+      ! Set bounds of integration for this group
+      if (Eout_lo > E_bins(g)) then
+        Eout_lo_g = Eout_lo
+      else
+        Eout_lo_g = E_bins(g)
+      end if
+      if (Eout_hi < E_bins(g + 1)) then
+        Eout_hi_g = Eout_hi
+      else
+        Eout_hi_g = E_bins(g + 1)
+      end if
+
+      ! Avoid a potential division by zero error
+      if (Eout_lo_g == ZERO) Eout_lo_g = 1E-100_8
+
+      ! Set the spacing to use for my Eout points
+      du = log(Eout_hi_g / Eout_lo_g) / real(NEout_g - 1, 8)
+
+      ! We will do this double integration by integrating over 
+      ! angle first (since sab varies more rapidly over angle than energy)
+      ! So, for each Eout, we set Eout, calculate beta, find the mu range of 
+      ! interest, then calculate sab as a function of mu, integrate
+      ! over this range for each legendre, and then store these in fEEl
+
+      ! First find our sab array   
+      do iE = 1, NEout_g
+        ! Find our Eout
+        Eout = Eout_lo_g * exp(du * real(iE - 1, 8))
+
+        ! Skip all of this if Eout is close to Ein
+        ! To fight a known numerical stability issue
+        if ((abs(Ein - Eout) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
+          fEEl(:, iE) = fEEl(:, iE - 1)
+          cycle
+        end if            
+        
+        ! Find beta
+        beta = (Eout - Ein) / kT
+
+        ! Now lets find the values of mu to
+        ! do the integration over
+        ! We do this because s(a,b) can look very much
+        ! like a delta function as Ein >> kT and so
+        ! we need to focus the Mu points to the region with
+        ! non-negligible values.
+        ! Note that non-negligible is defined by
+        ! SAB_THRESHOLD in the constants module.
+        call find_FG_mu(A, kT, Ein, Eout, beta, mymu)
+
+        ! Now lets find sabs over this range
+        ! Find fEmu pt corresponding to mymu(1)
+        if (mymu(1) <= mu(1)) then
+            i = 1
+          else if (mymu(1) >= mu(size(mu))) then
+            i = size(mu) - 1
+          else
+            i = binary_search(mu, size(mu), mymu(1))
+          end if
+        interp = (mymu(1) - mu(i)) / (mu(i + 1) - mu(i))
+        fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
+        
+        ! Now calculate sab value, one at a time, integrating over mu as we go.
+        sab_prev = fEmu_val * &
+            calc_sab(A, kT, Ein, Eout, beta, mymu(1))
+        do imu = 2, size(mymu)
+          ! Find fEmu pt corresponding to mymu(imu)
+          if (mymu(imu) <= mu(1)) then
+            i = 1
+          else if (mymu(imu) >= mu(size(mu))) then
+            i = size(mu) - 1
+          else
+            i = binary_search(mu, size(mu), mymu(imu))
+          end if
+          interp = (mymu(imu) - mu(i)) / (mu(i + 1) - mu(i))
+          fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
+          ! Now calculate sab value
+          sab = fEmu_val * &
+            calc_sab(A, kT, Ein, Eout, beta, mymu(imu))
+          fEEl(:, iE) = fEEl(:, iE) + &
+            calc_int_pn_tablelin(order, mymu(imu - 1), mymu(imu), sab_prev, sab)
+
+          sab_prev = sab
+        end do
+      end do
+
+      ! Integrate over Eout (0.5 multiplier not included since we are normalizing)
+      Eout_prev = Eout_lo_g
+      do iE = 1, NEout_g - 1
+        Eout = Eout_prev * exp(du)
+        distro(:, g) = distro(:, g) + (Eout - Eout_prev) * &
+          (fEEl(:, iE + 1) + fEEl(:, iE))
+        Eout_prev = Eout
+      end do        
+      
+      ! Tally the normalization constant.
+      p0_1g_norm = p0_1g_norm + distro(1, g)
+
+    end do
+
+    ! And normalize
+    distro = distro / p0_1g_norm
+  end subroutine integrate_freegas_leg
+
+  subroutine integrate_freegas_leg_mu(Ein, A, kT, fEmu, mu, E_bins, order, &
+    NEout, distro)
+
+    real(8), intent(in)  :: Ein         ! Incoming energy of neutron
+    real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
+    real(8), intent(in)  :: kT          ! Target Temperature (MeV)
+    real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
+    real(8), intent(in)  :: mu(:)       ! fEmu angular grid
+    real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+    integer, intent(in)  :: order       ! Number of moments to find
+    integer, intent(in)  :: NEout       ! Number of outgoing energy points
+    real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
+    
+    integer :: g             ! outgoing energy group index
+    integer :: iE            ! Outgoing energy index
+    real(8) :: du            ! delta lethargy (outgoing)
+    real(8), allocatable :: fEEl(:,:) ! function of Ein, Eout and legendre order l
+    real(8) :: Eout, Eout_prev  ! Value of outgoing energy
+    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
+    real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
+                                    ! for this group
+    real(8) :: p0_1g_norm           ! normalization constant so that P0 = 1.0
+    real(8) :: beta          ! normalized energy transfer
+    integer :: l             ! Scattering order
+    integer :: NEout_g       ! Number of Eout pts
+    
+    ! This routine will proceed as follows:
+    ! 1) Find the outgoing energy boundaries of interest
+    ! 2) For each group:
+    !   2.a) for each Eout point:
+    !     2.a.i)   Find the angular boundaries to numerically integrate over
+    !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
+    !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
+    !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
+
+    !!! Other papers have used a Gaussian quadrature for Eout integration.
+    !!! This would be incredibly nice as I would save tremendously on the
+    !!! number of points.
+write(*,*) 'Ein = ', Ein    
+    NEout_g = int(ceiling(real(NEout) / real(size(E_bins) - 1)))    
+    allocate(fEEl(order, NEout_g))
+    distro = ZERO
+    p0_1g_norm = ZERO
+
+    ! Calculate the lower and upper bounds of integration
+    call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
+
+    do g = 1, size(E_bins) - 1
+      fEEl = ZERO
+      ! First we find our energy ranges of interest
+      if (Eout_hi <= E_bins(g)) then
+        ! The E pts are all outside this group
+        cycle
+      else if (Eout_lo >= E_bins(g + 1)) then
+        ! The E pts are all outside this group
+        cycle
+      end if
+
+      ! Set bounds of integration for this group
+      if (Eout_lo > E_bins(g)) then
+        Eout_lo_g = Eout_lo
+      else
+        Eout_lo_g = E_bins(g)
+      end if
+      if (Eout_hi < E_bins(g + 1)) then
+        Eout_hi_g = Eout_hi
+      else
+        Eout_hi_g = E_bins(g + 1)
+      end if
+
+      ! Avoid a potential division by zero error
+      if (Eout_lo_g == ZERO) Eout_lo_g = 1E-100_8
+
+      ! Set the spacing to use for my Eout points
+      du = log(Eout_hi_g / Eout_lo_g) / real(NEout_g - 1, 8)
+
+      ! We will do this double integration by integrating over 
+      ! angle first (since sab varies more rapidly over angle than energy)
+      ! So, for each Eout, we set Eout, calculate beta, find the mu range of 
+      ! interest, then calculate sab as a function of mu, integrate
+      ! over this range for each legendre, and then store these in fEEl
+
+      ! First find our sab array   
+      do iE = 1, NEout_g
+        ! Find our Eout
+        Eout = Eout_lo_g * exp(du * real(iE - 1, 8))
+
+        ! Skip all of this if Eout is close to Ein
+        ! To fight a known numerical stability issue
+        if ((abs(Ein - Eout) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
+          fEEl(:, iE) = fEEl(:, iE - 1)
+          cycle
+        end if            
+        
+        ! Find beta
+        beta = (Eout - Ein) / kT
+
+        do l = 1, order
+          fEEl(l, iE) = adaptiveSimpsons_mu(A, kT, Ein, Eout, beta, l - 1, &
+            fEmu, mu, -ONE, ONE, 1.0E-6_8, 20)
+        end do
+
+      end do
+
+      ! Integrate over Eout (0.5 multiplier not included since we are normalizing)
+      Eout_prev = Eout_lo_g
+      do iE = 1, NEout_g - 1
+        Eout = Eout_prev * exp(du)
+        distro(:, g) = distro(:, g) + (Eout - Eout_prev) * &
+          (fEEl(:, iE + 1) + fEEl(:, iE))
+        Eout_prev = Eout
+      end do        
+      
+      ! Tally the normalization constant.
+      p0_1g_norm = p0_1g_norm + distro(1, g)
+
+    end do
+
+    ! And normalize
+    distro = distro / p0_1g_norm
+  end subroutine integrate_freegas_leg_mu
+
+  subroutine integrate_freegas_leg_Eoutmu(Ein, A, kT, fEmu, mu, E_bins, order, &
+    NEout, distro)
+
+    real(8), intent(in)  :: Ein         ! Incoming energy of neutron
+    real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
+    real(8), intent(in)  :: kT          ! Target Temperature (MeV)
+    real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
+    real(8), intent(in)  :: mu(:)       ! fEmu angular grid
+    real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+    integer, intent(in)  :: order       ! Number of moments to find
+    integer, intent(in)  :: NEout       ! Number of outgoing energy points
+    real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
+    
+    integer :: g             ! outgoing energy group index
+    real(8) :: p0_1g_norm    ! normalization constant so that P0 = 1.0
+    integer :: l             ! Scattering order
+    
+    ! This routine will proceed as follows:
+    ! 1) Find the outgoing energy boundaries of interest
+    ! 2) For each group:
+    !   2.a) for each Eout point:
+    !     2.a.i)   Find the angular boundaries to numerically integrate over
+    !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
+    !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
+    !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
+
+    !!! Other papers have used a Gaussian quadrature for Eout integration.
+    !!! This would be incredibly nice as I would save tremendously on the
+    !!! number of points.
+write(*,*) 'Ein = ', Ein
+    distro = ZERO
+    p0_1g_norm = ZERO
+
+    do g = 1, size(E_bins) - 1
+      
+      do l = 1, order
+        distro(l, g) = adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
+          E_bins(g), E_bins(g + 1), 1.0E-2_8, 10)
+      end do
+      
+      ! Tally the normalization constant.
+      p0_1g_norm = p0_1g_norm + distro(1, g)
+    end do
+
+    ! And normalize
+    distro = distro / p0_1g_norm
+  end subroutine integrate_freegas_leg_Eoutmu
+
+!===============================================================================
+! CALC_FG_EOUT_BOUNDS determines the outgoing energy (Eout) integration bounds
+! to use such that the negligible 'tails' of the S(a,b) distribution can
+! be ignored, saving computational time.
+!===============================================================================
+
+  pure subroutine calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
+    real(8), intent(in) :: A    ! Atomic-weight-ratio of target
+    real(8), intent(in) :: kT   ! Target Temperature (MeV)
+    real(8), intent(in) :: Ein  ! Incoming energy of neutron
+    real(8), intent(out) :: Eout_lo ! Low bound of Eout
+    real(8), intent(out) :: Eout_hi ! High bound of Eout
+
+    real(8) :: alpha            ! Multiplicative factor which represents
+                                ! maximum energy loss in a pure TAR collision.
+
+    alpha = ((A - ONE) / (A + ONE))**2
+
+    ! alpha*Ein is the minimum Eout of a TAR elastic collision.
+    ! Let's take 5% of that energy, to give room for the fact that
+    ! the target is not at rest and this isn't a hard boundary anymore.
+    ! This... is willy nilly.
+    Eout_lo = 0.01_8 * alpha * Ein
+
+    ! The only way for upscatter to occur is with the target nuclide having
+    ! a large maxwellian energy. So, add on larger than the mean to Ein.
+    ! Again, this is willy nilly.
+    Eout_hi = 8.0_8 * kT * (A + ONE) / A + Ein
+
+  end subroutine calc_FG_Eout_bounds
+
+!===============================================================================
+! CALC_SAB calculates the value of S(a,b) for the free-gas scattering kernel.
+! Note that beta is provided, but alpha is calculated within the function.
+!===============================================================================
+
+  pure function calc_sab(A, kT, Ein, Eout, beta, mu) result(sab)
+    real(8), intent(in) :: A    ! Atomic-weight-ratio of target
+    real(8), intent(in) :: kT   ! Target Temperature (MeV)
+    real(8), intent(in) :: Ein  ! Incoming energy of neutron
+    real(8), intent(in) :: Eout ! Outgoing energy of neutron
+    real(8), intent(in) :: beta ! Energy Transfer
+    real(8), intent(in) :: mu   ! Angle in question
+    
+    real(8) :: sab   ! The result of this function
+    real(8) :: alpha ! Momentum Transfer
+    real(8) :: lterm ! The leading term from the rest of the integral with S(a,b)
+                     ! calculated in this routine to save FLOPs elsewhere.
+
+    ! These are limits used by NJOY99 to help with numerical stability.
+    real(8), parameter :: alpha_min = 1.0E-6_8
+    real(8), parameter :: sab_min   = -225.0_8
+    real(8), parameter :: lterm_min = 2.0E-10_8
+
+    ! Find the leading term (the part not inside S(a,b), but still in eqn)
+    lterm = sqrt(Eout / Ein) / kT * ((A + ONE) / A) ** 2
+
+    ! Calculate momentum transfer, alpha
+    alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (A * kT)
+    if (alpha < alpha_min) then
+      alpha = alpha_min
+    end if
+
+    ! Find the argument to the exponent in S(a,b), for testing against
+    ! sab_min
+    sab = -(alpha + beta)**2 / (4.0_8 * alpha) ! The sab exp argument
+
+    if (sab < sab_min) then
+      sab = ZERO
+    else
+      ! We have an acceptable value, plug in and move on.
+      sab = lterm * exp(sab) / (sqrt(4.0_8 * PI * alpha))  
+      if (sab < lterm_min) then
+        sab = ZERO
+      end if
+    end if
+  end function calc_sab
+
+!===============================================================================
+! BRENT_MU uses Brents method of root finding to determine where the S(a,b)
+! function crosses the provided threshold as a function of mu.
+!===============================================================================
+
+  pure function brent_mu(awr, kT, Ein, Eout, beta, thresh, lo, hi, tol) result(mu_val)
+    real(8), intent(in) :: awr    ! Atomic-weight-ratio of target
+    real(8), intent(in) :: kT   ! Target Temperature (MeV)
+    real(8), intent(in) :: Ein  ! Incoming energy of neutron
+    real(8), intent(in) :: Eout ! Outgoing energy of neutron
+    real(8), intent(in) :: beta ! Energy Transfer
+    real(8), intent(in) :: thresh ! SAB Threshold to search for
+    real(8), intent(in) :: lo   ! Low mu value boundary
+    real(8), intent(in) :: hi   ! High mu value boundary
+    real(8), intent(in) :: tol  ! Error tolerance
+
+    real(8) :: mu_val
+    real(8) :: a, b, c, d, fa, fb, fc, s, fs
+    real(8) :: tmpval
+    integer :: i     ! Iteration counter
+    logical :: mflag ! Method flag
+
+    a = lo
+    b = hi
+    c = ZERO
+    d = INFINITY
+
+    fa = calc_sab(awr, kT, Ein, Eout, beta, a) - thresh
+    fb = calc_sab(awr, kT, Ein, Eout, beta, b) - thresh
+
+    fc = ZERO
+    s  = ZERO
+    fs = ZERO
+
+    ! Check the bounds, exit if we are not in bounds
+    if (fa * fb >= ZERO) then
+      if (fa < fb) then
+        mu_val = a
+      else
+        mu_val = b
+      end if
+      return
+    end if
+
+    ! Now, we will switch a and b if abs(fa) < abs(fb)
+    if (abs(fa) < abs(fb)) then
+      tmpval = a
+      a = b
+      b = tmpval
+      tmpval = fa
+      fa = fb
+      fb = tmpval
+    end if
+
+    ! Set up our initial run through
+
+    c = a
+    fc = fa
+    mflag = .true.
+    i = 0
+
+    do while ((fb /= ZERO) .and. (abs(a - b) > tol))
+      if ((fa /= fc) .and. (fb /= fc)) then
+        ! Inverse quadratic interpolation
+        s = a * fb * fc / (fa - fb) / (fa - fc) + b * fa * fc / (fb - fa) / &
+          (fb - fc) + c * fa * fb / (fc - fa) / (fc - fb)
+      else
+        ! Secant Rule
+        s = b - fb * (b - a) / (fb - fa)
+      end if
+
+      tmpval = (3.0_8 * a + b) * 0.25_8
+      if ((.not. (((s > tmpval) .and. (s < b)) .or. &
+        ((s < tmpval) .and. (s > b)))) .or. &
+        (mflag .and. (abs(s - b) >= (0.5_8 * abs(b - c)))) .or. &
+        (.not. mflag .and. (abs(s - b) >= (abs(c - d) * 0.5_8)))) then
+          s = 0.5_8 * (a + b)
+          mflag = .true.
+      else
+        if ((mflag .and. (abs(b - c) < tol)) .or. &
+          (.not. mflag .and. (abs(c - d) < tol))) then
+          s = (a + b) * 0.5_8
+          mflag = .true.
+        else
+            mflag = .false.
+        end if          
+      end if
+
+      fs = calc_sab(awr, kT, Ein, Eout, beta, s) - thresh
+      d = c
+      c = b
+      fc = fb
+
+      if (fa * fs < ZERO) then
+        b = s
+        fb = fs
+      else 
+        a = s
+        fa = fs
+      end if
+
+      ! Now swap a and b if we need to again
+      if (abs(fa) < abs(fb)) then
+        tmpval = a
+        a = b
+        b = tmpval
+        tmpval = fa
+        fa = fb
+        fb = tmpval
+      end if
+
+      i = i + 1
+    end do
+
+    mu_val =  b
+
+  end function brent_mu
+
+!===============================================================================
+! FIND_FG_MU calculates the angular boundaries (for a given Ein, Eout pair) to
+! use for the integration over the change in angle ($\mu$) variable.  This is 
+! needed because S(a,b) approaches a delta function as the incoming energy
+! increases (to the order of eV - keV).  Delta functions, obviously, are very
+! difficult to numerically integrate, so this routine puts the angular points
+! where they are needed, saving FLOPs.
+!===============================================================================
+
+  pure subroutine find_FG_mu(A, kT, Ein, Eout, beta, mu)
+    real(8), intent(in) :: A    ! Atomic-weight-ratio of target
+    real(8), intent(in) :: kT   ! Target Temperature (MeV)
+    real(8), intent(in) :: Ein  ! Incoming energy of neutron
+    real(8), intent(in) :: Eout ! Outgoing energy of neutron
+    real(8), intent(in) :: beta ! Energy Transfer
+    real(8), intent(inout) :: mu(:) ! Angle points to analyze
+
+    real(8) :: mu_max    ! mu which gives the peak of sab(mu)
+    real(8) :: alpha_max ! Value of alpha corresponding to mu_max
+    real(8) :: sab_max   ! Maximum sab value in [-1,1]
+    real(8) :: sab_minthresh ! Minimum value of sab to consider
+    real(8) :: mu_lo, mu_hi, dmu ! Low, hi mu pts and delta-mu
+    integer :: imu       ! mu loop index
+
+    ! Calculate the alpha corresponding to the max of s(a,b)
+    ! This was derived by ds(a,b)/da = 0
+    alpha_max = sqrt(beta * beta + ONE) - ONE
+    ! Find the mu values corresponding to alpha_max
+    mu_max = (Ein + Eout - alpha_max * A * kT) / (TWO * sqrt(Ein * Eout))
+    
+    ! Now that I have mu_max, lets chack the values to the left and right
+    ! side to try and find when we can start inspecting sab
+
+    ! First, if mu_max is outside of [-1,1], then this is a relatively
+    ! flat profile and we should be integrating all of the range
+    if (abs(mu_max) > ONE) then
+      mu_lo = -ONE
+      mu_hi = ONE
+    else
+      ! Lets first start checking the low side.
+      ! Our threshold is based on the value of sab
+      ! at the maximum, so lets find the maximum value
+      sab_max = calc_sab(A, kT, Ein, Eout, beta, mu_max)
+      sab_minthresh = sab_max * SAB_THRESHOLD
+      if (calc_sab(A, kT, Ein, Eout, beta, -ONE) > sab_minthresh) then
+        mu_lo = -ONE
+      else
+        mu_lo = brent_mu(A, kT, Ein, Eout, beta, sab_minthresh, -ONE, mu_max, 1.0E-5_8)
+      end if
+      if (calc_sab(A, kT, Ein, Eout, beta, ONE) > sab_minthresh) then
+        mu_hi = ONE
+      else
+        mu_hi = brent_mu(A, kT, Ein, Eout, beta, sab_minthresh, mu_max, ONE, 1.0E-5_8)
+      end if                 
+    end if
+
+    ! Now set the angular grid.
+    dmu = (mu_hi - mu_lo) / (real(size(mu) - 1, 8))
+    mu(1) = mu_lo
+    do imu = 2, size(mu)
+      mu(imu) = mu(imu - 1) + dmu
+    end do
+
+  end subroutine find_FG_mu
+
+!===============================================================================
+! CALC_FGK calculates the value of the free-gas scattering kernel.
+! Note that beta is provided, but alpha is calculated within the function.
+!===============================================================================
+
+  function calc_fgk(awr, kT, Ein, Eout, beta, l, mu, fEmu, global_mu) &
+    result(fgk)
+
+    real(8), intent(in) :: awr    ! Atomic-weight-ratio of target
+    real(8), intent(in) :: kT   ! Target Temperature (MeV)
+    real(8), intent(in) :: Ein  ! Incoming energy of neutron
+    real(8), intent(in) :: Eout ! Outgoing energy of neutron
+    real(8), intent(in) :: beta ! Energy Transfer
+    integer, intent(in) :: l    ! Legendre order
+    real(8), intent(in) :: mu   ! Angle in question
+    real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
+    real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
+    
+    real(8) :: fgk   ! The result of this function
+    real(8) :: alpha ! Momentum Transfer
+    real(8) :: lterm ! The leading term from the rest of the integral with S(a,b)
+                     ! calculated in this routine to save FLOPs elsewhere.
+    integer :: i                    ! Global mu index
+    real(8) :: interp, fEmu_val     ! interpolation fraction and interpolated value
+                                    ! of the angular distribution
+
+    ! Find fEmu val to use
+    if (mu <= global_mu(1)) then
+        i = 1
+      else if (mu >= global_mu(size(global_mu))) then
+        i = size(global_mu) - 1
+      else
+        i = binary_search(global_mu, size(global_mu), mu)
+      end if
+    interp = (mu - global_mu(i)) / (global_mu(i + 1) - global_mu(i))
+    fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
+
+    ! Find the leading term (the part not inside S(a,b), but still in eqn)
+    lterm = fEmu_val * sqrt(Eout / Ein) / kT * ((awr + ONE) / awr) ** 2
+
+    ! Calculate momentum transfer, alpha
+    alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (awr * kT)
+
+    if (alpha < 1.0E-6_8) alpha = 1.0E-6_8
+
+    ! Find the argument to the exponent in S(a,b), for testing against
+    ! sab_min
+    fgk = -(alpha + beta)**2 / (4.0_8 * alpha) ! The sab exp argument
+    fgk = lterm * exp(fgk) / (sqrt(4.0_8 * PI * alpha))
+
+    fgk = fgk * calc_pn(l, mu)
+
+  end function calc_fgk
+
+! Adaptive Integration Routines for the Mu variable:
+
+  function adaptiveSimpsons_mu(awr, kT, Ein, Eout, beta, l, fEmu, global_mu, &
+    a, b, eps, maxRecursionDepth) result(integral)
+
+    real(8), intent(in) :: awr  ! Atomic-weight-ratio of target
+    real(8), intent(in) :: kT   ! Target Temperature (MeV)
+    real(8), intent(in) :: Ein  ! Incoming energy of neutron
+    real(8), intent(in) :: Eout ! Outgoing energy of neutron
+    real(8), intent(in) :: beta ! Energy Transfer
+    integer, intent(in) :: l    ! Legendre order
+    real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
+    real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
+    real(8), intent(in) :: a 
+    real(8), intent(in) :: b
+    real(8), intent(in) :: eps
+    integer, intent(in) :: maxRecursionDepth
+
+    real(8) :: c, h, fa, fb, fc, S
+    real(8) :: integral
+
+    c = (a + b)* 0.5_8
+    h = b - a
+    fa = calc_fgk(awr, kT, Ein, Eout, beta, l, a, fEmu, global_mu)
+    fb = calc_fgk(awr, kT, Ein, Eout, beta, l, b, fEmu, global_mu)
+    fc = calc_fgk(awr, kT, Ein, Eout, beta, l, c, fEmu, global_mu)
+    S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
+    integral =  adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, beta, l, fEmu, global_mu, &
+      a, b, eps, S, fa, fb, fc, maxRecursionDepth)
+  end function adaptiveSimpsons_mu
+
+  recursive function adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, beta, l, &
+    fEmu, global_mu, a, b, eps, S, fa, fb, fc, bottom) result(val)
+
+    real(8), intent(in) :: awr  ! Atomic-weight-ratio of target
+    real(8), intent(in) :: kT   ! Target Temperature (MeV)
+    real(8), intent(in) :: Ein  ! Incoming energy of neutron
+    real(8), intent(in) :: Eout ! Outgoing energy of neutron
+    real(8), intent(in) :: beta ! Energy Transfer
+    integer, intent(in) :: l    ! Legendre order
+    real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
+    real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
+    real(8), intent(in) :: a 
+    real(8), intent(in) :: b
+    real(8), intent(in) :: eps
+    real(8), intent(in) :: S
+    real(8), intent(in) :: fa
+    real(8), intent(in) :: fb
+    real(8), intent(in) :: fc
+    integer, intent(in) :: bottom
+
+    real(8) :: c, d, h, e, fd, fe, Sleft, Sright, S2
+    real(8) :: val
+
+    c = 0.5_8 * (a + b)
+    h = b - a                                                                 
+    d = 0.5_8 * (a + c)
+    e = 0.5_8 * (c + b)
+    fd = calc_fgk(awr, kT, Ein, Eout, beta, l, d, fEmu, global_mu)
+    fe = calc_fgk(awr, kT, Ein, Eout, beta, l, e, fEmu, global_mu)
+    Sleft  = (h / 12.0_8) * (fa + 4.0_8 * fd + fc)
+    Sright = (h / 12.0_8) * (fc + 4.0_8 * fe + fb)
+    S2 = Sleft + Sright
+    if ((bottom <= 0) .or. (abs(S2 - S) <= 15.0_8 * eps)) then
+      val = S2 + (S2 - S) / 15.0_8
+    else
+      val = adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, beta, l, fEmu, global_mu, &
+              a, c, 0.5_8 * eps, Sleft,  fa, fc, fd, bottom - 1) + &
+            adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, beta, l, fEmu, global_mu, &
+              c, b, 0.5_8 * eps, Sright, fc, fb, fe, bottom - 1)
+    end if
+  end function adaptiveSimpsonsAux_mu
+ 
+! Adaptive Integration Routines for the Mu variable:
+
+  function adaptiveSimpsons_Eout(awr, kT, Ein, l, fEmu, global_mu, &
+    a, b, eps, maxRecursionDepth) result(integral)
+
+    real(8), intent(in) :: awr  ! Atomic-weight-ratio of target
+    real(8), intent(in) :: kT   ! Target Temperature (MeV)
+    real(8), intent(in) :: Ein  ! Incoming energy of neutron
+    integer, intent(in) :: l    ! Legendre order
+    real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
+    real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
+    real(8), intent(in) :: a 
+    real(8), intent(in) :: b
+    real(8), intent(in) :: eps
+    integer, intent(in) :: maxRecursionDepth
+
+    real(8) :: c, h, fa, fb, fc, S
+    real(8) :: beta_a, beta_b, beta_c
+    real(8) :: integral
+
+    c = (a + b)* 0.5_8
+    h = b - a
+    beta_a = (a - Ein) / kT
+    beta_b = (b - Ein) / kT
+    beta_c = (c - Ein) / kT
+    fa = adaptiveSimpsons_mu(awr, kT, Ein, a, beta_a, l, &
+            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+    fb = adaptiveSimpsons_mu(awr, kT, Ein, b, beta_b, l, &
+            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+    fc = adaptiveSimpsons_mu(awr, kT, Ein, c, beta_c, l, &
+            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+    
+    S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
+    integral =  adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, fEmu, global_mu, &
+      a, b, eps, S, fa, fb, fc, maxRecursionDepth)
+  end function adaptiveSimpsons_Eout
+
+  recursive function adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, &
+    fEmu, global_mu, a, b, eps, S, fa, fb, fc, bottom) result(val)
+
+    real(8), intent(in) :: awr  ! Atomic-weight-ratio of target
+    real(8), intent(in) :: kT   ! Target Temperature (MeV)
+    real(8), intent(in) :: Ein  ! Incoming energy of neutron
+    integer, intent(in) :: l    ! Legendre order
+    real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
+    real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
+    real(8), intent(in) :: a 
+    real(8), intent(in) :: b
+    real(8), intent(in) :: eps
+    real(8), intent(in) :: S
+    real(8), intent(in) :: fa
+    real(8), intent(in) :: fb
+    real(8), intent(in) :: fc
+    integer, intent(in) :: bottom
+
+    real(8) :: c, d, h, e, fd, fe, Sleft, Sright, S2
+    real(8) :: beta_d, beta_e
+    real(8) :: val
+
+    c = 0.5_8 * (a + b)
+    h = b - a                                                                 
+    d = 0.5_8 * (a + c)
+    e = 0.5_8 * (c + b)
+    fd = adaptiveSimpsons_mu(awr, kT, Ein, d, beta_d, l, &
+            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+    fe = adaptiveSimpsons_mu(awr, kT, Ein, e, beta_e, l, &
+            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+    Sleft  = (h / 12.0_8) * (fa + 4.0_8 * fd + fc)
+    Sright = (h / 12.0_8) * (fc + 4.0_8 * fe + fb)
+    S2 = Sleft + Sright
+    if ((bottom <= 0) .or. (abs(S2 - S) <= 15.0_8*eps)) then
+      val = S2 + (S2 - S) / 15.0_8
+    else
+      val = adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, fEmu, global_mu, &
+              a, c, 0.5_8 * eps, Sleft, fa, fc, fd, bottom - 1) + &
+            adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, fEmu, global_mu, &
+              c, b, 0.5_8 * eps, Sright, fc, fb, fe, bottom - 1)
+    end if
+  end function adaptiveSimpsonsAux_Eout
+
+end module freegas
