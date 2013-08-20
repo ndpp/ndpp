@@ -16,7 +16,7 @@ module freegas
 ! distribution of an elastic collision using the free-gas scattering kernel.
 !===============================================================================
 
-  subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
+  subroutine integrate_freegas_leg_old(Ein, A, kT, fEmu, mu, E_bins, order, &
     NEout, distro)
 
     real(8), intent(in)  :: Ein         ! Incoming energy of neutron
@@ -181,9 +181,9 @@ module freegas
 
     ! And normalize
     distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg
+  end subroutine integrate_freegas_leg_old
 
-  subroutine integrate_freegas_leg_mu(Ein, A, kT, fEmu, mu, E_bins, order, &
+  subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
     NEout, distro)
 
     real(8), intent(in)  :: Ein         ! Incoming energy of neutron
@@ -208,7 +208,10 @@ module freegas
     real(8) :: beta          ! normalized energy transfer
     integer :: l             ! Scattering order
     integer :: NEout_g       ! Number of Eout pts
+    real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
     
+    allocate(mymu(2))
+
     ! This routine will proceed as follows:
     ! 1) Find the outgoing energy boundaries of interest
     ! 2) For each group:
@@ -280,9 +283,11 @@ write(*,*) 'Ein = ', Ein
         ! Find beta
         beta = (Eout - Ein) / kT
 
+        call find_FG_mu(A, kT, Ein, Eout, beta, mymu)
+
         do l = 1, order
           fEEl(l, iE) = adaptiveSimpsons_mu(A, kT, Ein, Eout, beta, l - 1, &
-            fEmu, mu, -ONE, ONE, 1.0E-6_8, 20)
+            fEmu, mu, mymu(1), mymu(2), 1.0E-6_8, 20)
         end do
 
       end do
@@ -303,9 +308,9 @@ write(*,*) 'Ein = ', Ein
 
     ! And normalize
     distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg_mu
+  end subroutine integrate_freegas_leg
 
-  subroutine integrate_freegas_leg_Eoutmu(Ein, A, kT, fEmu, mu, E_bins, order, &
+  subroutine integrate_freegas_leg_E(Ein, A, kT, fEmu, mu, E_bins, order, &
     NEout, distro)
 
     real(8), intent(in)  :: Ein         ! Incoming energy of neutron
@@ -351,7 +356,7 @@ write(*,*) 'Ein = ', Ein
 
     ! And normalize
     distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg_Eoutmu
+  end subroutine integrate_freegas_leg_E
 
 !===============================================================================
 ! CALC_FG_EOUT_BOUNDS determines the outgoing energy (Eout) integration bounds
@@ -759,6 +764,7 @@ write(*,*) 'Ein = ', Ein
 
     real(8) :: c, h, fa, fb, fc, S
     real(8) :: beta_a, beta_b, beta_c
+    real(8) :: mu_a(2), mu_b(2), mu_c(2)
     real(8) :: integral
 
     c = (a + b)* 0.5_8
@@ -766,12 +772,16 @@ write(*,*) 'Ein = ', Ein
     beta_a = (a - Ein) / kT
     beta_b = (b - Ein) / kT
     beta_c = (c - Ein) / kT
+    call find_FG_mu(awr, kT, Ein, a, beta_a, mu_a)
+    call find_FG_mu(awr, kT, Ein, b, beta_b, mu_b)
+    call find_FG_mu(awr, kT, Ein, c, beta_c, mu_c)
+
     fa = adaptiveSimpsons_mu(awr, kT, Ein, a, beta_a, l, &
-            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+            fEmu, global_mu, mu_a(1), mu_a(2), 1.0E-6_8, 20)
     fb = adaptiveSimpsons_mu(awr, kT, Ein, b, beta_b, l, &
-            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+            fEmu, global_mu, mu_b(1), mu_b(2), 1.0E-6_8, 20)
     fc = adaptiveSimpsons_mu(awr, kT, Ein, c, beta_c, l, &
-            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+            fEmu, global_mu, mu_c(1), mu_c(2), 1.0E-6_8, 20)
     
     S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
     integral =  adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, fEmu, global_mu, &
@@ -798,16 +808,25 @@ write(*,*) 'Ein = ', Ein
 
     real(8) :: c, d, h, e, fd, fe, Sleft, Sright, S2
     real(8) :: beta_d, beta_e
+    real(8) :: mu_d(2), mu_e(2)
     real(8) :: val
 
     c = 0.5_8 * (a + b)
     h = b - a                                                                 
     d = 0.5_8 * (a + c)
     e = 0.5_8 * (c + b)
+
+    beta_d = (d - Ein) / kT
+    beta_e = (e - Ein) / kT
+
+    call find_FG_mu(awr, kT, Ein, d, beta_d, mu_d)
+    call find_FG_mu(awr, kT, Ein, e, beta_e, mu_e)
+
     fd = adaptiveSimpsons_mu(awr, kT, Ein, d, beta_d, l, &
-            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+            fEmu, global_mu, mu_d(1), mu_d(2), 1.0E-6_8, 20)
     fe = adaptiveSimpsons_mu(awr, kT, Ein, e, beta_e, l, &
-            fEmu, global_mu, -ONE, ONE, 1.0E-6_8, 20)
+            fEmu, global_mu, mu_e(1), mu_e(2), 1.0E-6_8, 20)
+
     Sleft  = (h / 12.0_8) * (fa + 4.0_8 * fd + fc)
     Sright = (h / 12.0_8) * (fc + 4.0_8 * fe + fb)
     S2 = Sleft + Sright
