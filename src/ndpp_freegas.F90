@@ -208,7 +208,7 @@ module freegas
     integer :: l             ! Scattering order
     integer :: NEout_g       ! Number of Eout pts
     real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
-    
+
     allocate(mymu(2))
 
     ! This routine will proceed as follows:
@@ -228,6 +228,7 @@ write(*,*) 'Ein = ', Ein
     allocate(fEEl(order, NEout_g))
     distro = ZERO
     p0_1g_norm = ZERO
+
 
     ! Calculate the lower and upper bounds of integration
     call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
@@ -319,6 +320,130 @@ write(*,*) 'Ein = ', Ein
     integer, intent(in)  :: NEout       ! Number of outgoing energy points
     real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
     
+    integer :: g             ! outgoing energy group index
+    integer :: iE            ! Outgoing energy index
+    real(8) :: du            ! delta lethargy (outgoing)
+    real(8), allocatable :: fEEl(:,:) ! function of Ein, Eout and legendre order l
+    real(8) :: Eout, Eout_prev  ! Value of outgoing energy
+    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
+    real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
+                                    ! for this group
+    real(8) :: p0_1g_norm           ! normalization constant so that P0 = 1.0
+    integer :: l             ! Scattering order
+    integer :: NEout_g       ! Number of Eout pts
+    real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
+    real(8), allocatable :: Eouts(:)
+    allocate(mymu(2))
+
+    ! This routine will proceed as follows:
+    ! 1) Find the outgoing energy boundaries of interest
+    ! 2) For each group:
+    !   2.a) for each Eout point:
+    !     2.a.i)   Find the angular boundaries to numerically integrate over
+    !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
+    !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
+    !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
+
+    !!! Other papers have used a Gaussian quadrature for Eout integration.
+    !!! This would be incredibly nice as I would save tremendously on the
+    !!! number of points.
+write(*,*) 'Ein = ', Ein    
+    NEout_g = int(ceiling(real(NEout) / real(size(E_bins) - 1)))    
+    allocate(fEEl(order, NEout_g))
+    distro = ZERO
+    p0_1g_norm = ZERO
+
+!     if (Ein > 40.0_8 * kT / A) NEout_g = 20 * NEout_g
+
+    ! Calculate the lower and upper bounds of integration
+    call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
+
+    do g = 1, size(E_bins) - 1
+      fEEl = ZERO
+      ! First we find our energy ranges of interest
+      if (Eout_hi <= E_bins(g)) then
+        ! The E pts are all outside this group
+        cycle
+      else if (Eout_lo >= E_bins(g + 1)) then
+        ! The E pts are all outside this group
+        cycle
+      end if
+
+      ! Set bounds of integration for this group
+      if (Eout_lo > E_bins(g)) then
+        Eout_lo_g = Eout_lo
+      else
+        Eout_lo_g = E_bins(g)
+      end if
+      if (Eout_hi < E_bins(g + 1)) then
+        Eout_hi_g = Eout_hi
+      else
+        Eout_hi_g = E_bins(g + 1)
+      end if
+
+      ! Avoid a potential division by zero error
+      if (Eout_lo_g == ZERO) Eout_lo_g = 1E-100_8
+
+      call calc_Eouts(A, kT, Ein, Eout_lo_g, Eout_hi_g, NEout_g, Eouts)
+
+      ! We will do this double integration by integrating over 
+      ! angle first (since sab varies more rapidly over angle than energy)
+      ! So, for each Eout, we set Eout, find the mu range of 
+      ! interest, then calculate sab as a function of mu, integrate
+      ! over this range for each legendre, and then store these in fEEl
+
+      ! First find our sab array   
+      do iE = 1, NEout_g
+        ! Find our Eout
+        Eout = Eouts(iE)
+
+        ! Skip all of this if Eout is close to Ein
+        ! To fight a known numerical stability issue
+        if ((abs(Ein - Eout) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
+          fEEl(:, iE) = fEEl(:, iE - 1)
+          cycle
+        end if 
+
+        call find_FG_mu(A, kT, Ein, Eout, mymu)
+
+        do l = 1, order
+          fEEl(l, iE) = adaptiveSimpsons_mu(A, kT, Ein, Eout, l - 1, &
+            fEmu, mu, mymu(1), mymu(2), 1.0E-6_8, 20)
+        end do
+
+      end do
+
+      ! Integrate over Eout (0.5 multiplier not included since we are normalizing)
+      Eout_prev = Eouts(1)
+      do iE = 1, NEout_g - 1
+        Eout = Eouts(iE + 1)
+        distro(:, g) = distro(:, g) + (Eout - Eout_prev) * &
+          (fEEl(:, iE + 1) + fEEl(:, iE))
+        Eout_prev = Eout
+      end do        
+      
+      ! Tally the normalization constant.
+      p0_1g_norm = p0_1g_norm + distro(1, g)
+
+    end do
+
+    ! And normalize
+    distro = distro / p0_1g_norm
+  end subroutine integrate_freegas_leg
+
+  subroutine integrate_freegas_leg_E(Ein, A, kT, fEmu, mu, E_bins, order, &
+    NEout, distro)
+
+    real(8), intent(in)  :: Ein         ! Incoming energy of neutron
+    real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
+    real(8), intent(in)  :: kT          ! Target Temperature (MeV)
+    real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
+    real(8), intent(in)  :: mu(:)       ! fEmu angular grid
+    real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+    integer, intent(in)  :: order       ! Number of moments to find
+    integer, intent(in)  :: NEout       ! Number of outgoing energy points
+    real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
+    
     real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
     integer :: g             ! outgoing energy group index
     real(8) :: p0_1g_norm    ! normalization constant so that P0 = 1.0
@@ -357,7 +482,7 @@ write(*,*) 'Ein = ', Ein
 
     ! And normalize
     distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg
+  end subroutine integrate_freegas_leg_E
 
 !===============================================================================
 ! CALC_FG_EOUT_BOUNDS determines the outgoing energy (Eout) integration bounds
@@ -386,9 +511,65 @@ write(*,*) 'Ein = ', Ein
     ! The only way for upscatter to occur is with the target nuclide having
     ! a large maxwellian energy. So, add on larger than the mean to Ein.
     ! Again, this is willy nilly.
-    Eout_hi = 8.0_8 * kT * (A + ONE) / A + Ein
+    Eout_hi = 12.0_8 * kT * (A + ONE) / A + Ein
 
   end subroutine calc_FG_Eout_bounds
+
+  subroutine calc_Eouts(A, kT, Ein, Eout_lo, Eout_hi, NEout, Eout)
+    real(8), intent(in)  :: A    ! Atomic-weight-ratio of target
+    real(8), intent(in)  :: kT   ! Target Temperature (MeV)
+    real(8), intent(in)  :: Ein  ! Incoming energy of neutron
+    real(8), intent(in)  :: Eout_lo ! Low bound of Eout
+    real(8), intent(in)  :: Eout_hi ! High bound of Eout
+    integer, intent(in)  :: NEout ! Number of outgoing Energy pts
+    real(8), allocatable, intent(out) :: Eout(:)
+
+    real(8) :: alphaEin  ! Maximum energy loss in a pure TAR collision.
+    real(8) :: du        ! Change in lethargy
+    integer :: iE
+
+    allocate(Eout(NEout))
+
+    alphaEin = ((A - ONE) / (A + ONE))**2 * Ein
+    ! We will have 33% of our points before alphaEin,
+    ! 34% between alphaEin and Ein,
+    ! and 33% between Ein and Eout_hi
+
+    if ((Eout_lo < Ein) .and. (Ein < Eout_hi)) then
+      du = log(alphaEin / Eout_lo) / real(33 * NEout / 100 - 1, 8)
+      ! Find our Eout
+      iE = 1
+      Eout(iE) = Eout_lo
+      do while (Eout(iE) * exp(du) <= alphaEin)
+        iE = iE + 1
+        Eout(iE) = Eout(iE - 1) * exp(du)
+      end do
+
+      du = log(Ein / alphaEin) / real(34 * NEout / 100 - 1, 8)
+      ! Find our Eout
+      do while (Eout(iE) * exp(du) <= Ein)
+        iE = iE + 1
+        Eout(iE) = Eout(iE - 1) * exp(du)
+      end do
+
+      du = log(Eout_hi / Eout(iE)) / real(NEout - iE, 8)
+      ! Find our Eout
+      do while (iE < NEout)
+        iE = iE + 1
+        Eout(iE) = Eout(iE - 1) * exp(du)
+      end do
+    else
+      du = log(Eout_hi / Eout_lo) / real(NEout - 1, 8)
+      ! Find our Eout
+      Eout(1) = Eout_lo
+      do iE = 2, NEout
+        Eout(iE) = Eout(iE - 1) * exp(du)
+      end do
+    end if
+
+     
+
+  end subroutine calc_Eouts
 
 !===============================================================================
 ! CALC_SAB calculates the value of S(a,b) for the free-gas scattering kernel.

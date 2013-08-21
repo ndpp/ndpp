@@ -100,7 +100,7 @@ module constants
 !   logical, parameter :: INTERP_NEAREST = .false.
   logical, parameter :: INTERP_NEAREST = .true.
 
-  real(8), parameter :: SAB_THRESHOLD = 1.0E-3_8 ! Fraction of 
+  real(8), parameter :: SAB_THRESHOLD = 1.0E-6_8 ! Fraction of 
   ! maximum s(alpha,beta) value to use as cutoff for determining
   ! the range of integration
   
