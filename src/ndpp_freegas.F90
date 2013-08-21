@@ -127,7 +127,7 @@ module freegas
         ! non-negligible values.
         ! Note that non-negligible is defined by
         ! SAB_THRESHOLD in the constants module.
-        call find_FG_mu(A, kT, Ein, Eout, beta, mymu)
+        call find_FG_mu(A, kT, Ein, Eout, mymu)
 
         ! Now lets find sabs over this range
         ! Find fEmu pt corresponding to mymu(1)
@@ -205,7 +205,6 @@ module freegas
     real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
                                     ! for this group
     real(8) :: p0_1g_norm           ! normalization constant so that P0 = 1.0
-    real(8) :: beta          ! normalized energy transfer
     integer :: l             ! Scattering order
     integer :: NEout_g       ! Number of Eout pts
     real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
@@ -264,7 +263,7 @@ write(*,*) 'Ein = ', Ein
 
       ! We will do this double integration by integrating over 
       ! angle first (since sab varies more rapidly over angle than energy)
-      ! So, for each Eout, we set Eout, calculate beta, find the mu range of 
+      ! So, for each Eout, we set Eout, find the mu range of 
       ! interest, then calculate sab as a function of mu, integrate
       ! over this range for each legendre, and then store these in fEEl
 
@@ -278,15 +277,12 @@ write(*,*) 'Ein = ', Ein
         if ((abs(Ein - Eout) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
           fEEl(:, iE) = fEEl(:, iE - 1)
           cycle
-        end if            
-        
-        ! Find beta
-        beta = (Eout - Ein) / kT
+        end if 
 
-        call find_FG_mu(A, kT, Ein, Eout, beta, mymu)
+        call find_FG_mu(A, kT, Ein, Eout, mymu)
 
         do l = 1, order
-          fEEl(l, iE) = adaptiveSimpsons_mu(A, kT, Ein, Eout, beta, l - 1, &
+          fEEl(l, iE) = adaptiveSimpsons_mu(A, kT, Ein, Eout, l - 1, &
             fEmu, mu, mymu(1), mymu(2), 1.0E-6_8, 20)
         end do
 
@@ -351,7 +347,7 @@ write(*,*) 'Ein = ', Ein
       if ((E_bins(g) < Eout_hi) .and. (E_bins(g + 1) > Eout_lo)) then
         do l = 1, order
           distro(l, g) = adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            E_bins(g), E_bins(g + 1), 1.0E-3_8, 12)
+            E_bins(g), E_bins(g + 1), 1.0E-2_8, 10)
         end do
       end if
       
@@ -568,20 +564,22 @@ write(*,*) 'Ein = ', Ein
 ! where they are needed, saving FLOPs.
 !===============================================================================
 
-  pure subroutine find_FG_mu(A, kT, Ein, Eout, beta, mu)
+  pure subroutine find_FG_mu(A, kT, Ein, Eout, mu)
     real(8), intent(in) :: A    ! Atomic-weight-ratio of target
     real(8), intent(in) :: kT   ! Target Temperature (MeV)
     real(8), intent(in) :: Ein  ! Incoming energy of neutron
     real(8), intent(in) :: Eout ! Outgoing energy of neutron
-    real(8), intent(in) :: beta ! Energy Transfer
     real(8), intent(inout) :: mu(:) ! Angle points to analyze
 
     real(8) :: mu_max    ! mu which gives the peak of sab(mu)
+    real(8) :: beta      ! Energy Transfer
     real(8) :: alpha_max ! Value of alpha corresponding to mu_max
     real(8) :: sab_max   ! Maximum sab value in [-1,1]
     real(8) :: sab_minthresh ! Minimum value of sab to consider
     real(8) :: mu_lo, mu_hi, dmu ! Low, hi mu pts and delta-mu
     integer :: imu       ! mu loop index
+
+    beta = (Eout - Ein) / kT
 
     ! Calculate the alpha corresponding to the max of s(a,b)
     ! This was derived by ds(a,b)/da = 0
@@ -626,17 +624,15 @@ write(*,*) 'Ein = ', Ein
 
 !===============================================================================
 ! CALC_FGK calculates the value of the free-gas scattering kernel.
-! Note that beta is provided, but alpha is calculated within the function.
 !===============================================================================
 
-  function calc_fgk(awr, kT, Ein, Eout, beta, l, mu, fEmu, global_mu) &
+  function calc_fgk(awr, kT, Ein, Eout, l, mu, fEmu, global_mu) &
     result(fgk)
 
     real(8), intent(in) :: awr    ! Atomic-weight-ratio of target
     real(8), intent(in) :: kT   ! Target Temperature (MeV)
     real(8), intent(in) :: Ein  ! Incoming energy of neutron
     real(8), intent(in) :: Eout ! Outgoing energy of neutron
-    real(8), intent(in) :: beta ! Energy Transfer
     integer, intent(in) :: l    ! Legendre order
     real(8), intent(in) :: mu   ! Angle in question
     real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
@@ -644,6 +640,7 @@ write(*,*) 'Ein = ', Ein
     
     real(8) :: fgk   ! The result of this function
     real(8) :: alpha ! Momentum Transfer
+    real(8) :: beta  ! Energy Transfer
     real(8) :: lterm ! The leading term from the rest of the integral with S(a,b)
                      ! calculated in this routine to save FLOPs elsewhere.
     integer :: i                    ! Global mu index
@@ -667,6 +664,9 @@ write(*,*) 'Ein = ', Ein
     ! Calculate momentum transfer, alpha
     alpha = (Ein + Eout - TWO * mu * sqrt(Ein * Eout)) / (awr * kT)
 
+    ! Calculate energy transfer, beta
+    beta = (Eout - Ein) / kT
+
     if (alpha < 1.0E-6_8) alpha = 1.0E-6_8
 
     ! Find the argument to the exponent in S(a,b), for testing against
@@ -680,14 +680,13 @@ write(*,*) 'Ein = ', Ein
 
 ! Adaptive Integration Routines for the Mu variable:
 
-  function adaptiveSimpsons_mu(awr, kT, Ein, Eout, beta, l, fEmu, global_mu, &
+  function adaptiveSimpsons_mu(awr, kT, Ein, Eout, l, fEmu, global_mu, &
     a, b, eps, maxRecursionDepth) result(integral)
 
     real(8), intent(in) :: awr  ! Atomic-weight-ratio of target
     real(8), intent(in) :: kT   ! Target Temperature (MeV)
     real(8), intent(in) :: Ein  ! Incoming energy of neutron
     real(8), intent(in) :: Eout ! Outgoing energy of neutron
-    real(8), intent(in) :: beta ! Energy Transfer
     integer, intent(in) :: l    ! Legendre order
     real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
     real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
@@ -702,22 +701,21 @@ write(*,*) 'Ein = ', Ein
     c = (a + b)* 0.5_8
     h = (b - a)
 
-    fa = calc_fgk(awr, kT, Ein, Eout, beta, l, a, fEmu, global_mu)
-    fb = calc_fgk(awr, kT, Ein, Eout, beta, l, b, fEmu, global_mu)
-    fc = calc_fgk(awr, kT, Ein, Eout, beta, l, c, fEmu, global_mu)
+    fa = calc_fgk(awr, kT, Ein, Eout, l, a, fEmu, global_mu)
+    fb = calc_fgk(awr, kT, Ein, Eout, l, b, fEmu, global_mu)
+    fc = calc_fgk(awr, kT, Ein, Eout, l, c, fEmu, global_mu)
     S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
-    integral =  adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, beta, l, fEmu, global_mu, &
+    integral =  adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, l, fEmu, global_mu, &
       a, b, eps, S, fa, fb, fc, maxRecursionDepth)
   end function adaptiveSimpsons_mu
 
-  recursive function adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, beta, l, &
+  recursive function adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, l, &
     fEmu, global_mu, a, b, eps, S, fa, fb, fc, bottom) result(val)
 
     real(8), intent(in) :: awr  ! Atomic-weight-ratio of target
     real(8), intent(in) :: kT   ! Target Temperature (MeV)
     real(8), intent(in) :: Ein  ! Incoming energy of neutron
     real(8), intent(in) :: Eout ! Outgoing energy of neutron
-    real(8), intent(in) :: beta ! Energy Transfer
     integer, intent(in) :: l    ! Legendre order
     real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
     real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
@@ -737,17 +735,17 @@ write(*,*) 'Ein = ', Ein
     h = b - a                                                                 
     d = 0.5_8 * (a + c)
     e = 0.5_8 * (c + b)
-    fd = calc_fgk(awr, kT, Ein, Eout, beta, l, d, fEmu, global_mu)
-    fe = calc_fgk(awr, kT, Ein, Eout, beta, l, e, fEmu, global_mu)
+    fd = calc_fgk(awr, kT, Ein, Eout, l, d, fEmu, global_mu)
+    fe = calc_fgk(awr, kT, Ein, Eout, l, e, fEmu, global_mu)
     Sleft  = (h / 12.0_8) * (fa + 4.0_8 * fd + fc)
     Sright = (h / 12.0_8) * (fc + 4.0_8 * fe + fb)
     S2 = Sleft + Sright
     if ((bottom <= 0) .or. (abs(S2 - S) <= 15.0_8 * eps)) then
       val = S2 + (S2 - S) / 15.0_8
     else
-      val = adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, beta, l, fEmu, global_mu, &
+      val = adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, l, fEmu, global_mu, &
               a, c, 0.5_8 * eps, Sleft,  fa, fc, fd, bottom - 1) + &
-            adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, beta, l, fEmu, global_mu, &
+            adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, l, fEmu, global_mu, &
               c, b, 0.5_8 * eps, Sright, fc, fb, fe, bottom - 1)
     end if
   end function adaptiveSimpsonsAux_mu
@@ -769,26 +767,22 @@ write(*,*) 'Ein = ', Ein
     integer, intent(in) :: maxRecursionDepth
 
     real(8) :: c, h, fa, fb, fc, S
-    real(8) :: beta_a, beta_b, beta_c
     real(8) :: mu_a(2), mu_b(2), mu_c(2)
     real(8) :: integral
 
     c = (a + b)* 0.5_8
     h = b - a
 
-    beta_a = (a - Ein) / kT
-    beta_b = (b - Ein) / kT
-    beta_c = (c - Ein) / kT
-    call find_FG_mu(awr, kT, Ein, a, beta_a, mu_a)
-    call find_FG_mu(awr, kT, Ein, b, beta_b, mu_b)
-    call find_FG_mu(awr, kT, Ein, c, beta_c, mu_c)
+    call find_FG_mu(awr, kT, Ein, a, mu_a)
+    call find_FG_mu(awr, kT, Ein, b, mu_b)
+    call find_FG_mu(awr, kT, Ein, c, mu_c)
 
-    fa = adaptiveSimpsons_mu(awr, kT, Ein, a, beta_a, l, &
-            fEmu, global_mu, mu_a(1), mu_a(2), 1.0E-6_8, 20)
-    fb = adaptiveSimpsons_mu(awr, kT, Ein, b, beta_b, l, &
-            fEmu, global_mu, mu_b(1), mu_b(2), 1.0E-6_8, 20)
-    fc = adaptiveSimpsons_mu(awr, kT, Ein, c, beta_c, l, &
-            fEmu, global_mu, mu_c(1), mu_c(2), 1.0E-6_8, 20)
+    fa = adaptiveSimpsons_mu(awr, kT, Ein, a, l, &
+            fEmu, global_mu, mu_a(1), mu_a(2), 1.0E-8_8, 20)
+    fb = adaptiveSimpsons_mu(awr, kT, Ein, b, l, &
+            fEmu, global_mu, mu_b(1), mu_b(2), 1.0E-8_8, 20)
+    fc = adaptiveSimpsons_mu(awr, kT, Ein, c, l, &
+            fEmu, global_mu, mu_c(1), mu_c(2), 1.0E-8_8, 20)
     
     S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
     integral =  adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, fEmu, global_mu, &
@@ -814,7 +808,6 @@ write(*,*) 'Ein = ', Ein
     integer, intent(in) :: bottom
 
     real(8) :: c, d, h, e, fd, fe, Sleft, Sright, S2
-    real(8) :: beta_d, beta_e
     real(8) :: mu_d(2), mu_e(2)
     real(8) :: val
 
@@ -823,16 +816,13 @@ write(*,*) 'Ein = ', Ein
     e = 0.5_8 * (c + b)
     h = b - a  
 
-    beta_d = (d - Ein) / kT
-    beta_e = (e - Ein) / kT
+    call find_FG_mu(awr, kT, Ein, d, mu_d)
+    call find_FG_mu(awr, kT, Ein, e, mu_e)
 
-    call find_FG_mu(awr, kT, Ein, d, beta_d, mu_d)
-    call find_FG_mu(awr, kT, Ein, e, beta_e, mu_e)
-
-    fd = adaptiveSimpsons_mu(awr, kT, Ein, d, beta_d, l, &
-            fEmu, global_mu, mu_d(1), mu_d(2), 1.0E-6_8, 20)
-    fe = adaptiveSimpsons_mu(awr, kT, Ein, e, beta_e, l, &
-            fEmu, global_mu, mu_e(1), mu_e(2), 1.0E-6_8, 20)
+    fd = adaptiveSimpsons_mu(awr, kT, Ein, d, l, &
+            fEmu, global_mu, mu_d(1), mu_d(2), 1.0E-8_8, 20)
+    fe = adaptiveSimpsons_mu(awr, kT, Ein, e, l, &
+            fEmu, global_mu, mu_e(1), mu_e(2), 1.0E-8_8, 20)
 
     Sleft  = (h / 12.0_8) * (fa + 4.0_8 * fd + fc)
     Sright = (h / 12.0_8) * (fc + 4.0_8 * fe + fb)
