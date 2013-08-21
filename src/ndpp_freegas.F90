@@ -183,7 +183,7 @@ module freegas
     distro = distro / p0_1g_norm
   end subroutine integrate_freegas_leg_old
 
-  subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
+  subroutine integrate_freegas_leg_mu(Ein, A, kT, fEmu, mu, E_bins, order, &
     NEout, distro)
 
     real(8), intent(in)  :: Ein         ! Incoming energy of neutron
@@ -308,9 +308,9 @@ write(*,*) 'Ein = ', Ein
 
     ! And normalize
     distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg
+  end subroutine integrate_freegas_leg_mu
 
-  subroutine integrate_freegas_leg_E(Ein, A, kT, fEmu, mu, E_bins, order, &
+  subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
     NEout, distro)
 
     real(8), intent(in)  :: Ein         ! Incoming energy of neutron
@@ -323,6 +323,7 @@ write(*,*) 'Ein = ', Ein
     integer, intent(in)  :: NEout       ! Number of outgoing energy points
     real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
     
+    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
     integer :: g             ! outgoing energy group index
     real(8) :: p0_1g_norm    ! normalization constant so that P0 = 1.0
     integer :: l             ! Scattering order
@@ -343,12 +344,16 @@ write(*,*) 'Ein = ', Ein
     distro = ZERO
     p0_1g_norm = ZERO
 
+    ! Calculate the lower and upper bounds of integration
+    call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
+
     do g = 1, size(E_bins) - 1
-      
-      do l = 1, order
-        distro(l, g) = adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-          E_bins(g), E_bins(g + 1), 1.0E-2_8, 10)
-      end do
+      if ((E_bins(g) < Eout_hi) .and. (E_bins(g + 1) > Eout_lo)) then
+        do l = 1, order
+          distro(l, g) = adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
+            E_bins(g), E_bins(g + 1), 1.0E-3_8, 12)
+        end do
+      end if
       
       ! Tally the normalization constant.
       p0_1g_norm = p0_1g_norm + distro(1, g)
@@ -356,7 +361,7 @@ write(*,*) 'Ein = ', Ein
 
     ! And normalize
     distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg_E
+  end subroutine integrate_freegas_leg
 
 !===============================================================================
 ! CALC_FG_EOUT_BOUNDS determines the outgoing energy (Eout) integration bounds
@@ -695,7 +700,8 @@ write(*,*) 'Ein = ', Ein
     real(8) :: integral
 
     c = (a + b)* 0.5_8
-    h = b - a
+    h = (b - a)
+
     fa = calc_fgk(awr, kT, Ein, Eout, beta, l, a, fEmu, global_mu)
     fb = calc_fgk(awr, kT, Ein, Eout, beta, l, b, fEmu, global_mu)
     fc = calc_fgk(awr, kT, Ein, Eout, beta, l, c, fEmu, global_mu)
@@ -769,6 +775,7 @@ write(*,*) 'Ein = ', Ein
 
     c = (a + b)* 0.5_8
     h = b - a
+
     beta_a = (a - Ein) / kT
     beta_b = (b - Ein) / kT
     beta_c = (c - Ein) / kT
@@ -812,9 +819,9 @@ write(*,*) 'Ein = ', Ein
     real(8) :: val
 
     c = 0.5_8 * (a + b)
-    h = b - a                                                                 
     d = 0.5_8 * (a + c)
     e = 0.5_8 * (c + b)
+    h = b - a  
 
     beta_d = (d - Ein) / kT
     beta_e = (e - Ein) / kT
