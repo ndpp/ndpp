@@ -770,7 +770,7 @@ write(*,*) 'Ein = ', Ein
     real(8) :: mu_a(2), mu_b(2), mu_c(2)
     real(8) :: integral
 
-    c = (a + b)* 0.5_8
+    c = 0.5_8 * (a + b)
     h = b - a
 
     call find_FG_mu(awr, kT, Ein, a, mu_a)
