@@ -16,173 +16,6 @@ module freegas
 ! distribution of an elastic collision using the free-gas scattering kernel.
 !===============================================================================
 
-  subroutine integrate_freegas_leg_old(Ein, A, kT, fEmu, mu, E_bins, order, &
-    NEout, distro)
-
-    real(8), intent(in)  :: Ein         ! Incoming energy of neutron
-    real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
-    real(8), intent(in)  :: kT          ! Target Temperature (MeV)
-    real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
-    real(8), intent(in)  :: mu(:)       ! fEmu angular grid
-    real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
-    integer, intent(in)  :: order       ! Number of moments to find
-    integer, intent(in)  :: NEout       ! Number of outgoing energy points
-    real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
-    
-    integer :: g             ! outgoing energy group index
-    integer :: imu           ! angle bin index
-    integer :: iE            ! Outgoing energy index
-    real(8) :: du            ! delta lethargy (outgoing)
-    real(8), allocatable :: fEEl(:,:) ! function of Ein, Eout and legendre order l
-    real(8) :: Eout, Eout_prev  ! Value of outgoing energy
-    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
-    real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
-                                    ! for this group
-    real(8) :: p0_1g_norm           ! normalization constant so that P0 = 1.0
-    real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
-    real(8) :: beta                 ! normalized energy transfer
-    real(8) :: sab_prev, sab        ! previous (last mu) and current values of S(a,b)
-    integer :: i                    ! Global mu index
-    real(8) :: interp, fEmu_val     ! interpolation fraction and interpolated value
-                                    ! of the angular distribution
-    integer :: NEout_g        ! Number of Eout pts
-    
-    ! This routine will proceed as follows:
-    ! 1) Find the outgoing energy boundaries of interest
-    ! 2) For each group:
-    !   2.a) for each Eout point:
-    !     2.a.i)   Find the angular boundaries to numerically integrate over
-    !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
-    !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
-    !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
-
-    !!! Other papers have used a Gaussian quadrature for Eout integration.
-    !!! This would be incredibly nice as I would save tremendously on the
-    !!! number of points.
-    
-    NEout_g = int(ceiling(real(NEout) / real(size(E_bins) - 1)))    
-    allocate(fEEl(order, NEout_g))
-    distro = ZERO
-    p0_1g_norm = ZERO
-    allocate(mymu(FREEGAS_MU_PTS))
-
-    ! Calculate the lower and upper bounds of integration
-    call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
-
-    do g = 1, size(E_bins) - 1
-      fEEl = ZERO
-      ! First we find our energy ranges of interest
-      if (Eout_hi <= E_bins(g)) then
-        ! The E pts are all outside this group
-        cycle
-      else if (Eout_lo >= E_bins(g + 1)) then
-        ! The E pts are all outside this group
-        cycle
-      end if
-
-      ! Set bounds of integration for this group
-      if (Eout_lo > E_bins(g)) then
-        Eout_lo_g = Eout_lo
-      else
-        Eout_lo_g = E_bins(g)
-      end if
-      if (Eout_hi < E_bins(g + 1)) then
-        Eout_hi_g = Eout_hi
-      else
-        Eout_hi_g = E_bins(g + 1)
-      end if
-
-      ! Avoid a potential division by zero error
-      if (Eout_lo_g == ZERO) Eout_lo_g = 1E-100_8
-
-      ! Set the spacing to use for my Eout points
-      du = log(Eout_hi_g / Eout_lo_g) / real(NEout_g - 1, 8)
-
-      ! We will do this double integration by integrating over 
-      ! angle first (since sab varies more rapidly over angle than energy)
-      ! So, for each Eout, we set Eout, calculate beta, find the mu range of 
-      ! interest, then calculate sab as a function of mu, integrate
-      ! over this range for each legendre, and then store these in fEEl
-
-      ! First find our sab array   
-      do iE = 1, NEout_g
-        ! Find our Eout
-        Eout = Eout_lo_g * exp(du * real(iE - 1, 8))
-
-        ! Skip all of this if Eout is close to Ein
-        ! To fight a known numerical stability issue
-        if ((abs(Ein - Eout) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
-          fEEl(:, iE) = fEEl(:, iE - 1)
-          cycle
-        end if            
-        
-        ! Find beta
-        beta = (Eout - Ein) / kT
-
-        ! Now lets find the values of mu to
-        ! do the integration over
-        ! We do this because s(a,b) can look very much
-        ! like a delta function as Ein >> kT and so
-        ! we need to focus the Mu points to the region with
-        ! non-negligible values.
-        ! Note that non-negligible is defined by
-        ! SAB_THRESHOLD in the constants module.
-        call find_FG_mu(A, kT, Ein, Eout, mymu)
-
-        ! Now lets find sabs over this range
-        ! Find fEmu pt corresponding to mymu(1)
-        if (mymu(1) <= mu(1)) then
-            i = 1
-          else if (mymu(1) >= mu(size(mu))) then
-            i = size(mu) - 1
-          else
-            i = binary_search(mu, size(mu), mymu(1))
-          end if
-        interp = (mymu(1) - mu(i)) / (mu(i + 1) - mu(i))
-        fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
-        
-        ! Now calculate sab value, one at a time, integrating over mu as we go.
-        sab_prev = fEmu_val * &
-            calc_sab(A, kT, Ein, Eout, beta, mymu(1))
-        do imu = 2, size(mymu)
-          ! Find fEmu pt corresponding to mymu(imu)
-          if (mymu(imu) <= mu(1)) then
-            i = 1
-          else if (mymu(imu) >= mu(size(mu))) then
-            i = size(mu) - 1
-          else
-            i = binary_search(mu, size(mu), mymu(imu))
-          end if
-          interp = (mymu(imu) - mu(i)) / (mu(i + 1) - mu(i))
-          fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
-          ! Now calculate sab value
-          sab = fEmu_val * &
-            calc_sab(A, kT, Ein, Eout, beta, mymu(imu))
-          fEEl(:, iE) = fEEl(:, iE) + &
-            calc_int_pn_tablelin(order, mymu(imu - 1), mymu(imu), sab_prev, sab)
-
-          sab_prev = sab
-        end do
-      end do
-
-      ! Integrate over Eout (0.5 multiplier not included since we are normalizing)
-      Eout_prev = Eout_lo_g
-      do iE = 1, NEout_g - 1
-        Eout = Eout_prev * exp(du)
-        distro(:, g) = distro(:, g) + (Eout - Eout_prev) * &
-          (fEEl(:, iE + 1) + fEEl(:, iE))
-        Eout_prev = Eout
-      end do        
-      
-      ! Tally the normalization constant.
-      p0_1g_norm = p0_1g_norm + distro(1, g)
-
-    end do
-
-    ! And normalize
-    distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg_old
-
   subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
     NEout, distro)
 
@@ -200,7 +33,6 @@ module freegas
     integer :: iE            ! Outgoing energy index
     real(8) :: du            ! delta lethargy (outgoing)
     real(8), allocatable :: fEEl(:,:) ! function of Ein, Eout and legendre order l
-    real(8) :: Eout, Eout_prev  ! Value of outgoing energy
     real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
     real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
                                     ! for this group
@@ -208,8 +40,7 @@ module freegas
     integer :: l             ! Scattering order
     integer :: NEout_g       ! Number of Eout pts
     real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
-
-    allocate(mymu(2))
+    real(8), allocatable :: Eout(:) ! Outgoing energy grid for integration
 
     ! This routine will proceed as follows:
     ! 1) Find the outgoing energy boundaries of interest
@@ -219,15 +50,16 @@ module freegas
     !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
     !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
     !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
+    
+    write(*,*) 'Ein = ', Ein   
 
-    !!! Other papers have used a Gaussian quadrature for Eout integration.
-    !!! This would be incredibly nice as I would save tremendously on the
-    !!! number of points.
-write(*,*) 'Ein = ', Ein    
+    ! Perform allocations 
     NEout_g = int(ceiling(real(NEout) / real(size(E_bins) - 1)))    
     allocate(fEEl(order, NEout_g))
+    allocate(Eout(NEout_g))
     distro = ZERO
     p0_1g_norm = ZERO
+    allocate(mymu(2))
 
     ! Calculate the lower and upper bounds of integration
     call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
@@ -263,38 +95,37 @@ write(*,*) 'Ein = ', Ein
 
       ! We will do this double integration by integrating over 
       ! angle first (since sab varies more rapidly over angle than energy)
-      ! So, for each Eout, we set Eout, find the mu range of 
+      ! So, for each Eout, find the mu range of 
       ! interest, then calculate sab as a function of mu, integrate
       ! over this range for each legendre, and then store these in fEEl
 
       ! First find our sab array   
       do iE = 1, NEout_g
-        ! Find our Eout
-        Eout = Eout_lo_g * exp(du * real(iE - 1, 8))
+        ! Find our Eout and store it
+        Eout(iE) = Eout_lo_g * exp(du * real(iE - 1, 8))
 
         ! Skip all of this if Eout is close to Ein
         ! To fight a known numerical stability issue
-        if ((abs(Ein - Eout) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
+        if ((abs(Ein - Eout(iE)) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
           fEEl(:, iE) = fEEl(:, iE - 1)
           cycle
         end if 
 
-        call find_FG_mu(A, kT, Ein, Eout, mymu)
+        call find_FG_mu(A, kT, Ein, Eout(iE), mymu)
 
+        ! Now integrate over mu for each Legendre order
         do l = 1, order
-          fEEl(l, iE) = adaptiveSimpsons_mu(A, kT, Ein, Eout, l - 1, &
-            fEmu, mu, mymu(1), mymu(2), 1.0E-6_8, 20)
+          fEEl(l, iE) = adaptiveSimpsons_mu(A, kT, Ein, Eout(iE), l - 1, &
+            fEmu, mu, mymu(1), mymu(2))
         end do
-
       end do
 
-      ! Integrate over Eout (0.5 multiplier not included since we are normalizing)
-      Eout_prev = Eout_lo_g
+      ! Integrate over Eout 
+      ! (0.5 trapezoidal integration multiplier not included since we are 
+      ! normalizing anyways)
       do iE = 1, NEout_g - 1
-        Eout = Eout_prev * exp(du)
-        distro(:, g) = distro(:, g) + (Eout - Eout_prev) * &
+        distro(:, g) = distro(:, g) + (Eout(iE + 1) - Eout(iE)) * &
           (fEEl(:, iE + 1) + fEEl(:, iE))
-        Eout_prev = Eout
       end do  
       
       ! Tally the normalization constant.
@@ -335,7 +166,7 @@ write(*,*) 'Ein = ', Ein
     !!! Other papers have used a Gaussian quadrature for Eout integration.
     !!! This would be incredibly nice as I would save tremendously on the
     !!! number of points.
-write(*,*) 'Ein = ', Ein
+    write(*,*) 'Ein = ', Ein
     distro = ZERO
     p0_1g_norm = ZERO
 
@@ -393,62 +224,6 @@ write(*,*) 'Ein = ', Ein
     
   end subroutine calc_FG_Eout_bounds
 
-  subroutine calc_Eouts(A, kT, Ein, Eout_lo, Eout_hi, NEout, Eout)
-    real(8), intent(in)  :: A    ! Atomic-weight-ratio of target
-    real(8), intent(in)  :: kT   ! Target Temperature (MeV)
-    real(8), intent(in)  :: Ein  ! Incoming energy of neutron
-    real(8), intent(in)  :: Eout_lo ! Low bound of Eout
-    real(8), intent(in)  :: Eout_hi ! High bound of Eout
-    integer, intent(in)  :: NEout ! Number of outgoing Energy pts
-    real(8), allocatable, intent(out) :: Eout(:)
-
-    real(8) :: alphaEin  ! Maximum energy loss in a pure TAR collision.
-    real(8) :: du        ! Change in lethargy
-    integer :: iE
-
-    allocate(Eout(NEout))
-
-    alphaEin = ((A - ONE) / (A + ONE))**2 * Ein
-    ! We will have 33% of our points before alphaEin,
-    ! 34% between alphaEin and Ein,
-    ! and 33% between Ein and Eout_hi
-
-    if ((Eout_lo < Ein) .and. (Ein < Eout_hi)) then
-      du = log(alphaEin / Eout_lo) / real(33 * NEout / 100 - 1, 8)
-      ! Find our Eout
-      iE = 1
-      Eout(iE) = Eout_lo
-      do while (Eout(iE) * exp(du) <= alphaEin)
-        iE = iE + 1
-        Eout(iE) = Eout(iE - 1) * exp(du)
-      end do
-
-      du = log(Ein / alphaEin) / real(34 * NEout / 100 - 1, 8)
-      ! Find our Eout
-      do while (Eout(iE) * exp(du) <= Ein)
-        iE = iE + 1
-        Eout(iE) = Eout(iE - 1) * exp(du)
-      end do
-
-      du = log(Eout_hi / Eout(iE)) / real(NEout - iE, 8)
-      ! Find our Eout
-      do while (iE < NEout)
-        iE = iE + 1
-        Eout(iE) = Eout(iE - 1) * exp(du)
-      end do
-    else
-      du = log(Eout_hi / Eout_lo) / real(NEout - 1, 8)
-      ! Find our Eout
-      Eout(1) = Eout_lo
-      do iE = 2, NEout
-        Eout(iE) = Eout(iE - 1) * exp(du)
-      end do
-    end if
-
-     
-
-  end subroutine calc_Eouts
-
 !===============================================================================
 ! CALC_SAB calculates the value of S(a,b) for the free-gas scattering kernel.
 ! Note that beta is provided, but alpha is calculated within the function.
@@ -501,7 +276,7 @@ write(*,*) 'Ein = ', Ein
 ! function crosses the provided threshold as a function of mu.
 !===============================================================================
 
-  pure function brent_mu(awr, kT, Ein, Eout, beta, thresh, lo, hi, tol) result(mu_val)
+  pure function brent_mu(awr, kT, Ein, Eout, beta, thresh, lo, hi) result(mu_val)
     real(8), intent(in) :: awr    ! Atomic-weight-ratio of target
     real(8), intent(in) :: kT   ! Target Temperature (MeV)
     real(8), intent(in) :: Ein  ! Incoming energy of neutron
@@ -510,7 +285,6 @@ write(*,*) 'Ein = ', Ein
     real(8), intent(in) :: thresh ! SAB Threshold to search for
     real(8), intent(in) :: lo   ! Low mu value boundary
     real(8), intent(in) :: hi   ! High mu value boundary
-    real(8), intent(in) :: tol  ! Error tolerance
 
     real(8) :: mu_val
     real(8) :: a, b, c, d, fa, fb, fc, s, fs
@@ -557,7 +331,7 @@ write(*,*) 'Ein = ', Ein
     mflag = .true.
     i = 0
 
-    do while ((fb /= ZERO) .and. (abs(a - b) > tol))
+    do while ((fb /= ZERO) .and. (abs(a - b) > BRENT_MU_THRESH))
       if ((fa /= fc) .and. (fb /= fc)) then
         ! Inverse quadratic interpolation
         s = a * fb * fc / (fa - fb) / (fa - fc) + b * fa * fc / (fb - fa) / &
@@ -575,8 +349,8 @@ write(*,*) 'Ein = ', Ein
           s = 0.5_8 * (a + b)
           mflag = .true.
       else
-        if ((mflag .and. (abs(b - c) < tol)) .or. &
-          (.not. mflag .and. (abs(c - d) < tol))) then
+        if ((mflag .and. (abs(b - c) < BRENT_MU_THRESH)) .or. &
+          (.not. mflag .and. (abs(c - d) < BRENT_MU_THRESH))) then
           s = (a + b) * 0.5_8
           mflag = .true.
         else
@@ -663,12 +437,12 @@ write(*,*) 'Ein = ', Ein
       if (calc_sab(A, kT, Ein, Eout, beta, -ONE) > sab_minthresh) then
         mu_lo = -ONE
       else
-        mu_lo = brent_mu(A, kT, Ein, Eout, beta, sab_minthresh, -ONE, mu_max, 1.0E-5_8)
+        mu_lo = brent_mu(A, kT, Ein, Eout, beta, sab_minthresh, -ONE, mu_max)
       end if
       if (calc_sab(A, kT, Ein, Eout, beta, ONE) > sab_minthresh) then
         mu_hi = ONE
       else
-        mu_hi = brent_mu(A, kT, Ein, Eout, beta, sab_minthresh, mu_max, ONE, 1.0E-5_8)
+        mu_hi = brent_mu(A, kT, Ein, Eout, beta, sab_minthresh, mu_max, ONE)
       end if                 
     end if
 
@@ -740,7 +514,7 @@ write(*,*) 'Ein = ', Ein
 ! Adaptive Integration Routines for the Mu variable:
 
   function adaptiveSimpsons_mu(awr, kT, Ein, Eout, l, fEmu, global_mu, &
-    a, b, eps, maxRecursionDepth) result(integral)
+    a, b) result(integral)
 
     real(8), intent(in) :: awr  ! Atomic-weight-ratio of target
     real(8), intent(in) :: kT   ! Target Temperature (MeV)
@@ -751,8 +525,6 @@ write(*,*) 'Ein = ', Ein
     real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
     real(8), intent(in) :: a 
     real(8), intent(in) :: b
-    real(8), intent(in) :: eps
-    integer, intent(in) :: maxRecursionDepth
 
     real(8) :: c, h, fa, fb, fc, S
     real(8) :: integral
@@ -765,7 +537,7 @@ write(*,*) 'Ein = ', Ein
     fc = calc_fgk(awr, kT, Ein, Eout, l, c, fEmu, global_mu)
     S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
     integral =  adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, l, fEmu, global_mu, &
-      a, b, eps, S, fa, fb, fc, maxRecursionDepth)
+      a, b, ADAPTIVE_MU_TOL, S, fa, fb, fc, ADAPTIVE_MU_ITS)
   end function adaptiveSimpsons_mu
 
   recursive function adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, l, &
@@ -837,11 +609,11 @@ write(*,*) 'Ein = ', Ein
     call find_FG_mu(awr, kT, Ein, c, mu_c)
 
     fa = adaptiveSimpsons_mu(awr, kT, Ein, a, l, &
-            fEmu, global_mu, mu_a(1), mu_a(2), 1.0E-8_8, 20)
+            fEmu, global_mu, mu_a(1), mu_a(2))
     fb = adaptiveSimpsons_mu(awr, kT, Ein, b, l, &
-            fEmu, global_mu, mu_b(1), mu_b(2), 1.0E-8_8, 20)
+            fEmu, global_mu, mu_b(1), mu_b(2))
     fc = adaptiveSimpsons_mu(awr, kT, Ein, c, l, &
-            fEmu, global_mu, mu_c(1), mu_c(2), 1.0E-8_8, 20)
+            fEmu, global_mu, mu_c(1), mu_c(2))
     
     S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
     integral =  adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, fEmu, global_mu, &
@@ -879,9 +651,9 @@ write(*,*) 'Ein = ', Ein
     call find_FG_mu(awr, kT, Ein, e, mu_e)
 
     fd = adaptiveSimpsons_mu(awr, kT, Ein, d, l, &
-            fEmu, global_mu, mu_d(1), mu_d(2), 1.0E-8_8, 20)
+            fEmu, global_mu, mu_d(1), mu_d(2))
     fe = adaptiveSimpsons_mu(awr, kT, Ein, e, l, &
-            fEmu, global_mu, mu_e(1), mu_e(2), 1.0E-8_8, 20)
+            fEmu, global_mu, mu_e(1), mu_e(2))
 
     Sleft  = (h / 12.0_8) * (fa + 4.0_8 * fd + fc)
     Sright = (h / 12.0_8) * (fc + 4.0_8 * fe + fb)

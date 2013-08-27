@@ -86,9 +86,8 @@ module constants
   
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS  
-  integer, parameter :: MAX_LEGENDRE_ORDER   = 10,   & ! Max Lab Legendre Order
-                        FREEGAS_EOUT_PTS     = 2000,  & ! Number of Eout pts for FreeGas
-                        FREEGAS_MU_PTS       = 501     ! Number of mu pts for FreeGas
+  integer, parameter :: MAX_LEGENDRE_ORDER   = 10, &  ! Max Lab Legendre Order
+                        FREEGAS_EOUT_PTS     = 1000   ! Number of Eout pts for FreeGas
                                                      
   ! Number of equiprobable bins
   integer, parameter :: NUM_EP = 32
@@ -100,9 +99,18 @@ module constants
 !   logical, parameter :: INTERP_NEAREST = .false.
   logical, parameter :: INTERP_NEAREST = .true.
 
-  real(8), parameter :: SAB_THRESHOLD = 1.0E-3_8 ! Fraction of 
-  ! maximum s(alpha,beta) value to use as cutoff for determining
+  ! Fraction of maximum s(a,b) value to use as cutoff for determining
   ! the range of integration
+  real(8), parameter :: SAB_THRESHOLD = 1.0E-3_8 
+
+  ! Brent root finding algorithm threshold for the mu variable
+  real(8), parameter :: BRENT_MU_THRESH = 1.0E-6_8
+
+  ! Adaptive Simpsons integration (of mu) tolerance
+  real(8), parameter :: ADAPTIVE_MU_TOL = 1.0E-7_8
+
+  ! Adaptive Simpsons integration (of mu) maximum recursion depth/iterations
+  integer, parameter :: ADAPTIVE_MU_ITS = 12
   
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
