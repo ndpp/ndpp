@@ -136,59 +136,6 @@ module freegas
     distro = distro / p0_1g_norm
   end subroutine integrate_freegas_leg_u
 
-  subroutine integrate_freegas_leg_E(Ein, A, kT, fEmu, mu, E_bins, order, &
-    NEout, distro)
-
-    real(8), intent(in)  :: Ein         ! Incoming energy of neutron
-    real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
-    real(8), intent(in)  :: kT          ! Target Temperature (MeV)
-    real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
-    real(8), intent(in)  :: mu(:)       ! fEmu angular grid
-    real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
-    integer, intent(in)  :: order       ! Number of moments to find
-    integer, intent(in)  :: NEout       ! Number of outgoing energy points
-    real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
-    
-    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
-    integer :: g             ! outgoing energy group index
-    real(8) :: p0_1g_norm    ! normalization constant so that P0 = 1.0
-    integer :: l             ! Scattering order
-    
-    ! This routine will proceed as follows:
-    ! 1) Find the outgoing energy boundaries of interest
-    ! 2) For each group:
-    !   2.a) for each Eout point:
-    !     2.a.i)   Find the angular boundaries to numerically integrate over
-    !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
-    !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
-    !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
-
-    !!! Other papers have used a Gaussian quadrature for Eout integration.
-    !!! This would be incredibly nice as I would save tremendously on the
-    !!! number of points.
-    write(*,*) 'Ein = ', Ein
-    distro = ZERO
-    p0_1g_norm = ZERO
-
-    ! Calculate the lower and upper bounds of integration
-    call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
-
-    do g = 1, size(E_bins) - 1
-      if ((E_bins(g) < Eout_hi) .and. (E_bins(g + 1) > Eout_lo)) then
-        do l = 1, order
-          distro(l, g) = adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            E_bins(g), E_bins(g + 1), 1.0E-2_8, 10)
-        end do
-      end if
-      
-      ! Tally the normalization constant.
-      p0_1g_norm = p0_1g_norm + distro(1, g)
-    end do
-
-    ! And normalize
-    distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg_E
-
   subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
     NEout, distro)
 
@@ -207,23 +154,14 @@ module freegas
     real(8) :: p0_1g_norm    ! normalization constant so that P0 = 1.0
     integer :: l             ! Scattering order
     real(8) :: Elo, Ehi
-    real(8) :: alpha
+    real(8) :: alphaEin
 
-    alpha = (A - ONE) / (A + ONE)
-    alpha = alpha * alpha
+    alphaEin = (A - ONE) / (A + ONE)
+    alphaEin = alphaEin * alphaEin * Ein
     
-    ! This routine will proceed as follows:
-    ! 1) Find the outgoing energy boundaries of interest
-    ! 2) For each group:
-    !   2.a) for each Eout point:
-    !     2.a.i)   Find the angular boundaries to numerically integrate over
-    !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
-    !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
-    !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
-
-    !!! Other papers have used a Gaussian quadrature for Eout integration.
-    !!! This would be incredibly nice as I would save tremendously on the
-    !!! number of points.
+    ! This routine does the double integration of the free-gas kernel
+    ! using an adaptive simpsons integration scheme for both Eout and mu.
+    ! mu is the inner integration.
     write(*,*) 'Ein = ', Ein
     distro = ZERO
     p0_1g_norm = ZERO
@@ -233,6 +171,8 @@ module freegas
 
     do g = 1, size(E_bins) - 1
       if ((E_bins(g) < Eout_hi) .and. (E_bins(g + 1) > Eout_lo)) then
+        ! Now lets set the lower and upper bounds of integration which
+        ! will progress through the rest of these steps
         if (Eout_lo > E_bins(g)) then
           Elo = Eout_lo
         else
@@ -244,36 +184,53 @@ module freegas
           Ehi = E_bins(g + 1)
         end if
 
+        ! Do the tails of the distribution (low grp boundary to Elo, 
+        ! Ehi to high group boundary)
+        ! We do this because it is essentially free anyways (the tails
+        ! should be smooth and thus very few points are needed)
         do l = 1, order
           distro(l, g) = &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            E_bins(g), Elo, 1.0E-5_8, 10) + &
+            E_bins(g), Elo, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS) + &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            Ehi, E_bins(g + 1), 1.0E-5_8, 10)
+            Ehi, E_bins(g + 1), ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
         end do
 
-        if ((Elo < alpha * Ein) .and. (alpha * Ein < Ehi)) then
+        ! If alphaEin exists in the group of interest use it as a
+        ! adaptive simpsons break point
+        if ((Elo < alphaEin) .and. (alphaEin < Ehi)) then
           do l = 1, order
             distro(l, g) = distro(l, g) + &
               adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-              Elo, alpha * Ein, 1.0E-5_8, 10)
+              Elo, alpha * Ein, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
           end do
-          Elo = alpha * Ein
+          Elo = alphaEin
         end if
 
+        ! If Ein exists in the group of interest use it as a
+        ! adaptive simpsons break point
         if ((Elo < Ein) .and. (Ein < Ehi)) then
           do l = 1, order
             distro(l, g) = distro(l, g) + &
               adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-              Elo, Ein, 1.0E-5_8, 10)
+              Elo, Ein, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
           end do
           Elo = Ein
         end if
 
+        ! Do the remainder (Elo will have been set to whatever the start of
+        ! the remainder is by the time we get here)
         do l = 1, order
           distro(l, g) = distro(l, g) + &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            Elo, Ehi, 1.0E-5_8, 10)
+            Elo, Ehi, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
+        end do
+
+      else ! What the heck, do the integral anyways, should be pretty cheap.
+        do l = 1, order
+          distro(l, g) = &
+            adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
+            E_bins(g), E_bins(g + 1), ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
         end do
         
       end if
