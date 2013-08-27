@@ -16,7 +16,7 @@ module freegas
 ! distribution of an elastic collision using the free-gas scattering kernel.
 !===============================================================================
 
-  subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
+  subroutine integrate_freegas_leg_u(Ein, A, kT, fEmu, mu, E_bins, order, &
     NEout, distro)
 
     real(8), intent(in)  :: Ein         ! Incoming energy of neutron
@@ -134,7 +134,7 @@ module freegas
 
     ! And normalize
     distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg
+  end subroutine integrate_freegas_leg_u
 
   subroutine integrate_freegas_leg_E(Ein, A, kT, fEmu, mu, E_bins, order, &
     NEout, distro)
@@ -188,6 +188,103 @@ module freegas
     ! And normalize
     distro = distro / p0_1g_norm
   end subroutine integrate_freegas_leg_E
+
+  subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
+    NEout, distro)
+
+    real(8), intent(in)  :: Ein         ! Incoming energy of neutron
+    real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
+    real(8), intent(in)  :: kT          ! Target Temperature (MeV)
+    real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
+    real(8), intent(in)  :: mu(:)       ! fEmu angular grid
+    real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+    integer, intent(in)  :: order       ! Number of moments to find
+    integer, intent(in)  :: NEout       ! Number of outgoing energy points
+    real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
+    
+    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
+    integer :: g             ! outgoing energy group index
+    real(8) :: p0_1g_norm    ! normalization constant so that P0 = 1.0
+    integer :: l             ! Scattering order
+    real(8) :: Elo, Ehi
+    real(8) :: alpha
+
+    alpha = (A - ONE) / (A + ONE)
+    alpha = alpha * alpha
+    
+    ! This routine will proceed as follows:
+    ! 1) Find the outgoing energy boundaries of interest
+    ! 2) For each group:
+    !   2.a) for each Eout point:
+    !     2.a.i)   Find the angular boundaries to numerically integrate over
+    !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
+    !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
+    !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
+
+    !!! Other papers have used a Gaussian quadrature for Eout integration.
+    !!! This would be incredibly nice as I would save tremendously on the
+    !!! number of points.
+    write(*,*) 'Ein = ', Ein
+    distro = ZERO
+    p0_1g_norm = ZERO
+
+    ! Calculate the lower and upper bounds of integration
+    call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
+
+    do g = 1, size(E_bins) - 1
+      if ((E_bins(g) < Eout_hi) .and. (E_bins(g + 1) > Eout_lo)) then
+        if (Eout_lo > E_bins(g)) then
+          Elo = Eout_lo
+        else
+          Elo = E_bins(g)
+        end if
+        if (Eout_hi < E_bins(g + 1)) then
+          Ehi = Eout_hi
+        else
+          Ehi = E_bins(g + 1)
+        end if
+
+        do l = 1, order
+          distro(l, g) = &
+            adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
+            E_bins(g), Elo, 1.0E-5_8, 10) + &
+            adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
+            Ehi, E_bins(g + 1), 1.0E-5_8, 10)
+        end do
+
+        if ((Elo < alpha * Ein) .and. (alpha * Ein < Ehi)) then
+          do l = 1, order
+            distro(l, g) = distro(l, g) + &
+              adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
+              Elo, alpha * Ein, 1.0E-5_8, 10)
+          end do
+          Elo = alpha * Ein
+        end if
+
+        if ((Elo < Ein) .and. (Ein < Ehi)) then
+          do l = 1, order
+            distro(l, g) = distro(l, g) + &
+              adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
+              Elo, Ein, 1.0E-5_8, 10)
+          end do
+          Elo = Ein
+        end if
+
+        do l = 1, order
+          distro(l, g) = distro(l, g) + &
+            adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
+            Elo, Ehi, 1.0E-5_8, 10)
+        end do
+        
+      end if
+      
+      ! Tally the normalization constant.
+      p0_1g_norm = p0_1g_norm + distro(1, g)
+    end do
+
+    ! And normalize
+    distro = distro / p0_1g_norm
+  end subroutine integrate_freegas_leg
 
 !===============================================================================
 ! CALC_FG_EOUT_BOUNDS determines the outgoing energy (Eout) integration bounds
@@ -581,7 +678,7 @@ module freegas
     end if
   end function adaptiveSimpsonsAux_mu
  
-! Adaptive Integration Routines for the Mu variable:
+! Adaptive Integration Routines for the Eout variable:
 
   function adaptiveSimpsons_Eout(awr, kT, Ein, l, fEmu, global_mu, &
     a, b, eps, maxRecursionDepth) result(integral)
