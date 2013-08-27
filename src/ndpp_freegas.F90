@@ -202,7 +202,7 @@ module freegas
           do l = 1, order
             distro(l, g) = distro(l, g) + &
               adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-              Elo, alpha * Ein, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
+              Elo, alphaEin, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
           end do
           Elo = alphaEin
         end if
