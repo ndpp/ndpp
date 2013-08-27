@@ -16,9 +16,7 @@ module freegas
 ! distribution of an elastic collision using the free-gas scattering kernel.
 !===============================================================================
 
-  subroutine integrate_freegas_leg_u(Ein, A, kT, fEmu, mu, E_bins, order, &
-    NEout, distro)
-
+  subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, distro)
     real(8), intent(in)  :: Ein         ! Incoming energy of neutron
     real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
     real(8), intent(in)  :: kT          ! Target Temperature (MeV)
@@ -26,127 +24,6 @@ module freegas
     real(8), intent(in)  :: mu(:)       ! fEmu angular grid
     real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
     integer, intent(in)  :: order       ! Number of moments to find
-    integer, intent(in)  :: NEout       ! Number of outgoing energy points
-    real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
-    
-    integer :: g             ! outgoing energy group index
-    integer :: iE            ! Outgoing energy index
-    real(8) :: du            ! delta lethargy (outgoing)
-    real(8), allocatable :: fEEl(:,:) ! function of Ein, Eout and legendre order l
-    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
-    real(8) :: Eout_lo_g, Eout_hi_g ! Low and High bounds of Eout integration
-                                    ! for this group
-    real(8) :: p0_1g_norm           ! normalization constant so that P0 = 1.0
-    integer :: l             ! Scattering order
-    integer :: NEout_g       ! Number of Eout pts
-    real(8), allocatable :: mymu(:) ! The angular grid to use for each Ein,Eout pair
-    real(8), allocatable :: Eout(:) ! Outgoing energy grid for integration
-
-    ! This routine will proceed as follows:
-    ! 1) Find the outgoing energy boundaries of interest
-    ! 2) For each group:
-    !   2.a) for each Eout point:
-    !     2.a.i)   Find the angular boundaries to numerically integrate over
-    !     2.a.ii)  Calculate S(a,b) on the angle grid for the given Eout
-    !     2.a.iii) Perform the Legendre integration as S(a,b) is calculated
-    !   2.b) Intergrate (trapezoid rule) the outgoing energies of interest
-    
-    write(*,*) 'Ein = ', Ein   
-
-    ! Perform allocations 
-    NEout_g = int(ceiling(real(NEout) / real(size(E_bins) - 1)))    
-    allocate(fEEl(order, NEout_g))
-    allocate(Eout(NEout_g))
-    distro = ZERO
-    p0_1g_norm = ZERO
-    allocate(mymu(2))
-
-    ! Calculate the lower and upper bounds of integration
-    call calc_FG_Eout_bounds(A, kT, Ein, Eout_lo, Eout_hi)
-
-    do g = 1, size(E_bins) - 1
-      fEEl = ZERO
-      ! First we find our energy ranges of interest
-      if (Eout_hi <= E_bins(g)) then
-        ! The E pts are all outside this group
-        cycle
-      else if (Eout_lo >= E_bins(g + 1)) then
-        ! The E pts are all outside this group
-        cycle
-      end if
-
-      ! Set bounds of integration for this group
-      if (Eout_lo > E_bins(g)) then
-        Eout_lo_g = Eout_lo
-      else
-        Eout_lo_g = E_bins(g)
-      end if
-      if (Eout_hi < E_bins(g + 1)) then
-        Eout_hi_g = Eout_hi
-      else
-        Eout_hi_g = E_bins(g + 1)
-      end if
-
-      ! Avoid a potential division by zero error
-      if (Eout_lo_g == ZERO) Eout_lo_g = 1E-100_8
-
-      ! Set the spacing to use for my Eout points
-      du = log(Eout_hi_g / Eout_lo_g) / real(NEout_g - 1, 8)
-
-      ! We will do this double integration by integrating over 
-      ! angle first (since sab varies more rapidly over angle than energy)
-      ! So, for each Eout, find the mu range of 
-      ! interest, then calculate sab as a function of mu, integrate
-      ! over this range for each legendre, and then store these in fEEl
-
-      ! First find our sab array   
-      do iE = 1, NEout_g
-        ! Find our Eout and store it
-        Eout(iE) = Eout_lo_g * exp(du * real(iE - 1, 8))
-
-        ! Skip all of this if Eout is close to Ein
-        ! To fight a known numerical stability issue
-        if ((abs(Ein - Eout(iE)) / Ein < 1.0E-10_8) .and. (iE /= 1)) then
-          fEEl(:, iE) = fEEl(:, iE - 1)
-          cycle
-        end if 
-
-        call find_FG_mu(A, kT, Ein, Eout(iE), mymu)
-
-        ! Now integrate over mu for each Legendre order
-        do l = 1, order
-          fEEl(l, iE) = adaptiveSimpsons_mu(A, kT, Ein, Eout(iE), l - 1, &
-            fEmu, mu, mymu(1), mymu(2))
-        end do
-      end do
-
-      ! Integrate over Eout 
-      ! (0.5 trapezoidal integration multiplier not included since we are 
-      ! normalizing anyways)
-      do iE = 1, NEout_g - 1
-        distro(:, g) = distro(:, g) + (Eout(iE + 1) - Eout(iE)) * &
-          (fEEl(:, iE + 1) + fEEl(:, iE))
-      end do  
-      
-      ! Tally the normalization constant.
-      p0_1g_norm = p0_1g_norm + distro(1, g)
-    end do
-
-    ! And normalize
-    distro = distro / p0_1g_norm
-  end subroutine integrate_freegas_leg_u
-
-  subroutine integrate_freegas_leg(Ein, A, kT, fEmu, mu, E_bins, order, &
-    NEout, distro)
-
-    real(8), intent(in)  :: Ein         ! Incoming energy of neutron
-    real(8), intent(in)  :: A           ! Atomic-weight-ratio of target
-    real(8), intent(in)  :: kT          ! Target Temperature (MeV)
-    real(8), intent(in)  :: fEmu(:)     ! Energy-angle distro to act on
-    real(8), intent(in)  :: mu(:)       ! fEmu angular grid
-    real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
-    integer, intent(in)  :: order       ! Number of moments to find
-    integer, intent(in)  :: NEout       ! Number of outgoing energy points
     real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
     
     real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
@@ -162,7 +39,6 @@ module freegas
     ! This routine does the double integration of the free-gas kernel
     ! using an adaptive simpsons integration scheme for both Eout and mu.
     ! mu is the inner integration.
-    write(*,*) 'Ein = ', Ein
     distro = ZERO
     p0_1g_norm = ZERO
 

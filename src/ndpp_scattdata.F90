@@ -58,8 +58,6 @@ module scattdata_class
     type(DistAngle),  pointer :: adist => NULL() ! My reaction's angle dist
     real(8)              :: freegas_cutoff = ZERO ! Free gas cutoff energy
     real(8)              :: kT         = ZERO ! kT of library
-    integer              :: NEout      =  0   ! Number of outgoing E pts to
-                                              ! use for freegas integration
     
     ! Type-Bound procedures
     contains
@@ -125,8 +123,6 @@ module scattdata_class
       this % awr = nuc % awr
       ! Store library kT
       this % kT = nuc % kT
-      ! Set number of Eout pts to use when integrating Free Gas
-      this % NEout = FREEGAS_EOUT_PTS
 
       ! Set freegas cutoff; 
       ! only do if we are dealing with elastic reactions for now.
@@ -277,7 +273,6 @@ module scattdata_class
       this % awr        =  ZERO
       this % freegas_cutoff = ZERO
       this % kT         =  ZERO
-      this % NEout      =  0
 
       ! Reset pointers
       nullify(this % rxn)
@@ -542,7 +537,7 @@ module scattdata_class
           if (Ein < this % freegas_cutoff) then
             call integrate_freegas_leg(Ein, this % awr, this % kT, &
               distro_lab(:, 1), this % mu, this % E_bins, this % order, &
-              this % NEout, result_distro)
+              result_distro)
             temp_Enorm = ONE
           else
             call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &

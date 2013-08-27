@@ -86,8 +86,7 @@ module constants
   
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS  
-  integer, parameter :: MAX_LEGENDRE_ORDER   = 10, &  ! Max Lab Legendre Order
-                        FREEGAS_EOUT_PTS     = 1000   ! Number of Eout pts for FreeGas
+  integer, parameter :: MAX_LEGENDRE_ORDER   = 10
                                                      
   ! Number of equiprobable bins
   integer, parameter :: NUM_EP = 32
@@ -113,10 +112,10 @@ module constants
   integer, parameter :: ADAPTIVE_MU_ITS = 12
 
   ! Adaptive Simpsons integration (of Eout) tolerance
-  real(8), parameter :: ADAPTIVE_EOUT_TOL = 1.0E-6_8
+  real(8), parameter :: ADAPTIVE_EOUT_TOL = 1.0E-5_8
 
   ! Adaptive Simpsons integration (of Eout) maximum recursion depth/iterations
-  integer, parameter :: ADAPTIVE_EOUT_ITS = 12
+  integer, parameter :: ADAPTIVE_EOUT_ITS = 10
   
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
