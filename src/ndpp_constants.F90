@@ -112,10 +112,10 @@ module constants
   integer, parameter :: ADAPTIVE_MU_ITS = 12
 
   ! Adaptive Simpsons integration (of Eout) tolerance
-  real(8), parameter :: ADAPTIVE_EOUT_TOL = 1.0E-5_8
+  real(8), parameter :: ADAPTIVE_EOUT_TOL = 1.0E-6_8
 
   ! Adaptive Simpsons integration (of Eout) maximum recursion depth/iterations
-  integer, parameter :: ADAPTIVE_EOUT_ITS = 10
+  integer, parameter :: ADAPTIVE_EOUT_ITS = 12
   
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
