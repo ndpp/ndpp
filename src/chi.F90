@@ -1,4 +1,4 @@
-module ndpp_chi
+module chi_class
   
   use ace_header
   use constants
@@ -1166,4 +1166,4 @@ contains
 #endif
   end subroutine print_chi_hdf5
   
-end module ndpp_chi
+end module chi_class
