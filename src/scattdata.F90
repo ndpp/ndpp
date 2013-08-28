@@ -98,9 +98,6 @@ module scattdata_class
       ! Test reactions to ensure we have a scattering reaction.
       if (.not. is_valid_scatter(rxn % MT)) return
       
-!       if (rxn % MT == N_LEVEL) return ! This is a level elastic reaction which
-      ! is only an aggregate of others; we dont want this either.
-      
       ! Now, check edist, if passed, and ensure it is of the right law type
       ! before proceeding
       if (associated(edist)) then
