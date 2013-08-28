@@ -43,7 +43,11 @@ module ndpp_class
     integer              :: mu_bins = 2001
     ! Flag to integrate chi or not
     logical              :: integrate_chi = .true.
-    ! Minimum group to group transfer to bother printing
+    logical              :: use_freegas   = .true.
+    ! The energy cutoff (divided by kT) to turn off the free gas treatment
+    ! (unless overridden by per-nuclide cutoffs)
+    real(8)              :: freegas_cutoff = DEFAULT_FREEGAS_THRESHOLD
+    ! Minimum group to group transfer probability to bother printing
     real(8)              :: print_tol = 1.0E-8_8
     ! Tolerance on the union energy grid thinning
     real(8)              :: thin_tol
@@ -125,6 +129,7 @@ module ndpp_class
       scatt_order_    = 5
       thinning_tol_   = 0.2
       mu_bins_        = 2001
+      freegas_cutoff_ = DEFAULT_FREEGAS_THRESHOLD
       
       ! Parse ndpp.xml file
       call read_xml_file_ndpp_t(filename)
@@ -249,7 +254,23 @@ module ndpp_class
                   "ndpp.xml. Mu_bins must be two or greater."
         call fatal_error()
       end if
-      
+
+      ! Now get the free-gas threshol
+      ! If the user entered a negative, that means they want freegas for the
+      ! entire energy range. They can also set the cutoff to a
+      ! very large number. The result of this if-block will be the largest
+      ! number possible if freegas_cutoff < 0, and the provided value if not.
+      if (freegas_cutoff_ == INFINITE_FREEGAS_CUTOFF) then
+        self % freegas_cutoff = INFINITY
+      else if (freegas_cutoff_ >= ZERO) then
+        self % freegas_cutoff = freegas_cutoff_
+      else
+        message = "Invalid negative value of <freegas_cutoff> specified in " // &
+                "ndpp.xml. Specify -1 if no cutoff is desired; all other " // &
+                "values are invalid."
+        call fatal_error()
+      end if
+            
       ! Get grid thinning information
       if (thinning_tol_ > ZERO) then
         ! Convert from percent to fraction and store
@@ -374,7 +395,29 @@ module ndpp_class
           call read_ace_table(1, i_listing)
           nuc => nuclides(1)
           call timer_stop(self % time_read_xs)
-          
+
+          ! Set the free gas cutoff point (in MeV now, not MeV/kT)
+          ! for this nuclide
+          if (xs_listings(i_listing) % freegas_cutoff /= &
+            GLOBAL_FREEGAS_CUTOFF) then
+            if (xs_listings(i_listing) % freegas_cutoff == &
+              INFINITE_FREEGAS_CUTOFF) then
+              nuc % freegas_cutoff = INFINITY
+            else
+              nuc % freegas_cutoff = xs_listings(i_listing) % freegas_cutoff * &
+                nuc % kT
+            end if
+          else
+            if (self % freegas_cutoff == INFINITY) then
+              nuc % freegas_cutoff = INFINITY
+            else
+              nuc % freegas_cutoff = self % freegas_cutoff * nuc % kT
+            end if
+          end if
+          ! Also set xs_listings()%freegas_cutoff to the new nuclide value
+          ! so we can print our library by passing in just xs_listing()
+          xs_listings(i_listing) % freegas_cutoff = nuc % freegas_cutoff
+
           ! Setup output nuclear data library
           call init_library(self, nuc)
           
@@ -587,13 +630,15 @@ module ndpp_class
           trim(nuc % alias) // '" awr="' // trim(to_str(nuc % awr)) // &
           '" location="1" name="' // trim(nuc % name) // '" path="' // &
           trim(filename) // '" temperature="' // trim(to_str(nuc % kT)) // &
-          '" zaid="' // trim(to_str(nuc % zaid)) // '" metastable= "1" />'
+          '" zaid="' // trim(to_str(nuc % zaid)) // '" metastable= "1" ' // &
+          'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '"/>'
       else
         write(UNIT_NDPP, '(A)') indent // '<ndpp_table alias="' // &
           trim(nuc % alias) // '" awr="' // trim(to_str(nuc % awr)) // &
           '" location="1" name="' // trim(nuc % name) // '" path="' // &
           trim(filename) // '" temperature="' // trim(to_str(nuc % kT)) // &
-          '" zaid="' // trim(to_str(nuc % zaid)) // '" />'
+          '" zaid="' // trim(to_str(nuc % zaid)) // '" ' // &
+          'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '"/>'
       end if
       
       
@@ -702,6 +747,14 @@ module ndpp_class
          listing % awr        = ace_tables_(i) % awr
          listing % kT         = ace_tables_(i) % temperature
          listing % location   = ace_tables_(i) % location
+         if ((ace_tables_(i) % freegas_cutoff < ZERO) .AND. &
+            ((ace_tables_(i) % freegas_cutoff /= INFINITE_FREEGAS_CUTOFF) .AND. &
+            (ace_tables_(i) % freegas_cutoff /= GLOBAL_FREEGAS_CUTOFF))) then
+           message = "Invalid value of freegas_cutoff element in cross_sections.xml file!"
+           call fatal_error()
+         else
+           listing % freegas_cutoff   = ace_tables_(i) % freegas_cutoff
+         end if
 
          ! determine type of cross section
          if (ends_with(listing % name, 'c')) then

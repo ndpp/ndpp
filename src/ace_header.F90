@@ -137,6 +137,9 @@ module ace_header
     ! Reactions
     integer :: n_reaction ! # of reactions
     type(Reaction), pointer :: reactions(:) => null()
+
+    ! Free-gas treatment cutoff energy (in MeV, NOT MeV / kT)
+    real(8) :: freegas_cutoff
     
     ! Type-Bound procedures
     contains
@@ -193,6 +196,7 @@ module ace_header
     real(8)       :: awr        ! atomic weight ratio (# of neutron masses)
     real(8)       :: kT         ! Boltzmann constant * temperature (MeV)
     logical       :: metastable ! is this nuclide metastable?
+    real(8)       :: freegas_cutoff ! freegas_cutoff energy (in MeV / kT)
     character(MAX_FILE_LEN) :: path ! path to library containing table
   end type XsListing
 

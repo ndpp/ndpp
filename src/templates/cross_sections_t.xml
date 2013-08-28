@@ -15,6 +15,7 @@
     <component name="temperature" type="double" default="0.0" />
     <component name="path" type="word" length="255" />
     <component name="location" type="integer" default="0" />
+    <component name="freegas_cutoff" type="double" default="-2.0"/>
   </typedef>
 
   <variable name="ace_tables_" tag="ace_table" type="ace_table_xml" dimension="1" />

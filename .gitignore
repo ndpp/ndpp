@@ -35,3 +35,5 @@ examples/basic/ndpp_lib.xml
 
 examples/full/*.g2
 examples/full/ndpp_lib.xml
+
+ndpp.sublime-workspace

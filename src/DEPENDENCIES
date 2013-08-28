@@ -58,6 +58,13 @@ ndpp_class.o: timer_header.o
 
 ndpp_error.o: ndpp_global.o
 
+ndpp_freegas.o: ndpp_constants.o
+ndpp_freegas.o: ndpp_error.o
+ndpp_freegas.o: ndpp_global.o
+ndpp_freegas.o: ndpp_legendre.o
+ndpp_freegas.o: search.o
+ndpp_freegas.o: string.o
+
 ndpp_global.o: ace_header.o
 ndpp_global.o: ndpp_constants.o
 ndpp_global.o: dict_header.o
@@ -103,6 +110,7 @@ ndpp_scattdata.o: ndpp_constants.o
 ndpp_scattdata.o: dict_header.o
 ndpp_scattdata.o: endf.o
 ndpp_scattdata.o: ndpp_error.o
+ndpp_scattdata.o: ndpp_freegas.o
 ndpp_scattdata.o: ndpp_global.o
 ndpp_scattdata.o: interpolation.o
 ndpp_scattdata.o: ndpp_legendre.o

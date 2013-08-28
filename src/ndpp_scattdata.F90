@@ -5,6 +5,7 @@ module scattdata_class
   use dict_header
   use endf,             only: is_scatter
   use error,            only: fatal_error, warning
+  use freegas,          only: integrate_freegas_leg
   use global,           only: nuclides, message
   use interpolation,    only: interpolate_tab1
   use legendre
@@ -55,6 +56,8 @@ module scattdata_class
     type(Reaction),   pointer :: rxn   => NULL() ! My reaction
     type(DistEnergy), pointer :: edist => NULL() ! My reaction's combined dist
     type(DistAngle),  pointer :: adist => NULL() ! My reaction's angle dist
+    real(8)              :: freegas_cutoff = ZERO ! Free gas cutoff energy
+    real(8)              :: kT         = ZERO ! kT of library
     
     ! Type-Bound procedures
     contains
@@ -118,6 +121,16 @@ module scattdata_class
       this % rxn => rxn
       ! Store the atomic weight ratio
       this % awr = nuc % awr
+      ! Store library kT
+      this % kT = nuc % kT
+
+      ! Set freegas cutoff; 
+      ! only do if we are dealing with elastic reactions for now.
+      ! Non-elastic reactions will use the default values of zero  .   
+      if (this % rxn % MT == ELASTIC) then
+        ! Store the freegas cutoff energy (MeV)
+        this % freegas_cutoff = nuc % freegas_cutoff
+      end if
       
       ! Set distributions
       if (rxn % has_angle_dist) then
@@ -257,7 +270,10 @@ module scattdata_class
       this % scatt_type = -1
       this % order      =  0
       this % groups     =  0
-      this % awr        = ZERO
+      this % awr        =  ZERO
+      this % freegas_cutoff = ZERO
+      this % kT         =  ZERO
+
       ! Reset pointers
       nullify(this % rxn)
       nullify(this % edist)
@@ -370,7 +386,7 @@ module scattdata_class
         sigS_array => rxn % sigma
       end if
       
-      ! Get sigS
+      ! Get sigS and the integrated distro
       if ((Ein < nuc % energy(rxn % threshold)) .or. &
         (Ein > this % E_bins(size(this % E_bins)))) then
         ! This is a catch-all, our energy was below the threshold or above the
@@ -507,8 +523,8 @@ module scattdata_class
       ! 3) integrate according to scatt_type
       
       ! 1) convert from CM to Lab, if necessary
-      if (this % rxn % scatter_in_cm) then
-        call cm2lab(this % awr, this % rxn % Q_value, Ein, this % mu, &
+      if ((this % rxn % scatter_in_cm) .and. (Ein >= this % freegas_cutoff)) then
+        call cm2lab(Ein, this % rxn % Q_value, this % awr, this % mu, &
           distro_int, distro_lab)
       else
         distro_lab = distro_int
@@ -518,12 +534,18 @@ module scattdata_class
       case (SCATT_TYPE_LEGENDRE)
         if ((associated(this % adist)) .and. &
           (.not. associated(this % edist))) then
-          ! 2) calculate the angular boundaries for integration
-          call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
-            this % E_bins, this % mu, interp, vals, bins, temp_Enorm) 
-          ! 3) integrate according to scatt_type
-          call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
-            interp, vals, bins, this % order, result_distro)
+          if (Ein < this % freegas_cutoff) then
+            call integrate_freegas_leg(Ein, this % awr, this % kT, &
+              distro_lab(:, 1), this % mu, this % E_bins, this % order, &
+              result_distro)
+            temp_Enorm = ONE
+          else
+            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
+              this % E_bins, this % mu, interp, vals, bins, temp_Enorm) 
+            ! 3) integrate according to scatt_type
+            call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
+              interp, vals, bins, this % order, result_distro)
+          end if
         else if ((associated(this % adist)) .and. &
           (associated(this % edist))) then
           ! Here, we have angular info in adist, but it goes to a single energy
@@ -797,11 +819,11 @@ module scattdata_class
 ! of reference tabular distribution.
 !===============================================================================
 
-    subroutine cm2lab(awr, Q, Ein, mu, data, distro_out)
-      real(8), intent(in) :: awr   ! Atomic Weight Ratio for this nuclide
-      real(8), intent(in) :: Q     ! Binding Energy of reaction, for finding R
-      real(8), intent(in) :: Ein   ! Incoming energy
-      real(8), intent(in) :: mu(:) ! Angular grid
+    subroutine cm2lab(Ein, Q, awr, mu, data, distro_out)
+      real(8), intent(in) :: Ein     ! Incoming energy
+      real(8), intent(in) :: Q       ! Reaction Q-value
+      real(8), intent(in) :: awr     ! Atomic weight ratio
+      real(8), intent(in) :: mu(:)   ! Angular grid
       real(8), intent(in) :: data(:,:) ! The distribution to convert
       real(8), intent(out) :: distro_out(:,:) ! The distribution to convert
       
@@ -820,9 +842,8 @@ module scattdata_class
       mu_bins = size(data, dim = 1)
       
       ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
-      R2 = awr * awr  * (ONE + Q * (awr + ONE) / (awr * Ein))
-      
-      R = sqrt(R2)
+      R = awr * sqrt((ONE + Q * (awr + ONE) / (awr * Ein)))
+      R2 = R * R
       Rinv = ONE / R
         
       if (R2 < ONE) then
@@ -918,7 +939,7 @@ module scattdata_class
     subroutine calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
       
       real(8), intent(in)  :: awr         ! Atomic-weight ratio
-      real(8), intent(in)  :: Q           ! Reaction Q-Value
+      real(8), intent(in)  :: Q           ! Q-Value of this reaction
       real(8), intent(in)  :: Ein         ! Incoming energy
       real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
       real(8), intent(in)  :: mu(:)       ! tabular mu values
@@ -934,15 +955,13 @@ module scattdata_class
                                           ! problem
       
       real(8) :: Emin, Emax       ! Max/Min E transfer of this reaction
-      
-      real(8) :: mu_low, mu_high  ! Low and high angular points
       real(8) :: R                ! The Reduced Mass (takes in to account Qval)
+      real(8) :: mu_low, mu_high  ! Low and high angular points
       integer :: g                ! Group index variable
-      integer :: imu
-      
-      ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
+      integer :: imu              ! angle bin counter
+
       R = awr * sqrt((ONE + Q * (awr + ONE) / (awr * Ein)))
-      
+
       do g = 1, size(E_bins) - 1
         ! Calculate the values of mu corresponding to this energy group
         ! These come from eqs. 232-233 in Methods for Processing ENDF/B-VII, 
@@ -1320,5 +1339,7 @@ module scattdata_class
 ! distribution while the FILE6 version does the same for a combined energy-angle
 ! distribution
 !===============================================================================
+
+!!! NOT YET IMPLEMENTED
 
 end module scattdata_class

@@ -4,14 +4,15 @@ import ndpp_data as ndpp
 import numpy as np
 from mayavi import mlab
 
-#~ h1 = ndpp.NDPP_lib('./1001.70c.g1','binary')
+h1 = ndpp.NDPP_lib('./1001.70c.g60','binary')
+h1 = ndpp.NDPP_lib('./2004.70c.g60','binary')
 #~ h1 = ndpp.NDPP_lib('./1001.70c.g3','binary')
 #~ h1 = ndpp.NDPP_lib('./1002.84c.g1','binary')
 #~ h1 = ndpp.NDPP_lib('./8016.70c.g1','binary')
 #~ h1 = ndpp.NDPP_lib('./8016.70c.g3','binary')
 #~ h1 = ndpp.NDPP_lib('./92235.70c.g3','binary')
 #~ h1 = ndpp.NDPP_lib('./92235.70c.g1','binary')
-h1 = ndpp.NDPP_lib('./94240.70c.g3','binary')
+#~ h1 = ndpp.NDPP_lib('./94240.70c.g3','binary')
 
 bins = 21
 print h1.test_scatt_positivity(num_mu_pts = bins)
@@ -19,7 +20,7 @@ one_group = h1.condense_outgoing_scatt([0, 1, 2])
 glow = h1.condense_outgoing_scatt([0])
 gmid = h1.condense_outgoing_scatt([1])
 ghigh = h1.condense_outgoing_scatt([2])
-(data_1g, mu) = h1.expand_scatt(one_group, bins, order = 11)
+(data_1g, mu) = h1.expand_scatt(one_group, bins, order = 6)
 lethargy = np.log(h1.Ein_scatt[h1.NE_scatt - 1] / h1.Ein_scatt[:])
 
 x,y=np.meshgrid(mu,lethargy)

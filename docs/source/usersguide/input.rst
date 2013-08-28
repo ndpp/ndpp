@@ -16,14 +16,16 @@ To provide the input parameters for NDPP, there is one required input file,
 `ndpp.xml`, and another, `cross_sections.xml`, which is optional. 
 The required `ndpp.xml` file provides NDPP with the options the user wishes to 
 use when processing a set of nuclides.  The set of nuclides to evaluate is 
-provided in the optional file, `cross_sections.xml`. This file is of the exact 
-same format as the cross_sections.xml file used for OpenMC_.  If an explicit 
-`cross_sections.xml` file is not provided (and referenced in `ndpp.xml`), then 
-the default `cross_sections.xml` referenced by the `CROSS_SECTIONS` environment variable
-will be used.  In effect, this means that the user's entire cross-section library
+provided in the optional file, `cross_sections.xml`. This file is very similar 
+to the cross_sections.xml file used for OpenMC_, and OpenMC_ files can be read 
+directly by NDPP.  If an explicit `cross_sections.xml` file is not provided 
+(and referenced in `ndpp.xml`), then the default `cross_sections.xml` referenced 
+by the `CROSS_SECTIONS` environment variable will be used.  In effect, 
+this means that the user's entire cross-section library
 (in the default `cross_sections.xml` file) will be processed, unless a reduced
 set is provided with a local `cross_sections.xml.'
 
+.. _NDPP:
 --------------------------------------
 NDPP Options Specification -- ndpp.xml
 --------------------------------------
@@ -67,6 +69,23 @@ This parameter has no impact on the runtime memory or computational costs of
 the target Monte Carlo code.
 
   *Default*: 2001
+
+.. _freegas_cutoff:
+``<freegas_cutoff>`` Element
+---------------------
+
+The ``<freegas_cutoff>`` element has no attributes and accepts a double-precision
+number.  This number represents the incoming energy (divided by the library's 
+value of kT) at which the free gas treatment is disabled off.  For example, if
+a value of `800.0' is entered for a library with a kT value of `2.53E-8' MeV, then
+the free gas treatment will be disabled at `800.0 * 2.53E-8' MeV, 
+or `2.024E-5' MeV. If the free gas treatment is desired over all the energy range,
+a value of `-1' can be provided for this element. To disable the free gas
+treatment, a value of `0.0' can be entered. This cutoff value applies to all 
+nuclides in the `cross_sections.xml' file, but can be overridden on a 
+per-nuclide basis in the `cross_sections.xml' file.
+
+  *Default*: 400.0
   
 .. _cross_sections:
 
@@ -147,9 +166,28 @@ Finally, if "none" is specified, then no library will be written.
 Cross-Section Library Specification -- cross_sections.xml
 ---------------------------------------------------------
 
-The `cross_sections.xml` file uses the same format used in OpenMC_; its format
-and generation strategies are discussed at cross_sections.xml_
+The `cross_sections.xml` file uses a very similar format to that used in OpenMC_
+with deviations noted here.  For a full discussion of the format
+and generation strategies see the OpenMC manual discussion_. 
 
+``<freegas_cutoff>`` Attribute
+---------------------------
+
+The ``<freegas_cutoff>`` attribute is a member of the `<ace_table>' element and
+accepts a single floating-point number. The value provided will override the 
+value of `freegas_cutoff_' specified in the NDPP_ input file for the nuclide. If
+none is provided, the value provided in the `ndpp.xml' input will be applied.
+The syntax for this attribute is the same as is used for the `freegas_cutoff_' 
+element discussed above.
+
+As an example, the following shows how to set the H-1 free gas treatment to be
+applied over the entire energy range:
+
+.. code-block:: xml
+
+    <ace_table alias="H-1.70c" freegas_cutoff="-1.0" awr="0.999167" location="1" name="1001.70c" path="endf70a" temperature="2.5301e-08" zaid="1001"/>
+ 
+ 
 .. _XML: http://www.w3.org/XML/
 .. _OpenMC: https://github.com/mit-crpg/openmc
-.. _cross_sections.xml: http://mit-crpg.github.io/openmc/usersguide/install.html#cross-section-configuration
+.. _discussion: http://mit-crpg.github.io/openmc/usersguide/install.html#cross-section-configuration
