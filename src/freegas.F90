@@ -528,7 +528,6 @@ module freegas
 ! a and b.  The code for these routines was adapted from that found at:
 ! http://en.wikipedia.org/wiki/Adaptive_Simpson%27s_method#C
 !===============================================================================
-! Adaptive Integration Routines for the Eout variable:
 
   function adaptiveSimpsons_Eout(awr, kT, Ein, l, fEmu, global_mu, &
     a, b) result(integral)
