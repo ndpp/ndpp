@@ -26,20 +26,24 @@ module freegas
     integer, intent(in)  :: order       ! Number of moments to find
     real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
     
-    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
     integer :: g             ! outgoing energy group index
     real(8) :: p0_1g_norm    ! normalization constant so that P0 = 1.0
     integer :: l             ! Scattering order
-    real(8) :: Elo, Ehi
-    real(8) :: alphaEin
+    real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
+    real(8) :: Elo, Ehi      ! Low and High bounds of Eout integration 
+                             ! for each grp
+    real(8) :: alphaEin      ! Eout lower limit for target-at-rest elastic
 
-    alphaEin = (A - ONE) / (A + ONE)
-    alphaEin = alphaEin * alphaEin * Ein
-    
     ! This routine does the double integration of the free-gas kernel
     ! using an adaptive simpsons integration scheme for both Eout and mu.
     ! mu is the inner integration.
-    distro = ZERO
+
+    ! Find alphaEin; we will use this for setting a breakpoint in our adaptive
+    ! Eout integration
+    alphaEin = (A - ONE) / (A + ONE)
+    alphaEin = alphaEin * alphaEin * Ein
+    
+    ! Set the normalization constant to zero so we can tally it w/ each group
     p0_1g_norm = ZERO
 
     ! Calculate the lower and upper bounds of integration
@@ -47,7 +51,8 @@ module freegas
 
     do g = 1, size(E_bins) - 1
       if ((E_bins(g) < Eout_hi) .and. (E_bins(g + 1) > Eout_lo)) then
-        ! Now lets set the lower and upper bounds of integration which
+        ! Now lets set the lower and upper bounds of integration 
+        ! for this group which
         ! will progress through the rest of these steps
         if (Eout_lo > E_bins(g)) then
           Elo = Eout_lo
@@ -60,16 +65,17 @@ module freegas
           Ehi = E_bins(g + 1)
         end if
 
-        ! Do the tails of the distribution (low grp boundary to Elo, 
+        ! Integrate the tails of the distribution (low grp boundary to Elo, 
         ! Ehi to high group boundary)
         ! We do this because it is essentially free anyways (the tails
-        ! should be smooth and thus very few points are needed)
+        ! should be smooth and thus very few points are needed), and has
+        ! led to small but sensible improvements in accuracy.
         do l = 1, order
           distro(l, g) = &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            E_bins(g), Elo, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS) + &
+            E_bins(g), Elo) + &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            Ehi, E_bins(g + 1), ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
+            Ehi, E_bins(g + 1))
         end do
 
         ! If alphaEin exists in the group of interest use it as a
@@ -78,7 +84,7 @@ module freegas
           do l = 1, order
             distro(l, g) = distro(l, g) + &
               adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-              Elo, alphaEin, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
+              Elo, alphaEin)
           end do
           Elo = alphaEin
         end if
@@ -89,7 +95,7 @@ module freegas
           do l = 1, order
             distro(l, g) = distro(l, g) + &
               adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-              Elo, Ein, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
+              Elo, Ein)
           end do
           Elo = Ein
         end if
@@ -99,16 +105,15 @@ module freegas
         do l = 1, order
           distro(l, g) = distro(l, g) + &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            Elo, Ehi, ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
+            Elo, Ehi)
         end do
 
       else ! What the heck, do the integral anyways, should be pretty cheap.
         do l = 1, order
           distro(l, g) = &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            E_bins(g), E_bins(g + 1), ADAPTIVE_EOUT_TOL, ADAPTIVE_EOUT_ITS)
+            E_bins(g), E_bins(g + 1))
         end do
-        
       end if
       
       ! Tally the normalization constant.
@@ -339,9 +344,9 @@ module freegas
     real(8) :: alpha_max ! Value of alpha corresponding to mu_max
     real(8) :: sab_max   ! Maximum sab value in [-1,1]
     real(8) :: sab_minthresh ! Minimum value of sab to consider
-    real(8) :: mu_lo, mu_hi, dmu ! Low, hi mu pts and delta-mu
-    integer :: imu       ! mu loop index
+    real(8) :: mu_lo, mu_hi  ! Low, hi mu pts
 
+    ! Calculate beta
     beta = (Eout - Ein) / kT
 
     ! Calculate the alpha corresponding to the max of s(a,b)
@@ -376,12 +381,9 @@ module freegas
       end if                 
     end if
 
-    ! Now set the angular grid.
-    dmu = (mu_hi - mu_lo) / (real(size(mu) - 1, 8))
+    ! Now set the return values
     mu(1) = mu_lo
-    do imu = 2, size(mu)
-      mu(imu) = mu(imu - 1) + dmu
-    end do
+    mu(2) = mu_hi
 
   end subroutine find_FG_mu
 
@@ -435,13 +437,16 @@ module freegas
     ! Find the argument to the exponent in S(a,b), for testing against
     ! sab_min
     fgk = -(alpha + beta)**2 / (4.0_8 * alpha) ! The sab exp argument
-    fgk = lterm * exp(fgk) / (sqrt(4.0_8 * PI * alpha))
-
-    fgk = fgk * calc_pn(l, mu)
+    fgk = lterm * exp(fgk) / (sqrt(4.0_8 * PI * alpha)) * calc_pn(l, mu)
 
   end function calc_fgk
 
-! Adaptive Integration Routines for the Mu variable:
+!===============================================================================
+! ADAPTIVESIMPSONS_MU and ADAPTIVESIMPSONSAUX_MU in conjunction perform adaptive
+! simpsons integration over the angular variable (mu) between bounds a and b.
+! The code for these routines was adapted from that found at:
+! http://en.wikipedia.org/wiki/Adaptive_Simpson%27s_method#C
+!===============================================================================
 
   function adaptiveSimpsons_mu(awr, kT, Ein, Eout, l, fEmu, global_mu, &
     a, b) result(integral)
@@ -465,9 +470,11 @@ module freegas
     fa = calc_fgk(awr, kT, Ein, Eout, l, a, fEmu, global_mu)
     fb = calc_fgk(awr, kT, Ein, Eout, l, b, fEmu, global_mu)
     fc = calc_fgk(awr, kT, Ein, Eout, l, c, fEmu, global_mu)
+
     S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
     integral =  adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, l, fEmu, global_mu, &
       a, b, ADAPTIVE_MU_TOL, S, fa, fb, fc, ADAPTIVE_MU_ITS)
+
   end function adaptiveSimpsons_mu
 
   recursive function adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, l, &
@@ -498,9 +505,11 @@ module freegas
     e = 0.5_8 * (c + b)
     fd = calc_fgk(awr, kT, Ein, Eout, l, d, fEmu, global_mu)
     fe = calc_fgk(awr, kT, Ein, Eout, l, e, fEmu, global_mu)
+
     Sleft  = (h / 12.0_8) * (fa + 4.0_8 * fd + fc)
     Sright = (h / 12.0_8) * (fc + 4.0_8 * fe + fb)
     S2 = Sleft + Sright
+
     if ((bottom <= 0) .or. (abs(S2 - S) <= 15.0_8 * eps)) then
       val = S2 + (S2 - S) / 15.0_8
     else
@@ -509,12 +518,20 @@ module freegas
             adaptiveSimpsonsAux_mu(awr, kT, Ein, Eout, l, fEmu, global_mu, &
               c, b, 0.5_8 * eps, Sright, fc, fb, fe, bottom - 1)
     end if
+
   end function adaptiveSimpsonsAux_mu
  
+
+!===============================================================================
+! ADAPTIVESIMPSONS_EOUT and ADAPTIVESIMPSONSAUX_EOUT in conjunction perform 
+! adaptive simpsons integration over the outgoing Energy (Eout) between bounds 
+! a and b.  The code for these routines was adapted from that found at:
+! http://en.wikipedia.org/wiki/Adaptive_Simpson%27s_method#C
+!===============================================================================
 ! Adaptive Integration Routines for the Eout variable:
 
   function adaptiveSimpsons_Eout(awr, kT, Ein, l, fEmu, global_mu, &
-    a, b, eps, maxRecursionDepth) result(integral)
+    a, b) result(integral)
 
     real(8), intent(in) :: awr  ! Atomic-weight-ratio of target
     real(8), intent(in) :: kT   ! Target Temperature (MeV)
@@ -524,8 +541,6 @@ module freegas
     real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
     real(8), intent(in) :: a 
     real(8), intent(in) :: b
-    real(8), intent(in) :: eps
-    integer, intent(in) :: maxRecursionDepth
 
     real(8) :: c, h, fa, fb, fc, S
     real(8) :: mu_a(2), mu_b(2), mu_c(2)
@@ -547,7 +562,7 @@ module freegas
     
     S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
     integral =  adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, fEmu, global_mu, &
-      a, b, eps, S, fa, fb, fc, maxRecursionDepth)
+      a, b, ADAPTIVE_EOUT_TOL, S, fa, fb, fc, ADAPTIVE_EOUT_ITS)
   end function adaptiveSimpsons_Eout
 
   recursive function adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, &
