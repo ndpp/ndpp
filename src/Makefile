@@ -119,8 +119,8 @@ all: xml-fortran $(program)
 xml-fortran:
 	cd xml-fortran; make MACHINE=$(MACHINE) F90=$(F90) F90FLAGS="$(F90FLAGS)"
 	cd templates; make F90=$(F90) F90FLAGS="$(F90FLAGS)"
-$(program): $(objects)
-	$(F90) $(objects) $(templates) $(xml_fort) $(LDFLAGS) -o $@
+$(program): $(objects) $(omc_objects)
+	$(F90) $(objects) $(omc_objects) $(templates) $(xml_fort) $(LDFLAGS) -o $@
 tests:
 	make all
 	cd ../tests/test_scatt; make COMPILER=$(COMPILER) DEBUG=$(DEBUG) \
