@@ -27,6 +27,8 @@ HDF5     = no
 # External Library Paths
 #===============================================================================
 
+# These are set up to work with Arch Linux; the user should revise these
+# as necessary for their distribution
 MPI_DIR   = /opt/mpich/3.0.2-$(COMPILER)
 HDF5_DIR  = /usr
 
