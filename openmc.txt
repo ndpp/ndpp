@@ -1,7 +1,7 @@
 NDPP is a work derived from OpenMC (https://github.com/mit-crpg/openmc).  The
-source code which does not have a filename matching ndpp_*.F90 is directly from 
-the OpenMC repository without modification (as well as the code in xml-fortran
-and the cross-section template in the templates directory).  If any of the
-included files from OpenMC are updated by MIT-CRPG, then they can be copied over
-and will likely work perfectly without modification. Of course, the test-suite
-should be run after this manual merge is done.
+source files pointed to by the omc_objects array in the src/OBJECTS file is
+directly from the OpenMC repository without modification (as well as the 
+code in xml-fortran and the cross-section template in the templates directory).
+If any of the included files from OpenMC are updated by MIT-CRPG, then they 
+can be copied over and will likely work perfectly without modification. Of 
+course, the test-suite should be run after this manual merge is done.
