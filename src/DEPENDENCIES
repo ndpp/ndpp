@@ -1,9 +1,6 @@
 ace_header.o: constants.o
 ace_header.o: endf_header.o
 
-endf.o: constants.o
-endf.o: string.o
-
 fission.o: ace_header.o
 fission.o: constants.o
 fission.o: error.o
@@ -22,7 +19,6 @@ list_header.o: constants.o
 
 ace.o: ace_header.o
 ace.o: constants.o
-ace.o: endf.o
 ace.o: error.o
 ace.o: fission.o
 ace.o: global.o
@@ -89,7 +85,6 @@ main.o: output.o
 
 output.o: ace_header.o
 output.o: constants.o
-output.o: endf.o
 output.o: global.o
 output.o: string.o
 
@@ -108,7 +103,6 @@ scatt.o: string.o
 scattdata.o: ace_header.o
 scattdata.o: constants.o
 scattdata.o: dict_header.o
-scattdata.o: endf.o
 scattdata.o: error.o
 scattdata.o: freegas.o
 scattdata.o: global.o

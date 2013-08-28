@@ -3,7 +3,6 @@ module scattdata_class
   use ace_header
   use constants
   use dict_header
-  use endf,             only: is_scatter
   use error,            only: fatal_error, warning
   use freegas,          only: integrate_freegas_leg
   use global,           only: nuclides, message
@@ -97,9 +96,9 @@ module scattdata_class
       ! This test will leave this as uninitialized (and is_init == .false.),
       ! which will be used as a flag when the reactions are combined.
       ! Test reactions to ensure we have a scattering reaction.
-      if (.not. is_scatter(rxn % MT)) return
+      if (.not. is_valid_scatter(rxn % MT)) return
       
-      if (rxn % MT == N_LEVEL) return ! This is a level elastic reaction which
+!       if (rxn % MT == N_LEVEL) return ! This is a level elastic reaction which
       ! is only an aggregate of others; we dont want this either.
       
       ! Now, check edist, if passed, and ensure it is of the right law type
@@ -1341,5 +1340,27 @@ module scattdata_class
 !===============================================================================
 
 !!! NOT YET IMPLEMENTED
+
+!===============================================================================
+! IS_VALID_SCATTER determines if a given MT number is that of a scattering event
+!===============================================================================
+
+  function is_valid_scatter(MT) result(scatter_event)
+
+    integer, intent(in) :: MT
+    logical             :: scatter_event
+
+    if (MT < 100) then
+      if (MT == N_FISSION .or. MT == N_F .or. MT == N_NF .or. MT == N_2NF & 
+           .or. MT == N_3NF .or. MT == N_LEVEL) then
+        scatter_event = .false.
+      else
+        scatter_event = .true.
+      end if
+    else
+      scatter_event = .false.
+    end if
+
+  end function is_valid_scatter
 
 end module scattdata_class

@@ -16,7 +16,6 @@ scattdata.o
 
 omc_objects = \
 dict_header.o \
-endf.o \
 endf_header.o \
 fission.o \
 interpolation.o \

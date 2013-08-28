@@ -5,7 +5,6 @@ module output
   use ace_header,      only: Nuclide, Reaction, UrrData
   use constants
   use dict_header
-  use endf,            only: reaction_name
   use global,          only: master, message, verbosity
   use string,          only: upper_case, to_str
 
