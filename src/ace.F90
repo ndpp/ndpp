@@ -3,7 +3,6 @@ module ace
   use ace_header,       only: Nuclide, Reaction, SAlphaBeta, XsListing, &
                               DistEnergy
   use constants
-  use endf,             only: reaction_name
   use error,            only: fatal_error, warning
   use fission,          only: nu_total
   use global

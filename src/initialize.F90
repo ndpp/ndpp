@@ -1,4 +1,4 @@
-module ndpp_init
+module initialize
 
   use constants
   use error,            only: fatal_error
@@ -100,4 +100,4 @@ contains
 
   end subroutine read_command_line
 
-end module ndpp_init
+end module initialize

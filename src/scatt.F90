@@ -1,4 +1,4 @@
-module ndpp_scatt
+module scatt_class
   
   use ace_header
   use constants
@@ -475,4 +475,4 @@ module ndpp_scatt
 #endif
   end subroutine print_scatt_hdf5
     
-end module ndpp_scatt
+end module scatt_class

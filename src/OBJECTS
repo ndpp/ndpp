@@ -1,26 +1,27 @@
 objects = \
-ndpp_global.o \
 ace_header.o \
+global.o \
+main.o \
+ace.o \
+chi.o \
+ndpp.o \
+constants.o \
+error.o \
+freegas.o \
+initialize.o \
+legendre.o \
+output.o \
+scatt.o \
+scattdata.o
+
+omc_objects = \
 dict_header.o \
-endf.o \
 endf_header.o \
 fission.o \
 interpolation.o \
 hdf5_interface.o \
 list_header.o \
 material_header.o \
-ndpp.o \
-ndpp_ace.o \
-ndpp_chi.o \
-ndpp_class.o \
-ndpp_constants.o \
-ndpp_error.o \
-ndpp_freegas.o \
-ndpp_init.o \
-ndpp_legendre.o \
-ndpp_output.o \
-ndpp_scatt.o \
-ndpp_scattdata.o \
 search.o \
 set_header.o \
 string.o \
