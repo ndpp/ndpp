@@ -15,7 +15,7 @@ Prerequisites
 In order to compile and run NDPP, a number of prerequisite software packages
 and libraries may be needed. These include:
 
-- A Fortran compiler such as gfortran_
+- A Fortran compiler such as gfortran_ 4.6.x or newer
 - git_ version control software for obtaining source code (*optional*)
 - HDF5_ Library for portable binary output format (*optional*)
 

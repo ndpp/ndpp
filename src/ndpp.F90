@@ -11,7 +11,11 @@ module ndpp_class
   use scatt_class
   use string,           only: lower_case, starts_with, ends_with, to_str
   use timer_header
-  
+
+#ifdef OPENMP
+  use omp_lib
+#endif
+
 #ifdef HDF5
   use hdf5_interface
 #endif
@@ -130,6 +134,7 @@ module ndpp_class
       thinning_tol_   = 0.2
       mu_bins_        = 2001
       freegas_cutoff_ = DEFAULT_FREEGAS_THRESHOLD
+      threads_        = -1
       
       ! Parse ndpp.xml file
       call read_xml_file_ndpp_t(filename)
@@ -153,6 +158,15 @@ module ndpp_class
       else
         self % path_cross_sections = trim(cross_sections_)
       end if
+
+      ! Work with OpenMP threading information
+#ifdef OPENMP      
+      if (threads_ == -1) then
+        omp_threads = omp_get_max_threads()
+      else
+        omp_threads = threads_
+      end if   
+#endif
       
       ! Read cross_sections.xml
       call read_cross_sections_xml(self)
@@ -382,6 +396,11 @@ module ndpp_class
       ! Display output message
       message = "Beginning Pre-Processing..."
       call write_message(5)
+
+#ifdef OPENMP
+      message = "Using " // trim(to_str(omp_threads)) // " OpenMP Threads"
+      call write_message(5)
+#endif
       
       ! Start PreProcessor Timer
       call timer_start(self % time_preproc)

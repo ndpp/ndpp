@@ -5,7 +5,7 @@ module scattdata_class
   use dict_header
   use error,            only: fatal_error, warning
   use freegas,          only: integrate_freegas_leg
-  use global,           only: nuclides, message
+  use global
   use interpolation,    only: interpolate_tab1
   use legendre
   use output,           only: write_message, header, print_ascii_array
@@ -320,6 +320,7 @@ module scattdata_class
       end if
       
       ! Step through each incoming energy value to do these calculations
+      !$omp parallel do schedule(dynamic,50) num_threads(omp_threads) default(shared),private(iE)      
       do iE = 1, this % NE
         this % distro(iE) % data = ZERO
         if (associated(this % adist)) then
@@ -334,6 +335,7 @@ module scattdata_class
             this % cdfs(iE) % data, this % distro(iE) % data)
         end if 
       end do
+      !$omp end parallel do
       
     end subroutine scatt_convert_distro
 

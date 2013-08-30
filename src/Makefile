@@ -20,6 +20,7 @@ COMPILER = gnu
 DEBUG    = no
 PROFILE  = no
 OPTIMIZE = no
+OPENMP   = no
 MPI      = no
 HDF5     = no
 
@@ -102,6 +103,20 @@ endif
 ifeq ($(MPI),yes)
   F90 = $(MPI_DIR)/bin/mpif90
   F90FLAGS += -DMPI
+endif
+
+# OpenMP for shared-memory parallelism
+
+ifeq ($(OPENMP),yes)
+	ifeq ($(COMPILER),intel)
+	    F90FLAGS += -openmp -DOPENMP
+	    LDFLAGS += -openmp
+	endif
+
+	ifeq ($(COMPILER),gnu)
+	    F90FLAGS += -fopenmp -DOPENMP
+	    LDFLAGS += -fopenmp
+	endif
 endif
 
 # HDF5 for I/O
