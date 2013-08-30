@@ -22,4 +22,5 @@ element ndpp {
 
   element print_tol { xsd:double }? &
   
+  element threads {xsd:Integer }? &
 }

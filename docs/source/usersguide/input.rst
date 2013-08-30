@@ -161,6 +161,15 @@ format will be written which is useful for manual inspection of results.
 Finally, if "none" is specified, then no library will be written.
 
   *Default*: "ascii"
+
+``<threads>`` Element
+---------------------
+
+The ``<threads>`` element has no attributes and contains a single integer.  This
+value is the number of OpenMP threads to use.  This element has no effect when 
+NDPP is not compiled with OpenMP support.
+
+  *Default*: Use all available threads
   
 ---------------------------------------------------------
 Cross-Section Library Specification -- cross_sections.xml

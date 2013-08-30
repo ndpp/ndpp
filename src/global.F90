@@ -92,6 +92,11 @@ module global
   ! Various output options
   logical :: output_summary = .false.
 
+#ifdef OPENMP
+  ! Number of OpenMP threads to USE
+  integer :: omp_threads
+#endif               
+
 contains
 
 !===============================================================================

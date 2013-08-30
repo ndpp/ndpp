@@ -5,7 +5,7 @@ module output
   use ace_header,      only: Nuclide, Reaction, UrrData
   use constants
   use dict_header
-  use global,          only: master, message, verbosity
+  use global
   use string,          only: upper_case, to_str
 
   implicit none
@@ -53,6 +53,12 @@ contains
     ! Write number of processors
     write(UNIT=OUTPUT_UNIT, FMT='(6X,"MPI Processes:",1X,A)') &
          trim(to_str(n_procs))
+#endif
+
+#ifdef OPENMP
+    ! Write number of processors
+    write(UNIT=OUTPUT_UNIT, FMT='(6X,"OpenMP Threads:",1X,A)') &
+         trim(to_str(omp_threads))
 #endif
 
   end subroutine title

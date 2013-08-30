@@ -4,7 +4,7 @@ module scatt_class
   use constants
   use dict_header
   use error,            only: fatal_error, warning
-  use global,           only: nuclides, message
+  use global
   use interpolation,    only: interpolate_tab1
   use output,           only: write_message, header, print_ascii_array
   use scattdata_class,  only: scattdata
@@ -148,7 +148,7 @@ module scatt_class
       integer :: iE, NE                          ! Ein counter, # Ein
       integer :: irxn, Nrxn                      ! reaction counter, # Reactions
       integer :: groups, order                   ! # Groups, # Orders
-      type(ScattData), pointer :: mySD => NULL() ! Current working ScattData object
+      type(ScattData), pointer, SAVE :: mySD => NULL() ! Current working ScattData object
       real(8) :: norm_tot                        ! Sum of all normalization consts
       integer :: iE_print                 ! iE range to print status of
       integer :: iE_pct, last_iE_pct      ! Current and previous pct complete
@@ -165,7 +165,9 @@ module scatt_class
       allocate(scatt_mat(order, groups, NE))
 
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
-      do iE = 1, NE
+      !$omp parallel do schedule(dynamic,50) num_threads(omp_threads) default(shared),private(iE,mySD,norm_tot,irxn)
+      do iE = 1, NE   
+#ifndef OPENMP
         if (iE_print > 0) then
           if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
             iE_pct = 100 * iE / NE
@@ -176,7 +178,8 @@ module scatt_class
             end if
             last_iE_pct = iE_pct 
           end if
-        end if
+        end if   
+#endif    
         if (E_grid(iE) <= rxn_data(1) % E_bins(size(rxn_data(1) % E_bins))) then
           scatt_mat(:, :, iE) = ZERO
           norm_tot = ZERO
@@ -200,6 +203,7 @@ module scatt_class
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE - 1)
         end if
       end do
+      !$omp end parallel do      
       
     end subroutine calc_scatt_grid
   
