@@ -8,7 +8,7 @@ information that is more readily tallied by a Monte Carlo solver for the
 generation of multi-group cross-sections. Specifically, it integrates the 
 outgoing energy and angular distributions of a reaction to produce a format 
 (Legendre moments or tabular data) and energy group structure defined by the 
-user.  NDPP makes use of subroutines written for the OpenMC Monte Carlo neutron 
+user.  NDPP utilizes code written for the OpenMC Monte Carlo neutron 
 transport code.
 
 NDPP is developed by the `University of Michigan`_.  For 
@@ -21,7 +21,6 @@ at the `Massachusetts Institute of Technology`_.
 .. _Adam Nelson: mailto:nelsonag@umich.edu
 .. _Computational Reactor Physics Group: http://crpg.mit.edu
 .. _Massachusetts Institute of Technology: http://web.mit.edu
-.. _Paul Romano: mailto:paul.k.romano@gmail.com
 
 --------
 Contents
@@ -32,7 +31,7 @@ Contents
 
     quickinstall
     releasenotes/index
-    methods/index
+..methods/index
     usersguide/index
     publications
     license

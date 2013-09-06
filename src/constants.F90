@@ -1,13 +1,12 @@
 module constants
-  !!! When done (close to it) clear out unnecessary information from this module.
   implicit none
 
   ! ============================================================================
   ! VERSIONING NUMBERS
 
   ! OpenMC major, minor, and release numbers
-  integer, parameter :: VERSION_MAJOR   = 0
-  integer, parameter :: VERSION_MINOR   = 1
+  integer, parameter :: VERSION_MAJOR   = 1
+  integer, parameter :: VERSION_MINOR   = 0
   integer, parameter :: VERSION_RELEASE = 0
 
   ! Revision numbers for binary files

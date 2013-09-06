@@ -4,26 +4,28 @@
 Writing XML Input Files
 =======================
 
-The input files for NDPP are structured in a set of XML_ files. XML,
-which stands for eXtensible Markup Language, is a simple format that allows data
-to be exchanged efficiently between different programs and interfaces.  
+The input files for NDPP are a set of XML_ files. XML, which stands for 
+eXtensible Markup Language, is a simple format that allows data to be exchanged
+efficiently between different programs and interfaces.  
 
 -----------------
 Overview of Files
 -----------------
 
-To provide the input parameters for NDPP, there is one required input file, 
-`ndpp.xml`, and another, `cross_sections.xml`, which is optional. 
-The required `ndpp.xml` file provides NDPP with the options the user wishes to 
-use when processing a set of nuclides.  The set of nuclides to evaluate is 
-provided in the optional file, `cross_sections.xml`. This file is very similar 
-to the cross_sections.xml file used for OpenMC_, and OpenMC_ files can be read 
-directly by NDPP.  If an explicit `cross_sections.xml` file is not provided 
-(and referenced in `ndpp.xml`), then the default `cross_sections.xml` referenced 
-by the `CROSS_SECTIONS` environment variable will be used.  In effect, 
-this means that the user's entire cross-section library
-(in the default `cross_sections.xml` file) will be processed, unless a reduced
-set is provided with a local `cross_sections.xml.'
+To provide the input parameters for NDPP, there are two input files required:
+`ndpp.xml`, and a `cross_sections` file.  The `ndpp.xml` file provides NDPP with 
+the options the user wishes to use when processing a set of nuclides.  This 
+file must be named `ndpp.xml`.  The set of nuclides to be pre-processed is 
+provided in the `cross_sections` file, which can be named however the user wishes,
+but typically is named `cross_sections.xml`.
+This file is very similar to the `cross_sections.xml` file used by OpenMC_, 
+and the OpenMC_ `cross_sections.xml` file can be read directly by NDPP as a good 
+starting point. If an explicit `cross_sections.xml` file is not provided 
+(and the path and filename provided in `ndpp.xml`), then the default 
+`cross_sections` file referenced by the :envvar:`CROSS_SECTIONS` environment 
+variable will be used.  For most cases this means that the user's entire 
+cross-section library (in the default `cross_sections.xml` file) will be 
+processed, unless a reduced set is provided with a local `cross_sections' file.
 
 .. _NDPP:
 --------------------------------------
@@ -31,8 +33,9 @@ NDPP Options Specification -- ndpp.xml
 --------------------------------------
 
 All calculational parameters and desired output options are specified in the
-ndpp.xml file.  In the following discussion, if a parameter has a default value
-then its presence is optional; if it is omitted, the default will be used.
+`ndpp.xml`file. In the following discussion, if a default value is listed for a
+parameter, then that is the value which NDPP will use if the parameter is not
+provided in the input file.
 
 ``<scatt_type>`` Element
 ------------------------
@@ -62,11 +65,12 @@ depending on the value of ``<scatt_type>``.
 
 The ``<mu_bins>`` element has no attributes and contains a single integer.  This
 value represents the number of angular points used when converting the ACE-
-format angular distributions to an intermediate tabular representation.  
-Increasing the number of points increases the output accuracy, however, it
-comes at a cost of an increase in NDPP memory usage and computational cost.
-This parameter has no impact on the runtime memory or computational costs of
-the target Monte Carlo code.
+format angular distributions to an intermediate tabular representation.  This 
+intermediate representation is the data which is numerically integrated by NDPP, and
+therefore increasing the number of points increases the accuracy of the results, 
+however, it comes at a cost of an increase in NDPP memory usage and 
+computational cost. This parameter has no impact on the runtime memory or 
+computational costs of the target Monte Carlo code.
 
   *Default*: 2001
 
@@ -75,15 +79,15 @@ the target Monte Carlo code.
 ---------------------
 
 The ``<freegas_cutoff>`` element has no attributes and accepts a double-precision
-number.  This number represents the incoming energy (divided by the library's 
-value of kT) at which the free gas treatment is disabled off.  For example, if
+number.  This number represents the maximum incoming energy (divided by each 
+library's value of kT) at which the free gas treatment is disabled.  For example, if
 a value of `800.0' is entered for a library with a kT value of `2.53E-8' MeV, then
 the free gas treatment will be disabled at `800.0 * 2.53E-8' MeV, 
-or `2.024E-5' MeV. If the free gas treatment is desired over all the energy range,
-a value of `-1' can be provided for this element. To disable the free gas
-treatment, a value of `0.0' can be entered. This cutoff value applies to all 
-nuclides in the `cross_sections.xml' file, but can be overridden on a 
-per-nuclide basis in the `cross_sections.xml' file.
+or `2.024E-5' MeV. If the free gas treatment is desired over the entire energy range
+for all nuclides/temperatures to be evaluated, a value of `-1' can be provided for 
+this element. To disable the free gas treatment, a value of `0.0' can be entered. 
+This cutoff value applies to all nuclides in the `cross_sections.xml' file, but can
+be overridden on a per-nuclide basis in the `cross_sections.xml' file.
 
   *Default*: 400.0
   
@@ -93,10 +97,7 @@ per-nuclide basis in the `cross_sections.xml' file.
 ----------------------------
 
 The ``<cross_sections>`` element has no attributes and simply indicates the path
-to an XML cross section listing file (usually named cross_sections.xml). If this
-element is absent from the settings.xml file, the :envvar:`CROSS_SECTIONS`
-environment variable will be used to find the path to the XML cross section
-listing.
+to an XML cross section listing file (usually named `cross_sections.xml`).
 
   *Default*: The :envvar:`CROSS_SECTIONS` environment variable will be used to 
   find the path to the XML cross section listing.
@@ -105,10 +106,11 @@ listing.
 -------------------------
 
 The ``<energy_bins>`` element provides the energy group structure to NDPP.
-``<energy_bins>`` simply contains a monotonically increasing list of 
-bounding energies for a number of groups. For example, if this element is specified as
-``<energy_bins> 0.0 1.0 20.0 </energy_bins>``, then two energy groups
-will be created, one with energies between 0 and 1 MeV and the other with
+``<energy_bins>`` simply contains a list (in increasing order) of 
+bounding energies for a number of groups. The list must be in increasing order
+to avoid errors during the execution of NDPP. For example, if this element is 
+specified as ``<energy_bins> 0.0 1.0 20.0 </energy_bins>``, then two energy 
+groups will be created, one with energies between 0 and 1 MeV and the other with
 energies between 1 and 20 MeV.
 
 ``<integrate_chi>`` Element
@@ -121,6 +123,8 @@ provided energy group structure and writen to the output files.
 If "false", then the :math:`\chi\left(E\right)` integration will not be performed.
 
   *Default*: true
+  *NOTE*: The fission spectrum integration methods have not yet been fully tested
+  and are to be considered developmental.
 
 ``<thinning_tol>`` Element
 --------------------------
@@ -149,16 +153,16 @@ preprocessed data library.
 ---------------------------
 
 The ``<output_format>`` element determines what format the preprocessed data
-libraries should use.  This element has no attributes and accepts a string.  
-Valid options are "ascii", "binary", "hdf5", "human", and "none".  If "ascii" is
+libraries should use.  This element accepts a string.  
+Valid options are "ascii", "binary", "hdf5", and "human".  If "ascii" is
 specified, an output library will be written for each entry in the 
-cross_sections.xml file which contains the requested data in ASCII text. 
+`cross_sections.xml` file which contains the requested data in ASCII text. 
 If "binary" is specified, the same will be written, but in a 
-machine-readable binary format.  If "hdf5" is specified, a single binary HDF5 
-library will be created which contains the data for all the cross_sections.xml
+machine-readable binary format.  These first two are similar to the Type 1 and 
+Type 2 ACE formats, respectively.  If "hdf5" is specified, a single binary HDF5 
+file will be created which contains the data for all the `cross_sections.xml`
 file entries. If "human" is specified, then a more verbose form of the "ascii" 
-format will be written which is useful for manual inspection of results.  
-Finally, if "none" is specified, then no library will be written.
+format will be written which is useful for manual inspection of results.
 
   *Default*: "ascii"
 
@@ -169,7 +173,8 @@ The ``<threads>`` element has no attributes and contains a single integer.  This
 value is the number of OpenMP threads to use.  This element has no effect when 
 NDPP is not compiled with OpenMP support.
 
-  *Default*: Use all available threads
+  *Default*: Use all available threads (or one, if NDPP not compiled with OpenMP
+  support).
   
 ---------------------------------------------------------
 Cross-Section Library Specification -- cross_sections.xml
@@ -184,13 +189,13 @@ and generation strategies see the OpenMC manual discussion_.
 
 The ``<freegas_cutoff>`` attribute is a member of the `<ace_table>' element and
 accepts a single floating-point number. The value provided will override the 
-value of `freegas_cutoff_' specified in the NDPP_ input file for the nuclide. If
-none is provided, the value provided in the `ndpp.xml' input will be applied.
-The syntax for this attribute is the same as is used for the `freegas_cutoff_' 
-element discussed above.
+value of `freegas_cutoff_' specified in the `ndpp.xml` file for the library it is
+an attribute of. If none is provided, the value provided in the `ndpp.xml' input 
+will be applied.  The syntax for this attribute is the same as is used for the 
+`freegas_cutoff_' element discussed above.
 
-As an example, the following shows how to set the H-1 free gas treatment to be
-applied over the entire energy range:
+As an example (which could be commonly utilized), the following shows how to set 
+the H-1 free gas treatment to be applied over the entire energy range:
 
 .. code-block:: xml
 

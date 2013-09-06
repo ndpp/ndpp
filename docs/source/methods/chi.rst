@@ -4,6 +4,7 @@
 Chi Integration Overview
 ========================
 
+*NOTE THAT THIS FeATURE HAS NOT YET BEEN TESTED*
 Fissionable nuclides can contain one ore more fission reactions in their ACE 
 data.  NDPP must parse through each of these reactions (and the associated 
 delayed neutron precursor data), calculate the outgoing 

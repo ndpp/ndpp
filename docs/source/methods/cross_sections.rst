@@ -6,9 +6,8 @@ Cross Section Representation
 
 The data governing the interaction of neutrons with various nuclei are
 represented using the ACE format which is used by OpenMC_, MCNP_, and Serpent_. 
-ACE-format data can be generated with the NJOY_ nuclear data processing system 
-which converts raw `ENDF/B data`_ into linearly-interpolable data as required by 
-most Monte Carlo codes. The use of a standard cross section format allows for a
+ACE-format data can be generated from `ENDF data`_ with the NJOY_ nuclear 
+data processing system. The use of a standard cross section format allows for a
 direct comparison of OpenMC with other codes since the same cross section
 libraries can be used.
 
@@ -29,4 +28,4 @@ data can be used.
 .. _MCNP: http://mcnp.lanl.gov
 .. _Serpent: http://montecarlo.vtt.fi
 .. _NJOY: http://t2.lanl.gov/codes.shtml
-.. _ENDF/B data: http://www.nndc.bnl.gov/endf
+.. _ENDF data: http://www.nndc.bnl.gov/endf

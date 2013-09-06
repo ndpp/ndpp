@@ -41,13 +41,6 @@ You tried compiling with the Intel Fortran compiler and it was not found on your
 :envvar:`PATH`. If you have the Intel compiler installed, make sure the shell
 can locate it (this can be tested with :program:`which ifort`).
 
-make[1]: pgf90: Command not found
-*********************************
-
-You tried compiling with the PGI Fortran compiler and it was not found on your
-:envvar:`PATH`. If you have the PGI compiler installed, make sure the shell can
-locate it (this can be tested with :program:`which pgf90`).
-
 ----------------------------
 Problems with NDPP Execution
 ----------------------------
@@ -71,15 +64,15 @@ failed. If after reading the debug output, you are still unsure why the program
 failed, send an email to the NDPP `developer
 <mailto:nelsonag@umich.edu>`_.
 
-ERROR: No cross_sections.xml file was specified in settings.xml or in the CROSS_SECTIONS environment variable.
-**************************************************************************************************************
+ERROR: No cross_sections.xml file was specified in ndpp.xml or in the CROSS_SECTIONS environment variable.
+**********************************************************************************************************
 
-NDPPs need to know where to find cross section data for each nuclide. 
-Information on what data is available and in what files is summarized in a 
-cross_sections.xml file. You need to tell NDPP where to find the
-cross_sections.xml file either with the `cross_sections` element in ndpp.xml or
-with the :envvar:`CROSS_SECTIONS` environment variable. It is recommended to add
-a line in your ``.profile``, ``.bash_profile``, ``.bashrc`` (or similar) 
+NDPP needs to know where to find cross section data for each nuclide. This
+information is provided by the `cross_sections.xml` file. You need to tell 
+NDPP where to find the `cross_sections.xml` file either with the 
+`cross_sections` element in ndpp.xml or with the :envvar:`CROSS_SECTIONS` 
+environment variable. It is recommended to add a line in your ``.profile``,
+``.bash_profile``, ``.bashrc`` (or similar) 
 setting the :envvar:`CROSS_SECTIONS` environment variable.
 
 .. _gfortran: http://gcc.gnu.org/wiki/GFortran
