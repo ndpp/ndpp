@@ -815,7 +815,7 @@ module ndpp_class
 ! Routine to initialize each nuclide's library
     
     subroutine init_library(this_ndpp, nuc)
-      type(nuclearDataPreProc), intent(in) :: this_ndpp ! NDPP data
+      class(nuclearDataPreProc), intent(in) :: this_ndpp ! NDPP data
       type(Nuclide), pointer, intent(in)   :: nuc       ! Nuclide data
       
       character(MAX_LINE_LEN) :: line
