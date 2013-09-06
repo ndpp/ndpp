@@ -27,15 +27,22 @@ and libraries may be needed. These include:
 Obtaining the Source
 --------------------
 
-All NDPP source code is hosted on BitBucket_. The latest version of the NDPP
-source code can be downloaded from GitHub with the following command::
+All NDPP source code is hosted on BitBucket_. You can download the source code
+directly from BitBucket or, if you have the git_ version control software installed
+on your computer, you can use git to obtain the source code. The latter method
+has the benefit that it is easy to receive updates directly from the BitBucket
+repository. With git installed and setup, the following command will download 
+the full source code from the BitBucket repository::
 
     git clone git@bitbucket.org:nelsonag/ndpp.git
 
-If you don't have git installed, you can download the source as a zip or tar
-file directly from BitBucket_.
+By default, the cloned repository will be set to the development branch. To
+switch to the source of the latest stable release, run the following commands::
 
-.. _BitBucket: https://github.com/nelsonag/ndpp
+    cd ndpp
+    git checkout master
+
+.. _BitBucket: https://bitbucket.org/nelsonag/ndpp
 
 -------------------------------
 Compiling on Linux and Mac OS X

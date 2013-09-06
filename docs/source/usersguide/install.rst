@@ -75,9 +75,8 @@ switch to the source of the latest stable release, run the following commands::
     cd ndpp/src
     git checkout master
 
-.. _BitBucket: https://github.com/nelsonag/ndpp
+.. _BitBucket: https://bitbucket.org/nelsonag/ndpp
 .. _git: http://git-scm.com
-.. _ssh: http://en.wikipedia.org/wiki/Secure_Shell
 
 Build Configuration
 -------------------
@@ -142,8 +141,6 @@ This will build an executable named ``ndpp`` and install it (by default in
 
 Compiling on Windows
 --------------------
-
-*Note that Windows compilation has not yet been tested but is expected to work*
 
 Using Cygwin
 ++++++++++++

@@ -10,4 +10,4 @@ bugs fixed, and known issues for each successive release.
 .. toctree::
     :maxdepth: 1
     
-    notes_0.1.0
+    notes_1.0.0
