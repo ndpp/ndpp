@@ -22,16 +22,11 @@ at the `Massachusetts Institute of Technology`_.
 .. _Computational Reactor Physics Group: http://crpg.mit.edu
 .. _Massachusetts Institute of Technology: http://web.mit.edu
 
---------
-Contents
---------
-
 .. toctree::
     :maxdepth: 1
 
-    quickinstall
     releasenotes/index
-..methods/index
+    quickinstall
     usersguide/index
     publications
     license

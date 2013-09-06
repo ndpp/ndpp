@@ -76,7 +76,7 @@ computational costs of the target Monte Carlo code.
 
 .. _freegas_cutoff:
 ``<freegas_cutoff>`` Element
----------------------
+----------------------------
 
 The ``<freegas_cutoff>`` element has no attributes and accepts a double-precision
 number.  This number represents the maximum incoming energy (divided by each 
@@ -185,7 +185,7 @@ with deviations noted here.  For a full discussion of the format
 and generation strategies see the OpenMC manual discussion_. 
 
 ``<freegas_cutoff>`` Attribute
----------------------------
+------------------------------
 
 The ``<freegas_cutoff>`` attribute is a member of the `<ace_table>' element and
 accepts a single floating-point number. The value provided will override the 
