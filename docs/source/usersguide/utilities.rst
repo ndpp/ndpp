@@ -14,7 +14,7 @@ functionality to:
 
 1)  Read in a binary library which was printed by NDPP 
 
-  a)  This is provided by the NDPP_lib class' constructor
+  a)  This is provided by the NDPP_lib class constructor
 
 2)  Condense the outgoing angular moments to one-group values
 
