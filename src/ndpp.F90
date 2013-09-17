@@ -106,6 +106,7 @@ module ndpp_class
       logical :: file_exists
       character(MAX_FILE_LEN) :: env_variable
       character(MAX_LINE_LEN) :: filename
+      integer :: g
       
       ! Display output message
       message = "Reading Nuclear Data Pre-Processor XML file..."
@@ -186,6 +187,19 @@ module ndpp_class
       
       ! Get energy groups and bins
       if (associated(energy_bins_)) then
+        ! Lets check to see that the bins are all in increasing order, and positive
+        do g = 1, size(energy_bins_) - 1
+          if (energy_bins_(g) < ZERO) then
+            message = "Invalid energy group structure specified in ndpp.xml; " // &
+                      "Groups boundaries be positive."
+            call fatal_error()
+          end if
+          if (energy_bins_(g) >= energy_bins_(g + 1)) then
+            message = "Invalid energy group structure specified in ndpp.xml; " // &
+                      "Group boundaries must be in increasing order."
+            call fatal_error()
+          end if
+        end do
         self % energy_groups = size(energy_bins_) - 1
         allocate(self % energy_bins(size(energy_bins_)))
         self % energy_bins = energy_bins_
@@ -322,14 +336,10 @@ module ndpp_class
       
       ! Revert to the default/uninitialized values
       self % path_cross_sections = ""
-!       if (associated(self % xs_listings)) deallocate(self % xs_listings)
-!       nullify(self % xs_listings)
-!       if (associated(self % xs_listing_dict)) deallocate(self % xs_listing_dict)
-!       nullify(self % xs_listing_dict)
       self % n_listings    = 0
       if (allocated(self % energy_bins)) deallocate(self % energy_bins)
       self % energy_groups = 0
-      self % lib_name  = ''
+      self % lib_name      = ''
       self % lib_format    = ASCII
       self % scatt_type    = SCATT_TYPE_LEGENDRE
       self % scatt_order   = SCATT_ORDER_DEFAULT
