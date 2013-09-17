@@ -20,7 +20,7 @@ module constants
   ! adjusted. Modifying constants in other sections may cause the code to fail.
 
   ! Monoatomic ideal-gas scattering treatment threshold
-  real(8), parameter :: DEFAULT_FREEGAS_THRESHOLD = 400.0
+  real(8), parameter :: FREEGAS_THRESHOLD_DEFAULT = 400.0
 
   ! Significance level for confidence intervals
   real(8), parameter :: CONFIDENCE_LEVEL = 0.95_8
@@ -82,6 +82,23 @@ module constants
   ! Value for freegas_cutoff (everywhere) which means 'apply everywhere'
   real(8), parameter :: &
        INFINITE_FREEGAS_CUTOFF = -ONE
+
+  ! Various Default values for input parameters, ints, reals, bool, chars:
+  integer, parameter :: &
+       MU_BINS_DEFAULT     = 2001, & ! # of angles for numerical integration
+       SCATT_ORDER_DEFAULT = 5,    & ! Legendre order default, if omitted
+       THREADS_DEFAULT     = 1,    & ! Default number of threads (-1 means use envvar)
+       SCATT_TYPE_DEFAULT  = SCATT_TYPE_LEGENDRE ! Default scatt results type
+
+  real(8), parameter :: &
+       PRINT_TOL_DEFAULT   = 1.0E-8_8, & ! Value at which scattering matrices
+                                         ! values are not printed
+       THIN_TOL_DEFAULT    = 1.0E-2_8    ! Value for grid thinning
+
+  logical, parameter :: &
+       INTEGRATE_CHI_DEFAULT = .false., & ! Integrate Chi?
+       USE_FREEGAS_DEFAULT   = .true.     ! Use free-gas treatment?
+
   
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS  

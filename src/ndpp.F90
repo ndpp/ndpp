@@ -42,17 +42,18 @@ module ndpp_class
     ! Scattering data output type (currently only Legendre or Histogram)
     integer              :: scatt_type    = SCATT_TYPE_LEGENDRE
     ! Scattering data output size (Number of Legendre Orders or Number of Bins)
-    integer              :: scatt_order   = 5
+    integer              :: scatt_order   = SCATT_ORDER_DEFAULT
     ! Number of angular bins to use during f_{n,MT} conversion
-    integer              :: mu_bins = 2001
+    integer              :: mu_bins = MU_BINS_DEFAULT
     ! Flag to integrate chi or not
-    logical              :: integrate_chi = .true.
-    logical              :: use_freegas   = .true.
+    logical              :: integrate_chi = INTEGRATE_CHI_DEFAULT
+    ! Flag to use free-gas treatment or not
+    logical              :: use_freegas   = USE_FREEGAS_DEFAULT
     ! The energy cutoff (divided by kT) to turn off the free gas treatment
     ! (unless overridden by per-nuclide cutoffs)
-    real(8)              :: freegas_cutoff = DEFAULT_FREEGAS_THRESHOLD
+    real(8)              :: freegas_cutoff = FREEGAS_THRESHOLD_DEFAULT
     ! Minimum group to group transfer probability to bother printing
-    real(8)              :: print_tol = 1.0E-8_8
+    real(8)              :: print_tol = PRINT_TOL_DEFAULT
     ! Tolerance on the union energy grid thinning
     real(8)              :: thin_tol
     ! Total Time
@@ -126,15 +127,15 @@ module ndpp_class
       
       ! Initialize XML scalar variables
       cross_sections_ = ''
-      integrate_chi_  = 'true'
+      integrate_chi_  = ''
       library_name_   = ''
       output_format_  = ''
       scatt_type_     = 'legendre'
-      scatt_order_    = 5
-      thinning_tol_   = 0.2
-      mu_bins_        = 2001
-      freegas_cutoff_ = DEFAULT_FREEGAS_THRESHOLD
-      threads_        = -1
+      scatt_order_    = SCATT_ORDER_DEFAULT
+      thinning_tol_   = THIN_TOL_DEFAULT
+      mu_bins_        = MU_BINS_DEFAULT
+      freegas_cutoff_ = FREEGAS_THRESHOLD_DEFAULT
+      threads_        = THREADS_DEFAULT
       
       ! Parse ndpp.xml file
       call read_xml_file_ndpp_t(filename)
@@ -161,7 +162,7 @@ module ndpp_class
 
       ! Work with OpenMP threading information
 #ifdef OPENMP      
-      if (threads_ == -1) then
+      if (threads_ == THREADS_DEFAULT) then
         omp_threads = omp_get_max_threads()
       else
         omp_threads = threads_
@@ -171,9 +172,11 @@ module ndpp_class
       ! Read cross_sections.xml
       call read_cross_sections_xml(self)
       
-      ! Get integrate_chi flag if provided
+      ! Get integrate_chi flag if provided, if not, default provided by class
       call lower_case(integrate_chi_)
-      if (integrate_chi_ == 'false') then
+      if (integrate_chi_ == '') then
+        self % integrate_chi = INTEGRATE_CHI_DEFAULT
+      elseif (integrate_chi_ == 'false') then
         self % integrate_chi = .false.
       elseif (integrate_chi_ /= 'true') then
         message = "Value for <integrate_chi> provided, but does not match " // &
@@ -235,13 +238,14 @@ module ndpp_class
       end if
       self % lib_name = library_name_
       
-      ! Get scattering type information.
+      ! Get scattering type information, if not provided, default provided by class
       call lower_case(scatt_type_)
-      if (scatt_type_ == 'tabular') then
+      if (scatt_type_ == '') then
+        self % scatt_type = SCATT_TYPE_DEFAULT
+      elseif (scatt_type_ == 'legendre') then
+        self % scatt_type = SCATT_TYPE_LEGENDRE
+      elseif (scatt_type_ == 'tabular') then
         self % scatt_type = SCATT_TYPE_TABULAR
-      elseif (scatt_type_ /= 'legendre') then
-        message = "Invalid scattering type provided, setting to default of LEGENDRE."
-        call warning()
       end if
       
       ! Get scattering order information.
@@ -328,9 +332,9 @@ module ndpp_class
       self % lib_name  = ''
       self % lib_format    = ASCII
       self % scatt_type    = SCATT_TYPE_LEGENDRE
-      self % scatt_order   = 5
-      self % integrate_chi = .true.
-      self % mu_bins       = 2001
+      self % scatt_order   = SCATT_ORDER_DEFAULT
+      self % integrate_chi = INTEGRATE_CHI_DEFAULT
+      self % mu_bins       = MU_BINS_DEFAULT
       
       ! Reset the timers
       call timer_reset(self % time_total)
