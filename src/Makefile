@@ -109,13 +109,13 @@ endif
 
 ifeq ($(OPENMP),yes)
 	ifeq ($(COMPILER),intel)
-	    F90FLAGS += -openmp -DOPENMP
-	    LDFLAGS += -openmp
+    F90FLAGS += -openmp -DOPENMP
+    LDFLAGS += -openmp
 	endif
 
 	ifeq ($(COMPILER),gnu)
-	    F90FLAGS += -fopenmp -DOPENMP
-	    LDFLAGS += -fopenmp
+    F90FLAGS += -fopenmp -DOPENMP
+    LDFLAGS += -fopenmp
 	endif
 endif
 
@@ -132,8 +132,8 @@ endif
 
 all: xml-fortran $(program)
 xml-fortran:
-	cd xml-fortran; make MACHINE=$(MACHINE) F90=$(F90) F90FLAGS="$(F90FLAGS)"
-	cd templates; make F90=$(F90) F90FLAGS="$(F90FLAGS)"
+	cd xml-fortran; make MACHINE=$(MACHINE) F90=$(F90) F90FLAGS="$(F90FLAGS)" LDFLAGS="$(LDFLAGS)"
+	cd templates; make F90=$(F90) F90FLAGS="$(F90FLAGS)" LDFLAGS="$(LDFLAGS)"
 $(program): $(objects) $(omc_objects)
 	$(F90) $(objects) $(omc_objects) $(templates) $(xml_fort) $(LDFLAGS) -o $@
 tests:

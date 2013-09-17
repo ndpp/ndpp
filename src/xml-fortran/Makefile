@@ -1,5 +1,5 @@
 reader = xmlreader
-source  = $(wildcard *.f90)
+source = $(wildcard *.f90)
 objects = $(source:.f90=.o)
 
 #===============================================================================
@@ -22,10 +22,9 @@ endif
 
 all: $(reader)
 $(reader): $(objects)
-	$(F90) $(objects) -o $@
+	$(F90) $(objects) $(LDFLAGS) -o $@
 clean:
 	@rm -f *.o *.mod $(reader)
-	@rm -rf CodeCoverage *.dyn gmon.out pgopti* *.HTML
 neat:
 	@rm -f *.o *.mod
 
