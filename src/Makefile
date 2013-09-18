@@ -139,7 +139,8 @@ $(program): $(objects) $(omc_objects)
 tests:
 	make all
 	cd ../tests/test_scatt; make COMPILER=$(COMPILER) DEBUG=$(DEBUG) \
-			OPTIMIZE=$(OPTIMIZE) PROFILE=$(PROFILE) MPI=$(MPI) HDF5=$(HDF5)
+			OPTIMIZE=$(OPTIMIZE) PROFILE=$(PROFILE) MPI=$(MPI) HDF5=$(HDF5) \
+			OPENMP=$(OPENMP)
 install:
 	@install -D $(program) $(DESTDIR)$(prefix)/bin/$(program)
 	@install -D ../man/man1/ndpp.1 $(DESTDIR)$(prefix)/share/man/man1/ndpp.1
