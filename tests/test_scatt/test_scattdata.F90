@@ -2,11 +2,11 @@ program test_scatt
   use ace_header
   use constants
   use scattdata_class
-  use ndpp_scatt
+  use scatt_class
   
   implicit none
   
-  REAL(8), PARAMETER :: TEST_TOL = 1E-10_8
+  real(8), parameter :: TEST_TOL = 1E-10_8
 
 !===============================================================================
   
@@ -867,7 +867,6 @@ program test_scatt
       allocate(CDF(NPEout))
       CDF = (/ZERO, ONE/)
       allocate(pdf_ref(NPEout))
-!~       pdf_ref = (/0.25_8, 0.5_8 /)
       pdf_ref = PDF
       
       ! Set the storage grid
@@ -910,9 +909,9 @@ program test_scatt
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, TWO * R, TWO * A, &
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, R, A/)
       ! Set the reference solution
-      distro_ref(:, 1) = 0.5_8 * (/0.1565176427_8, 0.2580539668_8, &
+      distro_ref(:, 1) = (/0.1565176427_8, 0.2580539668_8, &
         0.4254590641_8, 0.7014634088_8, 1.1565176427_8/)
-      distro_ref(:, 2) = 0.5_8 * (/0.5409883534_8, 0.4948293954_8, &
+      distro_ref(:, 2) = (/0.5409883534_8, 0.4948293954_8, &
         0.4797586878_8, 0.4948293954_8, 0.5409883534_8/)
       call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
       ! Check that pdfi and cdfi match the expected output
@@ -1003,8 +1002,8 @@ program test_scatt
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, LC(:, 1), &
         real(INTTp,8), real(NPEout,8), Eout, PDF, CDF, LC(:, 2)/)
       ! Set the reference solution
-      distro_ref(:, 1) = 0.25_8
-      distro_ref(:, 2) = 0.25_8
+      distro_ref(:, 1) = 0.5_8
+      distro_ref(:, 2) = 0.5_8
       call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
       ! Check that pdfi and cdfi match the expected output
       if ((any(pdfi /= pdf_ref)) .or. (any(cdfi /= CDF))) then
@@ -1084,7 +1083,7 @@ program test_scatt
         stop 10
       end if
       ! Check results
-      if ((any(distro(:,1) /= 0.25_8)) .or. (any(distro(:,2) /= 0.25_8))) then
+      if ((any(distro(:,1) /= 0.5_8)) .or. (any(distro(:,2) /= 0.5_8))) then
         write(*,*) 'convert_file6 FAILED! (Invalid Distro Values - Law 61 Iso)'
         write(*,*) distro
         stop 10
@@ -1109,8 +1108,8 @@ program test_scatt
       
       ! Test the linear values
       iE = 2
-      distro_ref(:, 1) = 0.5_8 * (/ZERO, 0.2_8, 0.5_8, 0.7_8, ONE/)
-      distro_ref(:, 2) = 0.5_8 * (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
+      distro_ref(:, 1) = (/ZERO, 0.2_8, 0.5_8, 0.7_8, ONE/)
+      distro_ref(:, 2) = (/ZERO, 0.25_8, 0.5_8, 0.75_8, ONE/)
       call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
       ! Check that pdfi and cdfi match the expected output
       if ((any(pdfi /= pdf_ref)) .or. (any(cdfi /= CDF))) then
@@ -1150,7 +1149,6 @@ program test_scatt
       edist % law = 7
       call convert_file6(iE, mu, edist, Eouts, INTT, pdfi, cdfi, distro)
       ! Check that pdfi and cdfi match the expected output
-!~       if ((any(pdfi /= pdf_ref)) .or. (any(cdfi /= CDF))) then
       if (allocated(pdfi) .and. allocated(cdfi)) then
         write(*,*) 'convert_file6 FAILED! (Invalid PDF & CDF Values - Invalid Law)'
         stop 10
@@ -1388,13 +1386,13 @@ program test_scatt
       awr = 235.0_8
       Q = ZERO
       distro = distro_in
-      call cm2lab(awr, Q, Ein, mu, distro_in, distro)
+      call cm2lab(Ein, Q, awr, mu, distro_in, distro)
       ! Check results
       if ((any(abs(distro(:,1) - distro_ref(:,1,1)) > 1.0E-6_8)) .or. &
         (any(abs(distro(:,2) - distro_ref(:,2,1)) > 1.0E-3_8))) then
         write(*,*) 'cm2lab FAILED! (Invalid Distro Values - R > 1)'
         write(*,*) maxval(abs(distro(:,1)-distro_ref(:,1,1)))
-        write(*,*) maxval(abs(distro(:,2)-distro_ref(:,2,1)))
+        write(*,*) maxval(abs(distro(:,2)-distro_ref(:,2,1)))      
         stop 10
       end if
       
@@ -1403,7 +1401,7 @@ program test_scatt
       awr = 0.999167_8
       Q = ZERO
       distro = distro_in
-      call cm2lab(awr, Q, Ein, mu, distro_in, distro)
+      call cm2lab(Ein, Q, awr, mu, distro_in, distro)
       ! Check results
       ! To not subject all domains of the solution to the same error bounds
       ! check the zero, first non-zero point, and remaining points separate.
@@ -1510,7 +1508,7 @@ program test_scatt
       Ein = 20.0_8
       E_bins = (/1E-11_8, ONE, TWO/)
       call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
-write(*,*) 'Enorm = ', Enorm      
+        
       ! For transfer to the lower group, hand calcs show that:
       ! mu_low = -1 and mu_high = 0.22537631014397342822
       if ((any((interp(:,1) - &
@@ -1541,7 +1539,7 @@ write(*,*) 'Enorm = ', Enorm
       Ein = 1E-11_8
       E_bins = (/ONE, TWO, 20.0_8/)
       call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
-write(*,*) 'Enorm = ', Enorm      
+          
       ! Check results
       ! Since Ein < min(E_bins), we know that all mu transfers are to mu=1
       ! (and thus improbable). This means interp == 1, bins == size(mu) - 1,
@@ -1561,7 +1559,7 @@ write(*,*) 'Enorm = ', Enorm
       Ein = 1.5_8
       E_bins = (/ONE, TWO, 20.0_8/)
       call calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
-write(*,*) 'Enorm = ', Enorm            
+               
       ! Check results
       ! Since Ein < E_bins(2), we know that in the 1st group, the upper mu
       ! transfer is to mu=1 (like in the previous case).
@@ -1650,12 +1648,14 @@ write(*,*) 'Enorm = ', Enorm
       ! Set reference solution (analytical linear aniso moments)
       allocate(distro_ref(order, num_G))
       distro_ref(:,1) = (/ONE, ONE / 3.0_8, ZERO, ZERO, ZERO, ZERO/)
-      ! Run the function
+      ! Run the function   
       call integrate_energyangle_file4_leg(fEmu, mu, interp, vals, bins, &
-        order - 1, distro)
+        order, distro)
       ! Test the results
       if (any(abs(distro - distro_ref) > TEST_TOL)) then
         write(*,*) 'integrate_energy_angle_file4_leg FAILED! (Case 1)'
+        write(*,*) distro
+        write(*,*) distro_ref
         stop 10
       end if
       ! Clear results
@@ -1692,7 +1692,7 @@ write(*,*) 'Enorm = ', Enorm
         -0.03662109375_8, -0.0520706176758_8, 0.00200271606445_8/)
       ! Run the function
       call integrate_energyangle_file4_leg(fEmu, mu, interp, vals, bins, &
-        order - 1, distro)
+        order, distro)
       ! Test the results
       if (any(abs(distro - distro_ref) > TEST_TOL)) then
         write(*,*) 'integrate_energy_angle_file4_leg FAILED! (Case 2)'
@@ -1776,7 +1776,7 @@ write(*,*) 'Enorm = ', Enorm
       ! Set Eout
       allocate(Eout(num_Eout))
       Eout = 1.5_8
-      ! Allocate CDF as needed
+      ! Allocate DF as needed
       allocate(CDF(num_Eout))
       CDF = ONE
       ! Allocate and ready distro
@@ -1787,7 +1787,7 @@ write(*,*) 'Enorm = ', Enorm
       distro_ref(:,1) = (/ONE, ONE / 3.0_8, ZERO, ZERO, ZERO, ZERO/)
       ! Run the calcs!
       call integrate_energyangle_file6_leg(fEmu, mu, Eout, INTT, CDF, E_bins, &
-        order - 1, distro, Enorm)
+        order, distro, Enorm)
       
       ! Test the results
       if (Enorm /= ONE) then
@@ -1833,8 +1833,7 @@ write(*,*) 'Enorm = ', Enorm
       distro_ref(:, 2) = (/ONE, ONE / 4.0_8, ZERO, ZERO, ZERO, ZERO/)
       ! Run the calcs!
       call integrate_energyangle_file6_leg(fEmu, mu, Eout, INTT, CDF, E_bins, &
-        order - 1, distro, Enorm)
-      
+        order, distro, Enorm)     
       ! Test the results
       if (Enorm /= ONE) then
         write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Enorm, Case 2)'
@@ -1882,7 +1881,7 @@ write(*,*) 'Enorm = ', Enorm
       distro_ref(:, 1) = TWO * (/ONE, ONE / 12.0_8, ZERO, ZERO, ZERO, ZERO/)
       ! Run the calcs!
       call integrate_energyangle_file6_leg(fEmu, mu, Eout, INTT, CDF, E_bins, &
-        order - 1, distro, Enorm)
+        order, distro, Enorm)
       ! Test the results
       if (Enorm /= ONE) then
         write(*,*) 'integrate_energy_angle_file6_leg FAILED! (Enorm, Case 3)'

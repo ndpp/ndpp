@@ -7,18 +7,18 @@ SRC_DIR = ../../src
 #===============================================================================
 
 objects = \
-$(SRC_DIR)/ndpp_scattdata.o \
+$(SRC_DIR)/scattdata.o \
 $(SRC_DIR)/ace_header.o \
-$(SRC_DIR)/endf.o \
-$(SRC_DIR)/endf_header.o \
-$(SRC_DIR)/ndpp_constants.o \
+$(SRC_DIR)/constants.o \
 $(SRC_DIR)/dict_header.o \
-$(SRC_DIR)/ndpp_error.o \
-$(SRC_DIR)/ndpp_global.o \
+$(SRC_DIR)/endf_header.o \
+$(SRC_DIR)/error.o \
+$(SRC_DIR)/freegas.o \
+$(SRC_DIR)/global.o \
 $(SRC_DIR)/interpolation.o \
-$(SRC_DIR)/ndpp_legendre.o \
-$(SRC_DIR)/ndpp_scatt.o \
-$(SRC_DIR)/ndpp_output.o \
+$(SRC_DIR)/legendre.o \
+$(SRC_DIR)/output.o \
+$(SRC_DIR)/scatt.o \
 $(SRC_DIR)/search.o \
 $(SRC_DIR)/string.o \
 test_scattdata.o
@@ -163,6 +163,6 @@ neat:
 
 include $(SRC_DIR)/DEPENDENCIES
 test_scattdata.o: $(SRC_DIR)/ace_header.o
-test_scattdata.o: $(SRC_DIR)/ndpp_constants.o
-test_scattdata.o: $(SRC_DIR)/ndpp_scatt.o
-test_scattdata.o: $(SRC_DIR)/ndpp_scattdata.o
+test_scattdata.o: $(SRC_DIR)/constants.o
+test_scattdata.o: $(SRC_DIR)/scatt.o
+test_scattdata.o: $(SRC_DIR)/scattdata.o
