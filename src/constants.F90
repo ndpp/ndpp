@@ -87,7 +87,7 @@ module constants
   integer, parameter :: &
        MU_BINS_DEFAULT     = 2001, & ! # of angles for numerical integration
        SCATT_ORDER_DEFAULT = 5,    & ! Legendre order default, if omitted
-       THREADS_DEFAULT     = 1,    & ! Default number of threads (-1 means use envvar)
+       THREADS_DEFAULT     = -1,   & ! Default number of threads (-1 means use envvar)
        SCATT_TYPE_DEFAULT  = SCATT_TYPE_LEGENDRE ! Default scatt results type
 
   real(8), parameter :: &
@@ -111,8 +111,8 @@ module constants
   
   ! Flag to interpolate on angular distributions with nearest neighbor or 
   ! linear interpolation
-!   logical, parameter :: INTERP_NEAREST = .false.
-  logical, parameter :: INTERP_NEAREST = .true.
+  logical, parameter :: INTERP_NEAREST = .false.
+  ! logical, parameter :: INTERP_NEAREST = .true.
 
   ! Fraction of maximum s(a,b) value to use as cutoff for determining
   ! the range of integration
