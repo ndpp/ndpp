@@ -116,7 +116,7 @@ module constants
 
   ! Fraction of maximum s(a,b) value to use as cutoff for determining
   ! the range of integration
-  real(8), parameter :: SAB_THRESHOLD = 1.0E-3_8 
+  real(8), parameter :: SAB_THRESHOLD = 1.0E-6_8 
 
   ! Brent root finding algorithm threshold for the mu variable
   real(8), parameter :: BRENT_MU_THRESH = 1.0E-6_8
@@ -125,13 +125,13 @@ module constants
   real(8), parameter :: ADAPTIVE_MU_TOL = 1.0E-7_8
 
   ! Adaptive Simpsons integration (of mu) maximum recursion depth/iterations
-  integer, parameter :: ADAPTIVE_MU_ITS = 12
+  integer, parameter :: ADAPTIVE_MU_ITS = 15
 
   ! Adaptive Simpsons integration (of Eout) tolerance
-  real(8), parameter :: ADAPTIVE_EOUT_TOL = 1.0E-6_8
+  real(8), parameter :: ADAPTIVE_EOUT_TOL = 1.0E-8_8
 
   ! Adaptive Simpsons integration (of Eout) maximum recursion depth/iterations
-  integer, parameter :: ADAPTIVE_EOUT_ITS = 12
+  integer, parameter :: ADAPTIVE_EOUT_ITS = 15
   
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
