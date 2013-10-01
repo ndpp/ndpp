@@ -938,8 +938,12 @@ module scattdata_class
         ! also on pg 2798
         
         if (R < ONE) then
-          mu_low  = sqrt(E_bins(g) / Ein)
-          mu_high = sqrt(E_bins(g + 1) / Ein)
+          ! Set R = 1/R, to conserve the min being alpha*Ein, but 
+          ! avoid the sqrt(-1) issues.
+          mu_low  = 0.5_8 * ((ONE + ONE / awr) * sqrt(E_bins(g) / Ein) + &
+            (ONE - ONE / (R * R)) / (ONE + ONE / awr) * sqrt(Ein / E_bins(g)))
+          mu_high = 0.5_8 * ((ONE + ONE / awr) * sqrt(E_bins(g + 1) / Ein) + &
+            (ONE - ONE / (R * R)) / (ONE + ONE / awr) * sqrt(Ein / E_bins(g + 1)))
         else if (E_bins(g) > ZERO) then
           mu_low  = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g) / Ein) + &
             (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g)))
