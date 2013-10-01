@@ -514,13 +514,7 @@ module scattdata_class
       ! Set up the results memory 
       allocate(result_distro(this % order, this % groups))
       result_distro = ZERO
-      
-      ! We know which distribution to work with, now it is time to:
-      ! 1) convert from CM to Lab, if necessary
-      ! 2) calculate the angular boundaries for integration
-      ! 3) integrate according to scatt_type
-      
-      ! 1) convert from CM to Lab, if necessary
+
       if ((this % rxn % scatter_in_cm) .and. (Ein >= this % freegas_cutoff)) then
         call cm2lab(Ein, this % rxn % Q_value, this % awr, this % mu, &
           distro_int, distro_lab)
@@ -540,12 +534,13 @@ module scattdata_class
           else
             call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
               this % E_bins, this % mu, interp, vals, bins, temp_Enorm) 
-            ! 3) integrate according to scatt_type
+            ! integrate according to scatt_type
             call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
               interp, vals, bins, this % order, result_distro)
           end if
         else if ((associated(this % adist)) .and. &
           (associated(this % edist))) then
+          distro_lab = distro_int
           ! Here, we have angular info in adist, but it goes to a single energy
           ! specified in edist. This is for level inelastic scattering and some 
           ! (n,xn) reactions.
@@ -560,19 +555,18 @@ module scattdata_class
               interp, vals, bins, this % order, result_distro)
           else if (this % edist % law == 9) then
             ! For these cases, we need to find out which outgoing groups get the 
-            ! isotropic (and then potentially converted from CM to Lab) angular
+            ! isotropic (and then converted from CM to Lab) angular
             ! distribution data, which will be the same for each group.  
             ! The group transfer should also be normalized by the probability of
             ! transfer to that group.
-            call law9_scatter_leg(distro_lab(:, 1), this % edist, Ein, this % E_bins, this % mu, &
-              this % order, result_distro, temp_Enorm)
+            call law9_scatter_leg(distro_lab(:, 1), this % edist, Ein, &
+              this % E_bins, this % mu, this % order, result_distro, temp_Enorm)
           end if
         else if (associated(this % edist)) then
           ! 3) integrate according to scatt_type
           call integrate_energyangle_file6_leg(distro_lab, this % mu, &
             this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
             this % E_bins, this % order, result_distro, temp_Enorm) 
-          
         end if
       case (SCATT_TYPE_TABULAR)
         
@@ -826,6 +820,96 @@ module scattdata_class
       real(8), intent(out) :: distro_out(:,:) ! The distribution to convert
       
       real(8) :: R, Rinv, R2       ! Reduced Effective Mass, 1/R, and R^2
+      integer :: imu, iEout        ! mu indices, outgoing energy index
+      real(8) :: interp            ! Interpolation parameter b.t wi pts
+      integer :: mu_bins           ! Number of mu bins in dim 1 of data
+      real(8) :: wi                ! CM cosine corresponding to mu(imu)
+      real(8) :: fwi               ! CM distro value at wi
+      real(8) :: dwdui             ! CM to Lab Jacobian at wi
+      real(8) :: S                 ! Sqrt(mu^2+R^2-1) temp variable
+      real(8) :: mu2               ! mu(i)^2 temp variable
+      integer :: iwi               ! location in mu(:) of wi
+      real(8) :: dmu               ! mu(:) spacing
+      real(8) :: Rinv2
+      
+      mu_bins = size(data, dim = 1)
+      dmu = mu(2) - mu(1)
+      
+      ! First check to make sure this is energetically possible
+      R2 = -Q * (awr + ONE) / awr
+      if (Ein <= R2) then
+        distro_out(:,:) = ZERO ! To make sure its energetically impossible
+        return
+      end if
+
+      ! Now carry on
+      ! From equation 234 in Methods for Processing ENDF/B-VII (pg 2798)
+      R = awr * sqrt((ONE - R2 / Ein))
+      R2 = R * R
+      Rinv = ONE / R
+      Rinv2 = Rinv * Rinv
+
+      if ((awr > ONE) .and. (R < ONE)) then
+        distro_out(:,:) = ZERO ! To make sure its energetically impossible
+        return
+      end if
+
+      if (R2 < ONE) then
+        do imu = 1, mu_bins
+          ! Calculat the w to mu conversion terms
+          mu2   = mu(imu) * mu(imu)
+          if (mu2 < 0.01_8) then
+            ! Switch R and Rinv (same for R2 and Rinv2)
+            S     = sqrt(mu2 + Rinv2 - ONE)
+            wi    = R * (mu2 - ONE + mu(imu) * S)
+            dwdui = R * (TWO * mu(imu) + S + mu2 / S)
+          else
+            S     = sqrt(mu2 + R2 - ONE)
+            wi    = Rinv * (mu2 - ONE + mu(imu) * S)
+            dwdui = Rinv * (TWO * mu(imu) + S + mu2 / S)
+          end if
+          ! Now find fwi at wi (linear interpolation)
+          iwi    = int((wi + ONE) / dmu) + 1
+          interp = (wi - mu(iwi)) / (mu(iwi + 1) - mu(iwi))
+          ! Now we can get fwi easily, lets do Eout loop now to not have
+          ! to recalculate all the above paramters at every imu
+          do iEout = 1, size(data, dim = 2)
+            fwi = (ONE - interp) * data(iwi, iEout) + &
+                  interp * data(iwi + 1, iEout)
+            distro_out(imu, iEout) = fwi * dwdui
+          end do
+        end do  
+      else
+        do imu = 1, mu_bins
+          ! Calculat the w to mu conversion terms
+          mu2   = mu(imu) * mu(imu)     
+          S     = sqrt(mu2 + R2 - ONE)
+          wi    = Rinv * (mu2 - ONE + mu(imu) * S)
+          dwdui = Rinv * (TWO * mu(imu) + S + mu2 / S)
+          ! Now find fwi at wi (linear interpolation)
+          iwi    = int((wi + ONE) / dmu) + 1
+          interp = (wi - mu(iwi)) / (mu(iwi + 1) - mu(iwi))
+          ! Now we can get fwi easily, lets do Eout loop now to not have
+          ! to recalculate all the above paramters at every imu
+          do iEout = 1, size(data, dim = 2)
+            fwi = (ONE - interp) * data(iwi, iEout) + &
+                  interp * data(iwi + 1, iEout)
+            distro_out(imu, iEout) = fwi * dwdui
+          end do
+        end do
+      end if
+            
+    end subroutine cm2lab
+
+    subroutine cm2lab2(Ein, Q, awr, mu, data, distro_out)
+      real(8), intent(in) :: Ein     ! Incoming energy
+      real(8), intent(in) :: Q       ! Reaction Q-value
+      real(8), intent(in) :: awr     ! Atomic weight ratio
+      real(8), intent(in) :: mu(:)   ! Angular grid
+      real(8), intent(in) :: data(:,:) ! The distribution to convert
+      real(8), intent(out) :: distro_out(:,:) ! The distribution to convert
+      
+      real(8) :: R, Rinv, R2       ! Reduced Effective Mass, 1/R, and R^2
       real(8) :: mu_l(size(data, dim = 1))  ! CM angular points corresponding to 
                                             ! mu(:), if mu was in Lab.
       real(8) :: tempdistro(size(data, dim = 1)) ! Temporary storage of the 
@@ -892,6 +976,11 @@ module scattdata_class
           ! always be the same
           distro_out(mu_bins, iEout) = tempdistro(mu_bins)
         end do
+        if (Ein == 1.75E-2_8) then
+        do imu = 1, mu_bins
+        write(17,*) mu(imu), mu_l(imu), distro_out(imu, 1)
+        end do   
+        endif     
       else
         ! Calculate the lab (mu) and CM (mu_l) mu grid points.
         ! the beginning and end points are treated separately since we know the
@@ -927,7 +1016,7 @@ module scattdata_class
         end do
       end if
             
-    end subroutine cm2lab
+    end subroutine cm2lab2
 
 !===============================================================================
 ! CALC_MU_BOUNDS Calculates the mu-values corresponding to the energy-out
