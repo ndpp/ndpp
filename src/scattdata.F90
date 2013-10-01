@@ -471,12 +471,12 @@ module scattdata_class
       ! from all energies to the energy range represented in the outgoing groups      
       
       ! Combine the terms to one before multiplying
-      sigS = sigS * p_valid! * real(rxn % multiplicity, 8)
+      sigS = sigS * p_valid * real(rxn % multiplicity, 8)
       do g = 1, this % groups
         distro(:, g) = distro(:, g) * sigS
       end do  
       ! Add this contribution to the normalization constant
-      norm_tot = norm_tot + sigS! / real(rxn % multiplicity, 8) ! Forget TY
+      norm_tot = norm_tot + sigS / real(rxn % multiplicity, 8)
       
     end function scatt_interp_distro
 
