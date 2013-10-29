@@ -31,6 +31,8 @@ module ndpp_class
     character(len=255)   :: path_cross_sections
     ! Number of listings in cross_sections.xml
     integer              :: n_listings    = 0
+    ! Incoming energy points
+    real(8), allocatable :: Ein(:)
     ! Energy group structure
     real(8), allocatable :: energy_bins(:)
     ! Number of energy groups
@@ -337,6 +339,7 @@ module ndpp_class
       ! Revert to the default/uninitialized values
       self % path_cross_sections = ""
       self % n_listings    = 0
+      if (allocated(self % Ein)) deallocate(self % Ein)
       if (allocated(self % energy_bins)) deallocate(self % energy_bins)
       self % energy_groups = 0
       self % lib_name      = ''
@@ -369,6 +372,8 @@ module ndpp_class
 
       type(Nuclide), pointer :: nuc => null() ! Nuclide cross-sections
       integer                :: i_listing     ! index of xs_listing
+      real(8), allocatable   :: Ein_temp(:)   ! Energy grid temporary variable
+      integer                :: i, j, k       ! Ein building temporary indices
       ! Scattering specific data
       real(8), allocatable   :: scatt_mat(:,:,:) !scattering matrix moments, 
                                                  ! order x g_out x E_in            
@@ -457,7 +462,15 @@ module ndpp_class
           ! display message
           message = "....Performing Scattering Integration"
           call write_message(6)
-    
+
+          ! Create energy grid to use (currently using nuc % energy, with points
+          ! added for each group boundary)
+          ! First allocate a temporary array, which is set to the total maximum
+          ! number of incoming energy points
+          call merge(nuc % energy, self % energy_bins, self % Ein)
+write(17,*) nuc % energy
+write(18,*) self % energy_bins
+write(19,*) self % Ein
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
@@ -957,6 +970,59 @@ write(*,*) temp_group
 #endif
       end if      
     end subroutine finalize_library
-  
+
+!===============================================================================
+! MERGE combines two arrays in to one longer array, maintaining the sorted order
+!===============================================================================
+    subroutine merge(a, b, c)
+      real(8), allocatable, intent(in)    :: a(:)
+      real(8), allocatable, intent(in)    :: b(:)
+      real(8), allocatable, intent(inout) :: c(:)
+
+      real(8), allocatable :: sorted(:)
+      integer :: na, nb, nc, nab
+      integer :: ia, ib, ic
+
+      na = size(a)
+      nb = size(b)
+      nab = na + nb
+      allocate(sorted(nab))
+
+      ia = 1
+      ib = 1
+      do ic = 1, nab
+        if (ia <= na .and. ib <= nb) then
+          if (a(ia) < b(ib)) then
+            ! add a
+            sorted(ic) = a(ia)
+            ia = ia + 1
+          else if (a(ia) == b(ib)) then
+            ! add a, but increment both
+            sorted(ic) = a(ia)
+            ia = ia + 1
+            ib = ib + 1
+          else
+            ! add b
+            sorted(ic) = b(ib)
+            ib = ib + 1
+          end if
+        else if (ia <= na) then
+          sorted(ic) = a(ia)
+          ia = ia + 1
+        else if (ib <= nb) then
+          sorted(ic) = b(ib)
+          ib = ib + 1
+        else
+          exit
+        end if
+      end do
+
+      allocate(c(ic - 1))
+      c = sorted(1: ic - 1)
+
+      deallocate(sorted)     
+    end subroutine merge
+ 
+
   end module ndpp_class
   
