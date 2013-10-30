@@ -31,6 +31,8 @@ module ndpp_class
     character(len=255)   :: path_cross_sections
     ! Number of listings in cross_sections.xml
     integer              :: n_listings    = 0
+    ! Incoming energy points
+    real(8), allocatable :: Ein(:)
     ! Energy group structure
     real(8), allocatable :: energy_bins(:)
     ! Number of energy groups
@@ -337,6 +339,7 @@ module ndpp_class
       ! Revert to the default/uninitialized values
       self % path_cross_sections = ""
       self % n_listings    = 0
+      if (allocated(self % Ein)) deallocate(self % Ein)
       if (allocated(self % energy_bins)) deallocate(self % energy_bins)
       self % energy_groups = 0
       self % lib_name      = ''
@@ -369,6 +372,8 @@ module ndpp_class
 
       type(Nuclide), pointer :: nuc => null() ! Nuclide cross-sections
       integer                :: i_listing     ! index of xs_listing
+      real(8), allocatable   :: Ein_temp(:)   ! Energy grid temporary variable
+      integer                :: i, j, k       ! Ein building temporary indices
       ! Scattering specific data
       real(8), allocatable   :: scatt_mat(:,:,:) !scattering matrix moments, 
                                                  ! order x g_out x E_in            
@@ -457,16 +462,20 @@ module ndpp_class
           ! display message
           message = "....Performing Scattering Integration"
           call write_message(6)
-    
+
+          ! Create energy grid to use (nuc % energy, with points
+          ! added for each group boundary)
+          call merge(nuc % energy, self % energy_bins, self % Ein)
+
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
             self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol, &
-            maxiE)
+            self % Ein)
             
           ! Print the results to file
           call timer_start(self % time_print)
-          call print_scatt(nuc % name, self % lib_format, scatt_mat, nuc % energy, maxiE, &
+          call print_scatt(nuc % name, self % lib_format, scatt_mat, self % Ein, &
             self % print_tol)
           call timer_stop(self % time_print)
           
@@ -957,6 +966,89 @@ write(*,*) temp_group
 #endif
       end if      
     end subroutine finalize_library
-  
+
+!===============================================================================
+! MERGE combines two arrays in to one longer array, maintaining the sorted order
+!===============================================================================
+    subroutine merge(ace, bin, result)
+      real(8), allocatable, intent(in)    :: ace(:) 
+      real(8), allocatable, intent(in)    :: bin(:)
+      real(8), allocatable, intent(inout) :: result(:)
+
+      real(8), allocatable :: merged(:)
+      integer :: nace, nbin, nc, nab
+      integer :: iace, ibin, ires
+      logical :: no_exit = .true.
+
+      nace = size(ace)
+      nbin = size(bin)
+      nab = nace + nbin
+      allocate(merged(nab))
+
+      iace = 1
+      ibin = 1
+      do ires = 1, nab
+        if (iace <= nace .and. ibin <= nbin) then
+          if (ace(iace) < bin(ibin)) then
+            ! take ace
+            merged(ires) = ace(iace)
+            iace = iace + 1
+          else if (ace(iace) == bin(ibin)) then
+            ! take ace info, but increment both
+            merged(ires) = ace(iace)
+            iace = iace + 1
+            ibin = ibin + 1
+          else
+            ! take bin info, unless it is zero
+            ! a zero Ein results in zero scattering, which is not a useful
+            ! point to interpolate to.  MC codes will extrapolate in this case
+            ! from the bottom-two points. This is more desirable than interpolating
+            ! between 0 and the next highest Ein.
+            ! Even more desirable, perhaps, would be interpolating between
+            ! a suitably low, but non-zero Ein, and the next highest Ein
+            if (bin(ibin) == ZERO) then
+              merged(ires) = ace(iace) * 1.0E-3_8
+            else
+              merged(ires) = bin(ibin)
+            end if
+            ibin = ibin + 1
+          end if
+        else if (iace <= nace) then
+          ! There are more ace data than bins
+          ! Take an ace and then stop building array
+          merged(ires) = ace(iace)
+          iace = iace + 1
+          no_exit = .false.
+          exit
+        else if (ibin <= nbin) then
+          ! There are more bins than ace data
+          ! Can't stop after taking the next one, since all
+          ! bins are needed, so no exit here like in above elseif block
+          merged(ires) = bin(ibin)
+          ibin = ibin + 1
+        else
+          no_exit = .false.
+          exit
+        end if
+      end do
+
+      ! Clear result if it has values (as it will when it gets here)
+      if (allocated(result)) then
+        deallocate(result)
+      end if
+
+      ! Readjust ires
+      if (.not. no_exit) then
+        ires = ires - 1
+      end if
+
+      ! Store our results
+      allocate(result(ires))
+      result = merged(1: ires)
+      ! Clean up
+      deallocate(merged)     
+    end subroutine merge
+ 
+
   end module ndpp_class
   
