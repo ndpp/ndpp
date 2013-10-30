@@ -25,7 +25,7 @@ module scatt_class
 !===============================================================================
     
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, &
-                          scatt_mat, mu_bins, thin_tol, maxiE)
+                          scatt_mat, mu_bins, thin_tol, E_grid)
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
@@ -34,10 +34,8 @@ module scatt_class
       integer, intent(in)                 :: mu_bins        ! Number of angular points
                                                             ! to use during f_{n,MT} conversion
       real(8), intent(in)                 :: thin_tol       ! Thinning tolerance
-      integer, intent(inout)              :: maxiE          ! maximum index of 
-                                                            ! nuc % energy
-      
-      real(8), allocatable      :: E_grid(:)                ! Common Energy Grid
+      real(8), allocatable, intent(in)    :: E_grid(:)      ! Incoming Energy Grid
+
       type(DistEnergy), pointer :: edist
       type(Reaction),   pointer :: rxn
       integer :: num_tot_rxn
@@ -101,20 +99,7 @@ module scatt_class
         nullify(mySD)
       end do
       
-      ! Create the energy grid in which the distributions will be calculated on
-      if (energy_bins(size(energy_bins)) < nuc % energy(1)) then
-        maxiE = 1
-      else if (energy_bins(size(energy_bins)) >= nuc % energy(nuc % n_grid)) then
-        maxiE = nuc % n_grid
-      else
-        ! We add one to this so that we always have one energy pt above the max
-        maxiE = binary_search(nuc % energy, nuc % n_grid, &
-          energy_bins(size(energy_bins))) + 1
-      end if
-      allocate(E_grid(maxiE))
-      E_grid = nuc % energy(1 : maxiE)
-      
-      ! Combine the reactions to a union grid
+      ! Calculate our equi-width mu points
       if (scatt_type == SCATT_TYPE_TABULAR) then
         allocate(mu_out(order))
         dmu = TWO / real(order - 1, 8)
@@ -123,7 +108,7 @@ module scatt_class
         end do
       end if
       
-      ! Now combine the results on to the nuc % energy grid.
+      ! Now combine the results on to E_grid
       call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
       
       ! Now clear rxn_datas members
@@ -212,24 +197,23 @@ module scatt_class
 ! in the specified format.
 !===============================================================================  
   
-  subroutine print_scatt(name, lib_format, data, E_grid, maxiE, tol)
+  subroutine print_scatt(name, lib_format, data, E_grid, tol)
     character(len=*),     intent(in) :: name        ! (hdf5 specific) name of group
     integer,              intent(in) :: lib_format  ! Library output type
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
-    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8),              intent(in) :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     
     if (lib_format == ASCII) then
-      call print_scatt_ascii(data, E_grid, maxiE, tol)
+      call print_scatt_ascii(data, E_grid, tol)
     else if (lib_format == BINARY) then
-      call print_scatt_bin(data, E_grid, maxiE, tol)
+      call print_scatt_bin(data, E_grid, tol)
     else if (lib_format == HUMAN) then
-      call print_scatt_human(data, E_grid, maxiE, tol)
+      call print_scatt_human(data, E_grid, tol)
     else if (lib_format == H5) then
-      call print_scatt_hdf5(name, data, E_grid, maxiE, tol)
+      call print_scatt_hdf5(name, data, E_grid, tol)
     end if
     
   end subroutine print_scatt
@@ -239,11 +223,10 @@ module scatt_class
 ! in an ASCII format.
 !===============================================================================
      
-  subroutine print_scatt_ascii(data, E_grid, maxiE, tol)
+  subroutine print_scatt_ascii(data, E_grid, tol)
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
-    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     integer :: gmin, gmax, iE
@@ -259,14 +242,14 @@ module scatt_class
     ! Begin writing:
     
     ! # energy points
-    write(UNIT_NUC,'(I20)') maxiE
+    write(UNIT_NUC,'(I20)') size(E_grid)
     
     ! <incoming energy array>
-    call print_ascii_array(E_grid(1 : maxiE), UNIT_NUC)    
+    call print_ascii_array(E_grid, UNIT_NUC)    
     
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
-    do iE = 1, maxiE
+    do iE = 1, size(E_grid)
       ! find gmin by checking the P0 moment
       do gmin = 1, size(data, dim = 2)
         if (data(1, gmin, iE) > tol) exit
@@ -291,11 +274,10 @@ module scatt_class
 ! in an ASCII format.
 !===============================================================================
      
-  subroutine print_scatt_human(data, E_grid, maxiE, tol)
+  subroutine print_scatt_human(data, E_grid, tol)
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
-    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     integer :: g, gmin, gmax, iE
@@ -311,14 +293,14 @@ module scatt_class
     ! Begin writing:
     
     ! # energy points
-    write(UNIT_NUC,'(I20)') maxiE
+    write(UNIT_NUC,'(I20)') size(E_grid)
     
     ! <incoming energy array>
-    call print_ascii_array(E_grid(1 : maxiE), UNIT_NUC)    
+    call print_ascii_array(E_grid, UNIT_NUC)    
     
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
-    do iE = 1, maxiE
+    do iE = 1, size(E_grid)
       ! find gmin by checking the P0 moment
       do gmin = 1, size(data, dim = 2)
         if (data(1, gmin, iE) > tol) exit
@@ -347,11 +329,10 @@ module scatt_class
 ! in a native Fortran stream format.
 !===============================================================================
      
-  subroutine print_scatt_bin(data, E_grid, maxiE, tol)
+  subroutine print_scatt_bin(data, E_grid, tol)
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
-    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     integer :: g, gmin, gmax, iE
@@ -367,14 +348,14 @@ module scatt_class
     ! Begin writing:
     
     ! # energy points
-    write(UNIT_NUC)  maxiE
+    write(UNIT_NUC)  size(E_grid)
     
     ! <incoming energy array>
-    write(UNIT_NUC) E_grid(1 : maxiE)
+    write(UNIT_NUC) E_grid
 
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
-    do iE = 1, maxiE
+    do iE = 1, size(E_grid)
       ! find gmin by checking the P0 moment
       do gmin = 1, size(data, dim = 2)
         if (data(1, gmin, iE) > tol) exit
@@ -401,12 +382,11 @@ module scatt_class
 ! with the HDF5 library.
 !===============================================================================
      
-  subroutine print_scatt_hdf5(name, data, E_grid, maxiE, tol)
+  subroutine print_scatt_hdf5(name, data, E_grid, tol)
     character(len=*),     intent(in) :: name        ! name of nuclide for group
     real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print 
                                                     ! (order x g x Ein)
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized Total Energy in
-    integer,              intent(in) :: maxiE       ! max entry in E_grid to print
+    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
     integer :: g, gmin, gmax, iE
@@ -437,16 +417,16 @@ module scatt_class
     
     ! # energy points !!! Maybe not necessary with HDF5, can I get the size
     ! easily???
-    call hdf5_write_integer(temp_group, 'NEin', maxiE)
+    call hdf5_write_integer(temp_group, 'NEin', size(E_grid))
     
     ! <incoming energy array>
-    call hdf5_write_double_1Darray(temp_group, 'Ein', E_grid(1 : maxiE), maxiE)
+    call hdf5_write_double_1Darray(temp_group, 'Ein', E_grid, size(E_grid))
 
     call hdf5_close_group()
 
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
-    do iE = 1, maxiE
+    do iE = 1, size(E_grid)
       iE_name = trim(adjustl(group_name)) // "/iE" // trim(adjustl(to_str(iE)))
       call hdf5_open_group(iE_name)
       ! find gmin by checking the P0 moment

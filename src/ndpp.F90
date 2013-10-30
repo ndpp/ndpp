@@ -463,23 +463,19 @@ module ndpp_class
           message = "....Performing Scattering Integration"
           call write_message(6)
 
-          ! Create energy grid to use (currently using nuc % energy, with points
+          ! Create energy grid to use (nuc % energy, with points
           ! added for each group boundary)
-          ! First allocate a temporary array, which is set to the total maximum
-          ! number of incoming energy points
           call merge(nuc % energy, self % energy_bins, self % Ein)
-write(17,*) nuc % energy
-write(18,*) self % energy_bins
-write(19,*) self % Ein
+
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
             self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol, &
-            maxiE)
+            self % Ein)
             
           ! Print the results to file
           call timer_start(self % time_print)
-          call print_scatt(nuc % name, self % lib_format, scatt_mat, nuc % energy, maxiE, &
+          call print_scatt(nuc % name, self % lib_format, scatt_mat, self % Ein, &
             self % print_tol)
           call timer_stop(self % time_print)
           
@@ -974,53 +970,83 @@ write(*,*) temp_group
 !===============================================================================
 ! MERGE combines two arrays in to one longer array, maintaining the sorted order
 !===============================================================================
-    subroutine merge(a, b, c)
-      real(8), allocatable, intent(in)    :: a(:)
-      real(8), allocatable, intent(in)    :: b(:)
-      real(8), allocatable, intent(inout) :: c(:)
+    subroutine merge(ace, bin, result)
+      real(8), allocatable, intent(in)    :: ace(:) 
+      real(8), allocatable, intent(in)    :: bin(:)
+      real(8), allocatable, intent(inout) :: result(:)
 
-      real(8), allocatable :: sorted(:)
-      integer :: na, nb, nc, nab
-      integer :: ia, ib, ic
+      real(8), allocatable :: merged(:)
+      integer :: nace, nbin, nc, nab
+      integer :: iace, ibin, ires
+      logical :: no_exit = .true.
 
-      na = size(a)
-      nb = size(b)
-      nab = na + nb
-      allocate(sorted(nab))
+      nace = size(ace)
+      nbin = size(bin)
+      nab = nace + nbin
+      allocate(merged(nab))
 
-      ia = 1
-      ib = 1
-      do ic = 1, nab
-        if (ia <= na .and. ib <= nb) then
-          if (a(ia) < b(ib)) then
-            ! add a
-            sorted(ic) = a(ia)
-            ia = ia + 1
-          else if (a(ia) == b(ib)) then
-            ! add a, but increment both
-            sorted(ic) = a(ia)
-            ia = ia + 1
-            ib = ib + 1
+      iace = 1
+      ibin = 1
+      do ires = 1, nab
+        if (iace <= nace .and. ibin <= nbin) then
+          if (ace(iace) < bin(ibin)) then
+            ! take ace
+            merged(ires) = ace(iace)
+            iace = iace + 1
+          else if (ace(iace) == bin(ibin)) then
+            ! take ace info, but increment both
+            merged(ires) = ace(iace)
+            iace = iace + 1
+            ibin = ibin + 1
           else
-            ! add b
-            sorted(ic) = b(ib)
-            ib = ib + 1
+            ! take bin info, unless it is zero
+            ! a zero Ein results in zero scattering, which is not a useful
+            ! point to interpolate to.  MC codes will extrapolate in this case
+            ! from the bottom-two points. This is more desirable than interpolating
+            ! between 0 and the next highest Ein.
+            ! Even more desirable, perhaps, would be interpolating between
+            ! a suitably low, but non-zero Ein, and the next highest Ein
+            if (bin(ibin) == ZERO) then
+              merged(ires) = ace(iace) * 1.0E-3_8
+            else
+              merged(ires) = bin(ibin)
+            end if
+            ibin = ibin + 1
           end if
-        else if (ia <= na) then
-          sorted(ic) = a(ia)
-          ia = ia + 1
-        else if (ib <= nb) then
-          sorted(ic) = b(ib)
-          ib = ib + 1
+        else if (iace <= nace) then
+          ! There are more ace data than bins
+          ! Take an ace and then stop building array
+          merged(ires) = ace(iace)
+          iace = iace + 1
+          no_exit = .false.
+          exit
+        else if (ibin <= nbin) then
+          ! There are more bins than ace data
+          ! Can't stop after taking the next one, since all
+          ! bins are needed, so no exit here like in above elseif block
+          merged(ires) = bin(ibin)
+          ibin = ibin + 1
         else
+          no_exit = .false.
           exit
         end if
       end do
 
-      allocate(c(ic - 1))
-      c = sorted(1: ic - 1)
+      ! Clear result if it has values (as it will when it gets here)
+      if (allocated(result)) then
+        deallocate(result)
+      end if
 
-      deallocate(sorted)     
+      ! Readjust ires
+      if (.not. no_exit) then
+        ires = ires - 1
+      end if
+
+      ! Store our results
+      allocate(result(ires))
+      result = merged(1: ires)
+      ! Clean up
+      deallocate(merged)     
     end subroutine merge
  
 

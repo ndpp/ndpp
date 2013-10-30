@@ -385,7 +385,8 @@ module scattdata_class
       end if
       
       ! Get sigS and the integrated distro
-      if ((Ein < nuc % energy(rxn % threshold)) .or. &
+      if (((Ein < nuc % energy(rxn % threshold)) .and. &
+          (rxn % threshold > 1)) .or. &
         (Ein > this % E_bins(size(this % E_bins)))) then
         ! This is a catch-all, our energy was below the threshold or above the
         ! max group value, 
