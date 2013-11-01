@@ -192,7 +192,9 @@ class NDPP_lib(object):
         # NOT YET IMPLEMENTED!!        
         pass
         
-    def condense_outgoing_scatt(self, groups):
+    def condense_outgoing_scatt(self, groups=None):
+        if groups is None:
+            groups = range(self.NG)
         condensed = np.zeros((self.NE_scatt, self.scatt_order))
 
         for iE in xrange(self.NE_scatt):
