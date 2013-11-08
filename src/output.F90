@@ -55,12 +55,6 @@ contains
          trim(to_str(n_procs))
 #endif
 
-#ifdef OPENMP
-    ! Write number of processors
-    write(UNIT=OUTPUT_UNIT, FMT='(6X,"OpenMP Threads:",1X,A)') &
-         trim(to_str(omp_threads))
-#endif
-
   end subroutine title
 
 !===============================================================================

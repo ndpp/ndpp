@@ -371,15 +371,10 @@ module ndpp_class
       class(nuclearDataPreProc), intent(inout) :: self ! data preprocessor to preprocess
 
       type(Nuclide), pointer :: nuc => null() ! Nuclide cross-sections
-      integer                :: i_listing     ! index of xs_listing
-      real(8), allocatable   :: Ein_temp(:)   ! Energy grid temporary variable
-      integer                :: i, j, k       ! Ein building temporary indices
+      integer                  :: i_listing     ! index of xs_listing
       ! Scattering specific data
-      real(8), allocatable   :: scatt_mat(:,:,:) !scattering matrix moments, 
-                                                 ! order x g_out x E_in            
-      integer                :: maxiE         ! Maximum index of nuc%energy that
-                                              ! will be printed (corresponds to
-                                              ! maximum energy group boundary)
+      real(8), allocatable :: scatt_mat(:,:,:) !scattering matrix moments, 
+                                                             ! order x g_out x E_in
       ! Chi specific data
       real(8), allocatable   :: chi_t(:,:)  ! grp x E_in chi tot values on a union grid
       real(8), allocatable   :: e_t_grid(:) ! List of energy points for chi tot
@@ -976,7 +971,7 @@ write(*,*) temp_group
       real(8), allocatable, intent(inout) :: result(:)
 
       real(8), allocatable :: merged(:)
-      integer :: nace, nbin, nc, nab
+      integer :: nace, nbin, nab
       integer :: iace, ibin, ires
       logical :: no_exit = .true.
 
