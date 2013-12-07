@@ -1,5 +1,5 @@
 module ndpp_class
-  
+
   use ace,              only: read_ace_table
   use ace_header
   use constants
@@ -23,7 +23,7 @@ module ndpp_class
   implicit none
   private
   public  :: nuclearDataPreProc
-  
+
   type :: nuclearDataPreProc
     ! Status of whether or not the preprocessor has been initialized
     logical              :: is_init = .false.
@@ -72,7 +72,7 @@ module ndpp_class
     type(Timer)          :: time_chi_preproc
     ! Time to Print the Output Data Libraries
     type(Timer)          :: time_print
-    
+
     ! List of type-bound procedures
     contains
       ! Initialization
@@ -97,37 +97,37 @@ module ndpp_class
 !===============================================================================
 ! INIT_NDPP initializes the data preprocessor object
 !===============================================================================
-  
+
     subroutine init_ndpp(self)
-    
+
       use xml_data_ndpp_t
-      
+
       class(nuclearDataPreProc), intent(inout)   :: self ! data preprocessor to initialize
       !character(MAX_FILE_LEN), intent(in) :: path_input ! Path to input file
-      
+
       logical :: file_exists
       character(MAX_FILE_LEN) :: env_variable
       character(MAX_LINE_LEN) :: filename
       integer :: g
-      
+
       ! Display output message
       message = "Reading Nuclear Data Pre-Processor XML file..."
       call write_message(5)
-      
+
       ! Start total timer and initialization timer
       call timer_start(self % time_total)
       call timer_start(self % time_initialize)
-      
+
       ! Check if ndpp.xml exists
       filename = trim(path_input) // "ndpp.xml"
-      
+
       inquire(FILE=filename, EXIST=file_exists)
       if (.not. file_exists) then
         message = "Data Pre-Processing XML file '" // trim(filename) // &
                   "' does not exist!"
         call fatal_error()
       end if
-      
+
       ! Initialize XML scalar variables
       cross_sections_ = ''
       integrate_chi_  = ''
@@ -139,10 +139,10 @@ module ndpp_class
       mu_bins_        = MU_BINS_DEFAULT
       freegas_cutoff_ = FREEGAS_THRESHOLD_DEFAULT
       threads_        = THREADS_DEFAULT
-      
+
       ! Parse ndpp.xml file
       call read_xml_file_ndpp_t(filename)
-      
+
       ! Find cross_sections.xml file -- the first place to look is the
       ! settings.xml file. If no file is found there, then we check the
       ! CROSS_SECTIONS environment variable
@@ -164,17 +164,17 @@ module ndpp_class
       end if
 
       ! Work with OpenMP threading information
-#ifdef OPENMP      
+#ifdef OPENMP
       if (threads_ == THREADS_DEFAULT) then
         omp_threads = omp_get_max_threads()
       else
         omp_threads = threads_
-      end if   
+      end if
 #endif
-      
+
       ! Read cross_sections.xml
       call read_cross_sections_xml(self)
-      
+
       ! Get integrate_chi flag if provided, if not, default provided by class
       call lower_case(integrate_chi_)
       if (integrate_chi_ == '') then
@@ -186,7 +186,7 @@ module ndpp_class
                   "TRUE or FALSE. Using default of TRUE."
         call warning()
       end if
-      
+
       ! Get energy groups and bins
       if (associated(energy_bins_)) then
         ! Lets check to see that the bins are all in increasing order, and positive
@@ -209,7 +209,7 @@ module ndpp_class
         message = "No energy group structure was specified in ndpp.xml."
         call fatal_error()
       end if
-      
+
       ! Get the output type, if none is provided, the default is set by the class.
       call lower_case(output_format_)
       if (len_trim(output_format_) > 0) then ! one is provided, make sure it is correct
@@ -240,7 +240,7 @@ module ndpp_class
           self % lib_format = ASCII
         end if
       end if
-      
+
       ! Get lib_name, if none provided, and not using HDF5,
       ! use the number of groups as ".g###"
       ! The distinction is because HDF5 data all goes in to one file.
@@ -253,7 +253,7 @@ module ndpp_class
         end if
       end if
       self % lib_name = library_name_
-      
+
       ! Get scattering type information, if not provided, default provided by class
       call lower_case(scatt_type_)
       if (scatt_type_ == '') then
@@ -263,7 +263,7 @@ module ndpp_class
       elseif (scatt_type_ == 'tabular') then
         self % scatt_type = SCATT_TYPE_TABULAR
       end if
-      
+
       ! Get scattering order information.
       if (scatt_order_ > 0) then
         if ((self % scatt_type == SCATT_TYPE_LEGENDRE) .and. &
@@ -279,7 +279,7 @@ module ndpp_class
                   "ndpp.xml."
         call fatal_error()
       end if
-      
+
       ! Get mu_bins information
       if (mu_bins_ > 1) then
         self % mu_bins = mu_bins_
@@ -304,38 +304,38 @@ module ndpp_class
                 "values are invalid."
         call fatal_error()
       end if
-            
+
       ! Get grid thinning information
       if (thinning_tol_ > ZERO) then
         ! Convert from percent to fraction and store
-        self % thin_tol = 0.01_8 * thinning_tol_ 
-      else 
+        self % thin_tol = 0.01_8 * thinning_tol_
+      else
         message = "Invalid thinning tolerance provided, setting to default of 0.2%."
         call warning()
       end if
-      
+
       ! Get printing tolerance information
       if (print_tol_ > ZERO) then
-        self % print_tol = print_tol_ 
-      else 
+        self % print_tol = print_tol_
+      else
         message = "Invalid printing tolerance provided, setting to default."
         call warning()
       end if
-      
+
       self % is_init = .true.
-      
+
       ! Stop initialization timer
       call timer_stop(self % time_initialize)
-      
+
     end subroutine init_ndpp
-  
+
 !===============================================================================
 ! CLEAR_DPP clears the data preprocessor object
 !===============================================================================
-  
+
     subroutine clear_ndpp(self)
       class(nuclearDataPreProc), intent(inout) :: self ! data preprocessor to clear
-      
+
       ! Revert to the default/uninitialized values
       self % path_cross_sections = ""
       self % n_listings    = 0
@@ -348,7 +348,7 @@ module ndpp_class
       self % scatt_order   = SCATT_ORDER_DEFAULT
       self % integrate_chi = INTEGRATE_CHI_DEFAULT
       self % mu_bins       = MU_BINS_DEFAULT
-      
+
       ! Reset the timers
       call timer_reset(self % time_total)
       call timer_reset(self % time_initialize)
@@ -356,24 +356,25 @@ module ndpp_class
       call timer_reset(self % time_preproc)
       call timer_reset(self % time_scatt_preproc)
       call timer_reset(self % time_chi_preproc)
-      
+
       ! Complete the clear
       self % is_init = .false.
-      
+
     end subroutine clear_ndpp
-  
+
 !===============================================================================
 ! PREPROCESS_DPP Performs the pre-processing of each nuclide requested and
 ! writes the results to the output library.
 !===============================================================================
-  
+
     subroutine preprocess_ndpp(self)
       class(nuclearDataPreProc), intent(inout) :: self ! data preprocessor to preprocess
 
-      type(Nuclide), pointer :: nuc => null() ! Nuclide cross-sections
-      integer                  :: i_listing     ! index of xs_listing
+      type(Nuclide), pointer    :: nuc => null() ! Nuclide cross-sections
+      type(SAlphaBeta), pointer :: sab => null() ! S(a,b) tables
+      integer                   :: i_listing     ! index of xs_listing
       ! Scattering specific data
-      real(8), allocatable :: scatt_mat(:,:,:) !scattering matrix moments, 
+      real(8), allocatable :: scatt_mat(:,:,:) !scattering matrix moments,
                                                              ! order x g_out x E_in
       ! Chi specific data
       real(8), allocatable   :: chi_t(:,:)  ! grp x E_in chi tot values on a union grid
@@ -382,13 +383,13 @@ module ndpp_class
       real(8), allocatable   :: e_p_grid(:) ! List of energy points for chi prompt
       real(8), allocatable   :: chi_d(:,:)  ! grp x E_in chi delayed values on a union grid
       real(8), allocatable   :: e_d_grid(:) ! List of energy points for chi delayed
-      
+
       ! Before we begin, write the metadata for the ndpp_lib.xml file.
-      ! The ndpp_lib.xml file is NDPPs version of an 
+      ! The ndpp_lib.xml file is NDPPs version of an
       ! xsdata/xsdir/cross_sections.xml file, which describes the nuclear datas
       ! location in a set of files.
-      ! We will write the header and metadata here and then, after each nuclide 
-      ! is complete, print that nuclide's entry. 
+      ! We will write the header and metadata here and then, after each nuclide
+      ! is complete, print that nuclide's entry.
       ! Finally, we will close the xml file.
       ! We also will write the HDF5 metafile (the library) which will contain
       ! the data for all ACE libraries to be processed. This is different than
@@ -400,13 +401,13 @@ module ndpp_class
         self % mu_bins, self % integrate_chi, self % print_tol, self % thin_tol)
 #ifdef HDF5
       if (self % lib_format == H5) then
-        call hdf5_file_create(self % lib_name, hdf5_output_file)     
+        call hdf5_file_create(self % lib_name, hdf5_output_file)
         hdf5_fh = hdf5_output_file
-!!! Do I also want to have header information just like in ndpp_lib.xml in here?        
+!!! Do I also want to have header information just like in ndpp_lib.xml in here?
       end if
 #endif
       call timer_stop(self % time_print)
-      
+
       ! Display output message
       message = "Beginning Pre-Processing..."
       call write_message(5)
@@ -415,14 +416,16 @@ module ndpp_class
       message = "Using " // trim(to_str(omp_threads)) // " OpenMP Threads"
       call write_message(5)
 #endif
-      
+
       ! Start PreProcessor Timer
       call timer_start(self % time_preproc)
-      
+
       do i_listing = 1, self % n_listings
         if (xs_listings(i_listing) % type == ACE_NEUTRON) then
+          ! ===================================================================
+          ! PERFORM CONTINUOUS ENERGY LIBRARY CALCULATIONS
           allocate(nuclides(1))
-          
+
           ! Read the ACE library
           call timer_start(self % time_read_xs)
           call read_ace_table(1, i_listing)
@@ -451,9 +454,9 @@ module ndpp_class
           ! so we can print our library by passing in just xs_listing()
           xs_listings(i_listing) % freegas_cutoff = nuc % freegas_cutoff
 
-          ! Setup output nuclear data library
+          ! Setup output for nuclear data library
           call init_library(self, nuc)
-          
+
           ! display message
           message = "....Performing Scattering Integration"
           call write_message(6)
@@ -467,18 +470,18 @@ module ndpp_class
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
             self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol, &
             self % Ein)
-            
+
           ! Print the results to file
           call timer_start(self % time_print)
           call print_scatt(nuc % name, self % lib_format, scatt_mat, self % Ein, &
             self % print_tol)
           call timer_stop(self % time_print)
-          
+
           if (allocated(scatt_mat)) then
             deallocate(scatt_mat)
           end if
           call timer_stop(self % time_scatt_preproc)
-          
+
           ! Integrate Chi
           if (self % integrate_chi) then
             ! display message
@@ -489,44 +492,92 @@ module ndpp_class
             if (nuc % fissionable) then
               call calc_chis(nuc, self % energy_bins, self % energy_groups, chi_t, &
                 chi_p, chi_d, e_t_grid, e_p_grid, e_d_grid, self % thin_tol)
-              
+
               ! Print the results to file
               call timer_start(self % time_print)
               call print_chi(nuc % name, self % lib_format, chi_t, chi_p, &
                 chi_d, e_t_grid, e_p_grid, e_d_grid)
               call timer_stop(self % time_print)
-              
+
               ! Deallocate data created for chi
               deallocate(chi_t, e_t_grid, chi_p, e_p_grid, chi_d, e_d_grid)
             end if
           end if
-          
+
           call timer_stop(self % time_chi_preproc)
+        else if (xs_listings(i_listing) % type == ACE_THERMAL) then
+          ! ===================================================================
+          ! PERFORM THERMAL SCATTERING LIBRARY CALCULATIONS
+          ! Get the data and then point to it with sab
+          allocate(sab_tables(1))
+          call timer_start(self % time_read_xs)
+          call read_ace_table(1, i_listing)
+          sab => sab_tables(1)
+          call timer_stop(self % time_read_xs)
+
+          ! Setup output for nuclear data library
+          !!!TD WOULD PREFER OPTIONAL ARGUMENTS IF POSSIBLE
+          ! call init_library(self, sab)
+
+          ! display message
+          message = "....Performing Scattering Integration"
+          call write_message(6)
+
+write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
+
+          ! Create energy grid to use (inelastic_e_in, elastic_e_in,
+          ! energy_bins), and cap it at
+          ! max(threshold_inelastic, threshold_elastic))
+          !!!TD - Above requirements mean this could be its own function
+          ! or have optional parameters
+          ! call merge(sab % energy, self % energy_bins, self % Ein)
+
+          ! Integrate Scattering Distributions
+          call timer_start(self % time_scatt_preproc)
+          call calc_scattsab(sab, self % energy_bins, self % scatt_type, &
+                             self % scatt_order, scatt_mat, self % mu_bins, &
+                             self % thin_tol, self % Ein)
+
+          ! Print the results to file
+          ! call timer_start(self % time_print)
+          ! call print_scatt(nuc % name, self % lib_format, scatt_mat, self % Ein, &
+          !   self % print_tol)
+          ! call timer_stop(self % time_print)
+
+          ! if (allocated(scatt_mat)) then
+          !   deallocate(scatt_mat)
+          ! end if
+          call timer_stop(self % time_scatt_preproc)
         else
           message = "Invalid Entry in cross_sections listings.  " // &
-            "NDPP does not support S(A,B) tables and Dosimetry Tables!"
+            "NDPP does not support dosimetry Tables! Entry will be ignored."
           call warning()
         end if
-        
+
         ! Write this nuclide to the ndpp_lib.xml file
         call timer_start(self % time_print)
         call print_ndpp_lib_xml_nuclide(xs_listings(i_listing), &
           self % lib_format, self % lib_name)
         call timer_stop(self % time_print)
-        
-        ! Deallocate the nuclide and its member data.
+
+        ! Deallocate the nuclide/sab data and its member data.
         if (allocated(nuclides)) then
+          nullify(nuc)
           call nuclides(1) % clear()
           deallocate(nuclides)
         end if
-      
+        if (allocated(sab_tables)) then
+          nullify(sab)
+          deallocate(sab_tables)
+        end if
+
         ! Close the file or HDF5 group
         call finalize_library(self % lib_format)
-        
+
       end do
-      
+
       call timer_stop(self % time_preproc)
-      
+
       ! Close the ndpp_lib.xml file
       call timer_start(self % time_print)
       call print_ndpp_lib_xml_closer(self % lib_format)
@@ -537,7 +588,7 @@ module ndpp_class
       end if
 #endif
       call timer_stop(self % time_print)
-      
+
     end subroutine preprocess_ndpp
 
 !===============================================================================
@@ -547,12 +598,12 @@ module ndpp_class
 
     subroutine print_runtime_ndpp(self)
       use, intrinsic :: ISO_FORTRAN_ENV
-      
+
       class(nuclearDataPreProc), intent(inout) :: self ! data preprocessor to preprocess
       integer :: ou = OUTPUT_UNIT
-      
+
       call timer_stop(self % time_total)
-      
+
       ! display header block
       call header("Timing Statistics")
 
@@ -565,18 +616,18 @@ module ndpp_class
       write(ou,100) "  Time for chi integration", &
         self % time_chi_preproc % elapsed
       write(ou,100) "Total time elapsed", self % time_total % elapsed
-      
+
       ! format for write statements
-  100 format (1X,A,T36,"= ",ES11.4," seconds")    
+  100 format (1X,A,T36,"= ",ES11.4," seconds")
 
     end subroutine print_runtime_ndpp
-  
+
 !===============================================================================
 !===============================================================================
 ! SUBROUTINES/FUNCTIONS TO SUPPORT nuclearDataPreProc CLASS
 !===============================================================================
 !===============================================================================
- 
+
 !===============================================================================
 ! PRINT_NDPP_LIB_XML_HEADER prints the metadata for this run of ndpp to
 ! ndpp_lib.xml in the path of the output libraries.
@@ -584,7 +635,7 @@ module ndpp_class
 
     subroutine print_ndpp_lib_xml_header(n_listings, energy_bins, lib_format, &
       scatt_type, scatt_order, mu_bins, integrate_chi, print_tol, thin_tol)
-      
+
       integer, intent(in)              :: n_listings     ! Number of entries
       real(8), allocatable, intent(in) :: energy_bins(:) ! Energy group structure
       integer, intent(in)              :: lib_format     ! Library type
@@ -594,13 +645,13 @@ module ndpp_class
       logical, intent(in)              :: integrate_chi  ! Flag on if chi data is included
       real(8), intent(in)              :: print_tol      ! Minimum g'->g transfer to bother printing
       real(8), intent(in)              :: thin_tol       ! Tolerance on the union energy grid thinning
-      
+
       character(2) :: indent = '  '
-      
+
       ! This file is unnecessary if no output is chosen, therefore, exit if that
       ! is the case
       if (lib_format == NO_OUT) return
-      
+
       ! Open file for writing
       open(FILE="ndpp_lib.xml", UNIT=UNIT_NDPP, STATUS='replace', ACTION='write')
       ! Write xml version header
@@ -612,9 +663,9 @@ module ndpp_class
         '  </directory>'
       if (lib_format == ASCII) then
         write(UNIT_NDPP, '(A)') indent // '<filetype> ascii </filetype>'
-      else if (lib_format == BINARY) then 
+      else if (lib_format == BINARY) then
         write(UNIT_NDPP, '(A)') indent // '<filetype> binary </filetype>'
-      else if (lib_format == H5) then 
+      else if (lib_format == H5) then
         write(UNIT_NDPP, '(A)') indent // '<filetype> hdf5 </filetype>'
       else if (lib_format == HUMAN) then
         write(UNIT_NDPP, '(A)') indent // '<filetype> human </filetype>'
@@ -641,21 +692,21 @@ module ndpp_class
       call print_ascii_array(energy_bins, UNIT_NDPP)
       write(UNIT_NDPP, '(A)') indent // '</energy_bins>'
       write(UNIT_NDPP, '(A)') ! blank line
-      
+
     end subroutine print_ndpp_lib_xml_header
 
 !===============================================================================
 ! PRINT_NDPP_LIB_XML_NUCLIDE prints the entry for each nuclide
 !===============================================================================
-    
+
     subroutine print_ndpp_lib_xml_nuclide(nuc, lib_format, lib_name)
       type(XsListing), intent(inout)         :: nuc        ! The nuclide to print
       integer, intent(in)                    :: lib_format ! Library type
       character(MAX_FILE_LEN), intent(inout) :: lib_name   ! library extension
-      
+
       character(2)            :: indent = '  '
       character(MAX_FILE_LEN) :: filename
-      
+
       ! This file is unnecessary if no output is chosen, therefore, exit if that
       ! is the case
       if (lib_format == NO_OUT) return
@@ -677,26 +728,26 @@ module ndpp_class
           '" zaid="' // trim(to_str(nuc % zaid)) // '" ' // &
           'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '"/>'
       end if
-      
-      
+
+
     end subroutine print_ndpp_lib_xml_nuclide
-    
+
 !===============================================================================
 ! PRINT_NDPP_LIB_XML_CLOSER prints the final tag of ndpp_lib.xml and closes the
 ! file.
 !===============================================================================
-    
+
     subroutine print_ndpp_lib_xml_closer(lib_format)
       integer, intent(in) :: lib_format     ! Library type
       ! This file is unnecessary if no output is chosen, therefore, exit if that
       ! is the case
       if (lib_format == NO_OUT) return
-      
+
       write(UNIT_NDPP, '(A)') '</ndpp_lib>'
       close(UNIT_NDPP)
-      
+
     end subroutine print_ndpp_lib_xml_closer
-  
+
 !===============================================================================
 ! READ_CROSS_SECTIONS_XML reads information from a cross_sections.xml file. This
 ! file contains a listing of the ACE cross sections that may be used. This is
@@ -709,7 +760,7 @@ module ndpp_class
       use xml_data_cross_sections_t
 
       class(nuclearDataPreProc), intent(inout) :: this_ndpp ! data preprocessor to use
-      
+
       integer :: i           ! loop index
       integer :: filetype    ! default file type
       integer :: recl        ! default record length
@@ -726,7 +777,7 @@ module ndpp_class
               "' does not exist!"
          call fatal_error()
       end if
-      
+
       message = "Reading cross sections XML file..."
       call write_message(5)
 
@@ -831,24 +882,24 @@ module ndpp_class
     end subroutine read_cross_sections_xml
 
 ! Routine to initialize each nuclide's library
-    
+
     subroutine init_library(this_ndpp, nuc)
       class(nuclearDataPreProc), intent(in) :: this_ndpp ! NDPP data
       type(Nuclide), pointer, intent(in)   :: nuc       ! Nuclide data
-      
+
       character(MAX_LINE_LEN) :: line
       character(MAX_FILE_LEN) :: filename
       integer                 :: chi_present_int, period_loc
-      
+
       if ((this_ndpp % lib_format == ASCII) .or. &
         (this_ndpp % lib_format == HUMAN)) then
-        
+
         ! Create filename for output library
         filename = trim(adjustl(nuc % name)) // trim(adjustl(this_ndpp % lib_name))
-        
+
         ! Open file for writing
         open(FILE=filename, UNIT=UNIT_NUC, STATUS='replace', ACTION='write')
-        
+
         ! Write header information:
         ! Nuclide Name, Temperature, Run Date
         line = ''
@@ -860,7 +911,7 @@ module ndpp_class
         ! Scattering Type (Legendre/Hist), Order of this Type, Chi Present, Thinning Tolerance
         ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
         ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then 
+        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then
           chi_present_int = 1
         else
           chi_present_int = 0
@@ -874,29 +925,29 @@ module ndpp_class
         line= ''
         write(line,'(I20)') this_ndpp % mu_bins
         write(UNIT_NUC,'(A)') trim(line)
-        
+
       else if (this_ndpp % lib_format == BINARY) then
         ! Create filename for output library
         filename = trim(adjustl(nuc % name)) // trim(adjustl(this_ndpp % lib_name))
-        
+
         ! Open file for writing
         open(FILE=filename, UNIT=UNIT_NUC, STATUS='replace', ACTION='write', &
           ACCESS = 'stream')
-        
+
         ! Write header information:
         ! Nuclide Name, Temperature, Run Date
         write(UNIT_NUC) nuc % name
         write(UNIT_NUC) nuc % kT
         write(UNIT_NUC) this_ndpp % energy_groups
-        
+
         ! Energy Bin Structure
         write(UNIT_NUC) this_ndpp % energy_bins
-        
-        ! Scattering Type (Legendre/Hist), Order of this Type, Chi Present, 
+
+        ! Scattering Type (Legendre/Hist), Order of this Type, Chi Present,
         ! Thinning Tolerance
         ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
         ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then 
+        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then
           chi_present_int = 1
         else
           chi_present_int = 0
@@ -906,23 +957,23 @@ module ndpp_class
         write(UNIT_NUC) this_ndpp % scatt_order
         write(UNIT_NUC) chi_present_int
         write(UNIT_NUC) this_ndpp % thin_tol
-        
+
         ! Write mu_bins
         write(UNIT_NUC) this_ndpp % mu_bins
-#ifdef HDF5          
-      else if (this_ndpp % lib_format == H5) then          
+#ifdef HDF5
+      else if (this_ndpp % lib_format == H5) then
         filename = trim(adjustl(nuc % name))
         period_loc = scan(filename, '.')
         filename(period_loc : period_loc) = '_'
         filename = "/" // trim(adjustl(filename))
-write(*,*) temp_group        
+write(*,*) temp_group
         call hdf5_open_group(filename)
-write(*,*) temp_group        
-        ! Write name, kt, energy_groups, energy_bins, 
+write(*,*) temp_group
+        ! Write name, kt, energy_groups, energy_bins,
         ! scatt_type, scatt_order, integrate_chi, thin_tol, mu_bins
         ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
         ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then 
+        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then
           chi_present_int = 1
         else
           chi_present_int = 0
@@ -946,27 +997,27 @@ write(*,*) temp_group
           this_ndpp % thin_tol)
 #endif
       end if
-      
+
     end subroutine init_library
-    
+
 ! Close the file or HDF5 group
     subroutine finalize_library(lib_format)
       integer, intent(in) :: lib_format
-      
+
       if (lib_format /= H5) then
         close(UNIT_NUC)
-#ifdef HDF5          
+#ifdef HDF5
       else
         call hdf5_close_group()
 #endif
-      end if      
+      end if
     end subroutine finalize_library
 
 !===============================================================================
 ! MERGE combines two arrays in to one longer array, maintaining the sorted order
 !===============================================================================
     subroutine merge(ace, bin, result)
-      real(8), allocatable, intent(in)    :: ace(:) 
+      real(8), allocatable, intent(in)    :: ace(:)
       real(8), allocatable, intent(in)    :: bin(:)
       real(8), allocatable, intent(inout) :: result(:)
 
@@ -1041,9 +1092,9 @@ write(*,*) temp_group
       allocate(result(ires))
       result = merged(1: ires)
       ! Clean up
-      deallocate(merged)     
+      deallocate(merged)
     end subroutine merge
- 
+
 
   end module ndpp_class
-  
+

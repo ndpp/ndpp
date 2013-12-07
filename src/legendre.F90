@@ -1,23 +1,23 @@
 module legendre
-  
+
   use ace_header
   use constants
   use error,      only: fatal_error
   use global,     only: message
-  
+
   implicit none
 
   contains
 
 !===============================================================================
-! CALC_INT_PN_TABLELIN calculates the Legendre expansion of a tabular angular 
-! distribution with linear-linear interpolation. This function returns 
+! CALC_INT_PN_TABLELIN calculates the Legendre expansion of a tabular angular
+! distribution with linear-linear interpolation. This function returns
 ! all n orders. It is intended to operate on one set of points from the table.
 ! Since this function is called repeatedly,
-! neither n or x is checked to see if they are in the applicable range. 
+! neither n or x is checked to see if they are in the applicable range.
 ! This is left to the client developer to use where applicable. x is to be in
 ! the domain of [-1,1], and 0<=n<=5. If x is outside of the range, the return
-! value will be outside the expected range; if n is outside the stated range, 
+! value will be outside the expected range; if n is outside the stated range,
 ! the return value will be 1.0_8.
 !===============================================================================
 
@@ -28,23 +28,23 @@ module legendre
       real(8), intent(in)  :: xhigh ! High boundary of range of integration
       real(8), intent(in)  :: flow  ! Line y-value at low boundary
       real(8), intent(in)  :: fhigh ! Line y-value at high boundary
-      
+
       real(8) :: integrals(n)       ! The Legendres evaluated at x (0:n)
-      
+
       integer :: l     ! Index of the Legendre order
       real(8) :: values
-      
-      ! The values below for integrals(l+1) are the integral of (f(x)*P_l(x)) 
+
+      ! The values below for integrals(l+1) are the integral of (f(x)*P_l(x))
       ! where f(x) is a straight line between flow and fhigh at xlow and xhigh
       integrals = ZERO
-          
+
       ! Sometimes xlow and xhigh can be very near each other (on the order of
-      ! machine precision) and this is a perfectly valid situation, however, 
+      ! machine precision) and this is a perfectly valid situation, however,
       ! these cases lead to division by zero errors when the actual result should
       ! approach zero. In that case, just return zero (which integrals has
       ! alrady been set to.
       if (xhigh-xlow < FP_PRECISION) return
-      
+
       do l = 0, n - 1
         select case (l)
           case (0)
@@ -148,7 +148,7 @@ module legendre
               (29393.0_8*fhigh*xhigh**12 - 92378.0_8*fhigh*xhigh**10 +109395.0_8* &
               fhigh*xhigh**8 - 60060.0_8*fhigh*xhigh**6 + 15015.0_8*fhigh*xhigh**4 - &
               1386.0_8*fhigh*xhigh**2)*xlow)/(xhigh - xlow) + ONE/1024.0_8*(2261.0_8*(fhigh + &
-              12.0_8*flow)*xlow**13 - 29393.0_8*flow*xhigh*xlow**12 - 8398.0_8*(fhigh + & 
+              12.0_8*flow)*xlow**13 - 29393.0_8*flow*xhigh*xlow**12 - 8398.0_8*(fhigh + &
               10.0_8*flow)*xlow**11 + 92378.0_8*flow*xhigh*xlow**10 + 12155.0_8*(fhigh + &
               8.0_8*flow)*xlow**9 - 109395.0_8*flow*xhigh*xlow**8 - 8580.0_8* &
               (fhigh + 6.0_8*flow)*xlow**7+ 60060.0_8*flow*xhigh*xlow**6 + 3003.0_8* &
@@ -298,7 +298,7 @@ module legendre
               2650894785.0_8*flow*xhigh*xlow**20 - 716458050.0_8*(fhigh + 18.0_8*flow)*xlow**19 + &
               13612702950.0_8*flow*xhigh*xlow**18 + 1750204665.0_8*(fhigh + 16.0_8*flow)*xlow**17 - &
               29753479305.0_8*flow*xhigh*xlow**16 - 2404321560.0_8*(fhigh + 14.0_8*flow)*xlow**15 + &
-              36064823400.0_8*flow*xhigh*xlow**14 + 2035917450.0_8*(fhigh + 12.0_8*flow)*xlow**13 - & 
+              36064823400.0_8*flow*xhigh*xlow**14 + 2035917450.0_8*(fhigh + 12.0_8*flow)*xlow**13 - &
               26466926850.0_8*flow*xhigh*xlow**12 - 1095183180.0_8*(fhigh + 10.0_8*flow)*xlow**11 + &
               12047014980.0_8*flow*xhigh*xlow**10 + 371821450.0_8*(fhigh + 8.0_8*flow)*xlow**9 - &
               3346393050.0_8*flow*xhigh*xlow**8 - 76488984.0_8*(fhigh + 6.0_8*flow)*xlow**7 + &
@@ -334,28 +334,30 @@ module legendre
             values = ONE
         end select
         integrals(l + 1) = integrals(l + 1) + values
-      end do    
+      end do
     end function calc_int_pn_tablelin
 
 !===============================================================================
 ! CALC_PN calculates the n-th order Legendre polynomial at the value of x.
 ! Since this function is called repeatedly during the neutron transport process,
-! neither n or x is checked to see if they are in the applicable range. 
+! neither n or x is checked to see if they are in the applicable range.
 ! This is left to the client developer to use where applicable. x is to be in
 ! the domain of [-1,1], and 0<=n<=5. If x is outside of the range, the return
-! value will be outside the expected range; if n is outside the stated range, 
+! value will be outside the expected range; if n is outside the stated range,
 ! the return value will be 1.0.  This is to replace the one in math.F90 when
 ! done. But is kept here to avoid merge issues in the mean time.
 !===============================================================================
-  
+
   pure function calc_pn(n,x) result(pnx)
 
     integer, intent(in) :: n   ! Legendre order requested
-    real(8), intent(in) :: x   ! Independent variable the Legendre is to be 
+    real(8), intent(in) :: x   ! Independent variable the Legendre is to be
                                ! evaluated at; x must be in the domain [-1,1]
     real(8)             :: pnx ! The Legendre poly of order n evaluated at x
-    
+
     select case(n)
+    case(0)
+      pnx = ONE
     case(1)
       pnx = x
     case(2)
@@ -369,7 +371,7 @@ module legendre
     case(6)
       pnx = 14.4375_8 * (x ** 6) - 19.6875_8 * (x ** 4) + &
         6.5625_8 * x * x - 0.3125_8
-    case(7) 
+    case(7)
       pnx = 26.8125_8 * (x ** 7) - 43.3125_8 * (x ** 5) + &
         19.6875_8 * x * x * x - 2.1875_8 * x
     case(8)
@@ -383,7 +385,7 @@ module legendre
         351.9140625_8 * (x ** 6) - 117.3046875_8 * (x ** 4) + &
         13.53515625_8 * x * x - 0.24609375_8
     ! Cases 11-20 come from Mathematica
-    case(11) 
+    case(11)
       pnx = (-2.70703125_8 * x + 58.65234375_8 * x**3 - 351.9140625_8 * x**5 + &
         854.6484375_8 * x**7 - 902.12890625_8 * x**9 + 344.44921875_8 * x**11)
     case(12)
@@ -428,7 +430,7 @@ module legendre
     case default
       pnx = ONE ! correct for case(0), incorrect for the rest
     end select
-  
+
   end function calc_pn
 
 end module legendre
