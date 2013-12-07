@@ -50,7 +50,9 @@ contains
     ! allocate arrays for ACE table storage and cross section cache
     allocate(nuclides(n_nuclides_total))
     allocate(sab_tables(n_sab_tables))
+!$omp parallel
     allocate(micro_xs(n_nuclides_total))
+!$omp end parallel
 
     ! ==========================================================================
     ! READ ALL ACE CROSS SECTION TABLES
@@ -241,6 +243,14 @@ contains
       ! Read first line of header
       read(UNIT=in, FMT='(A10,2G12.0,1X,A10)') name, awr, kT, date_
 
+      ! Check that correct xs was found -- if cross_sections.xml is broken, the
+      ! location of the table may be wrong
+      if(adjustl(name) /= adjustl(listing % name)) then
+        message = "XS listing entry " // trim(listing % name) // " did not &
+             &match ACE data, " // trim(name) // " found instead."
+        call fatal_error()
+      end if
+
       ! Read more header and NXS and JXS
       read(UNIT=in, FMT=100) comment, mat, & 
            (zaids(i), awrs(i), i=1,16), NXS, JXS
@@ -302,14 +312,6 @@ contains
       call read_angular_dist(nuc)
       call read_energy_dist(nuc)
       call read_unr_res(nuc)
-
-!~       ! Currently subcritical fixed source calculations are not allowed. Thus,
-!~       ! if any fissionable material is found in a fixed source calculation,
-!~       ! abort the run.
-!~       if (run_mode == MODE_FIXEDSOURCE .and. nuc % fissionable) then
-!~         message = "Cannot have fissionable material in a fixed source run."
-!~         call fatal_error()
-!~       end if
 
       ! for fissionable nuclides, precalculate microscopic nu-fission cross
       ! sections so that we don't need to call the nu_total function during
@@ -1179,6 +1181,12 @@ contains
 
     ! read secondary energy mode for inelastic scattering
     table % secondary_mode = NXS(7)
+    if (table % secondary_mode /= SAB_SECONDARY_EQUAL .and. &
+         table % secondary_mode /= SAB_SECONDARY_SKEWED) then
+      message = "Unsupported secondary mode on S(a,b) table " // &
+           trim(adjustl(table % name)) // ": " // to_str(table % secondary_mode)
+      call fatal_error()
+    end if
 
     ! read number of inelastic energies and allocate arrays
     NE_in = int(XSS(JXS(1)))
