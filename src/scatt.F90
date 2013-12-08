@@ -145,8 +145,8 @@ module scatt_class
 
       ! Initialize memory spaces
       groups = size(energy_bins) - 1
-      allocate(sab_int_el(order, groups, sab % n_elastic_e_in))
-      allocate(sab_int_inel(order, groups, sab % n_inelastic_e_in))
+      allocate(sab_int_el(order + 1, groups, sab % n_elastic_e_in))
+      allocate(sab_int_inel(order + 1, groups, sab % n_inelastic_e_in))
 
       ! This routine will go through the sab table and for the
       ! inelastic and elastic reactions, it will call the proper routines
