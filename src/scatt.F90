@@ -145,8 +145,8 @@ module scatt_class
 
       ! Initialize memory spaces
       groups = size(energy_bins) - 1
-      allocate(sab_int_el(order + 1, groups, sab % n_elastic_e_in))
-      allocate(sab_int_inel(order + 1, groups, sab % n_inelastic_e_in))
+      allocate(sab_int_el(order + 1, groups, size(E_grid)))
+      allocate(sab_int_inel(order + 1, groups, size(E_grid)))
 
       ! This routine will go through the sab table and for the
       ! inelastic and elastic reactions, it will call the proper routines
@@ -156,8 +156,10 @@ module scatt_class
       ! Perform integral for elastic and inelastic depending on output type
       ! Calculate our equi-width mu points
       if (scatt_type == SCATT_TYPE_LEGENDRE) then
-        call integrate_sab_el(sab, energy_bins, scatt_type, order, sab_int_el)
-        call integrate_sab_inel(sab, energy_bins, scatt_type, order, sab_int_inel)
+        call integrate_sab_el(sab, E_grid, energy_bins, scatt_type, order, &
+                              sab_int_el)
+        call integrate_sab_inel(sab, E_grid, energy_bins, scatt_type, order, &
+                                sab_int_inel)
 
       else if (scatt_type == SCATT_TYPE_TABULAR) then
         allocate(mu_out(order))
@@ -172,10 +174,7 @@ module scatt_class
 
 
       ! Now combine the results on to E_grid
-      ! Luckily, SAB incoming energy points are all to be linearly interpolated
-      ! between, so this is quite simple
-      !!!TD - make version for SAB
-      ! call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
+
 
     end subroutine calc_scattsab
 

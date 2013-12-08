@@ -133,6 +133,9 @@ module constants
   ! Adaptive Simpsons integration (of Eout) maximum recursion depth/iterations
   integer, parameter :: ADAPTIVE_EOUT_ITS = 15
 
+  ! Number of Eout points per bin for thermal scatter collisions
+  integer, parameter :: SAB_EPTS_PER_BIN = 3  ! 0 Implies no expansion
+
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
 

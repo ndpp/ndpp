@@ -526,11 +526,9 @@ module ndpp_class
 write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
 
           ! Create energy grid to use (inelastic_e_in, elastic_e_in,
-          ! energy_bins), and cap it at
-          ! max(threshold_inelastic, threshold_elastic))
-          !!!TD - Above requirements mean this could be its own function
-          ! or have optional parameters
-          ! call merge(sab % energy, self % energy_bins, self % Ein)
+          ! energy_bins)
+          call sab_egrid(sab, self % energy_bins, self % Ein)
+
 
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
@@ -1014,64 +1012,125 @@ write(*,*) temp_group
     end subroutine finalize_library
 
 !===============================================================================
+! SAB_EGRID Creates the thermal scattering energy grid for NDPP integration
+!===============================================================================
+    subroutine sab_egrid(sab, energy_bins, Ein)
+      type(SAlphaBeta), pointer, intent(in) :: sab            ! SAB Library
+      real(8), intent(in)                   :: energy_bins(:) ! Grp bounds
+      real(8), allocatable, intent(inout)   :: Ein(:)         ! Resultant Egrid
+
+      real(8), allocatable   :: e_grid_tmp(:) ! Temporary array for bldg E-grid
+      integer                :: i_max_ein     ! Index of maximum value we want from Ein
+      real(8)                :: max_ein       ! maximum value we want from Ein
+      integer                :: num_pts       ! Final number of pts for Ein
+      integer                :: i, j, iE      ! Counters for final indexing
+      real(8)                :: dE
+
+      if (allocated(sab % elastic_e_in)) then
+        call merge(sab % inelastic_e_in, sab % elastic_e_in, e_grid_tmp)
+        call merge(e_grid_tmp, energy_bins, Ein)
+        ! Now I want to cap this at the maximum value
+        max_ein = max(sab % inelastic_e_in(sab % n_inelastic_e_in), &
+                      sab % elastic_e_in(sab % n_elastic_e_in))
+      else
+        call merge(sab % inelastic_e_in, energy_bins, Ein)
+        ! Now I want to cap this at the maximum value
+        max_ein = sab % inelastic_e_in(sab % n_inelastic_e_in)
+      end if
+      i_max_ein = binary_search(Ein, size(Ein), max_ein) + 1
+
+      if (allocated(e_grid_tmp)) deallocate(e_grid_tmp)
+      allocate(e_grid_tmp(size(Ein)))
+      e_grid_tmp = Ein
+      deallocate(Ein)
+
+      num_pts = (i_max_ein - 1) * (SAB_EPTS_PER_BIN) + i_max_ein
+
+      allocate(Ein(num_pts))
+      j = 0
+      do iE = 1, i_max_ein - 1
+        if (SAB_EPTS_PER_BIN > ZERO) then
+          !!!TD: Logarithmic or linear? Right now its linear (uncomment for ln)
+          dE = (e_grid_tmp(iE + 1) - e_grid_tmp(iE)) / real(SAB_EPTS_PER_BIN + 1, 8)
+          ! dE = (log(e_grid_tmp(iE + 1)) - log(e_grid_tmp(iE))) / real(SAB_EPTS_PER_BIN + 1, 8)
+        end if
+        j = j + 1
+        Ein(j) = e_grid_tmp(iE)
+        do i = 1, SAB_EPTS_PER_BIN
+          j = j + 1
+          Ein(j) = Ein(j - 1) + dE
+          ! Ein(j) = Ein(j - 1) * exp(dE)
+        end do
+      end do
+      Ein(num_pts) = e_grid_tmp(i_max_ein)
+    end subroutine sab_egrid
+
+!===============================================================================
 ! MERGE combines two arrays in to one longer array, maintaining the sorted order
 !===============================================================================
-    subroutine merge(ace, bin, result)
-      real(8), allocatable, intent(in)    :: ace(:)
-      real(8), allocatable, intent(in)    :: bin(:)
+    subroutine merge(a, b, result)
+      real(8), target, intent(in)    :: a(:)
+      real(8), target, intent(in)    :: b(:)
       real(8), allocatable, intent(inout) :: result(:)
 
       real(8), allocatable :: merged(:)
-      integer :: nace, nbin, nab
-      integer :: iace, ibin, ires
+      integer :: ndata1, ndata2, nab
+      integer :: idata1, idata2, ires
       logical :: no_exit = .true.
+      real(8), pointer :: data1(:), data2(:)
 
-      nace = size(ace)
-      nbin = size(bin)
-      nab = nace + nbin
+      if (a(size(a)) > b(size(b))) then
+        data1 => b
+        data2 => a
+      else
+        data1 => a
+        data2 => b
+      end if
+
+      ndata1 = size(data1)
+      ndata2 = size(data2)
+      nab = ndata1 + ndata2
       allocate(merged(nab))
 
-      iace = 1
-      ibin = 1
+      idata1 = 1
+      idata2 = 1
       do ires = 1, nab
-        if (iace <= nace .and. ibin <= nbin) then
-          if (ace(iace) < bin(ibin)) then
-            ! take ace
-            merged(ires) = ace(iace)
-            iace = iace + 1
-          else if (ace(iace) == bin(ibin)) then
-            ! take ace info, but increment both
-            merged(ires) = ace(iace)
-            iace = iace + 1
-            ibin = ibin + 1
+        if (idata1 <= ndata1 .and. idata2 <= ndata2) then
+          if (data1(idata1) < data2(idata2)) then
+            ! take data1
+            merged(ires) = data1(idata1)
+            idata1 = idata1 + 1
+          else if (data1(idata1) == data2(idata2)) then
+            ! take data1 info, but increment both
+            merged(ires) = data1(idata1)
+            idata1 = idata1 + 1
+            idata2 = idata2 + 1
           else
-            ! take bin info, unless it is zero
+            ! take data2 info, unless it is zero
             ! a zero Ein results in zero scattering, which is not a useful
             ! point to interpolate to.  MC codes will extrapolate in this case
             ! from the bottom-two points. This is more desirable than interpolating
             ! between 0 and the next highest Ein.
             ! Even more desirable, perhaps, would be interpolating between
             ! a suitably low, but non-zero Ein, and the next highest Ein
-            if (bin(ibin) == ZERO) then
-              merged(ires) = ace(iace) * 1.0E-3_8
+            if (data2(idata2) == ZERO) then
+              merged(ires) = data1(idata1) * 1.0E-3_8
             else
-              merged(ires) = bin(ibin)
+              merged(ires) = data2(idata2)
             end if
-            ibin = ibin + 1
+            idata2 = idata2 + 1
           end if
-        else if (iace <= nace) then
-          ! There are more ace data than bins
-          ! Take an ace and then stop building array
-          merged(ires) = ace(iace)
-          iace = iace + 1
+        else if (idata1 <= ndata1) then
+          ! There are more data1 data than data2s
+          ! Take an data1 and then stop building array
+          merged(ires) = data1(idata1)
+          idata1 = idata1 + 1
           no_exit = .false.
           exit
-        else if (ibin <= nbin) then
-          ! There are more bins than ace data
-          ! Can't stop after taking the next one, since all
-          ! bins are needed, so no exit here like in above elseif block
-          merged(ires) = bin(ibin)
-          ibin = ibin + 1
+        else if (idata2 <= ndata2) then
+          ! There are more data2s than data1 data
+          merged(ires) = data2(idata2)
+          idata2 = idata2 + 1
         else
           no_exit = .false.
           exit
@@ -1083,8 +1142,8 @@ write(*,*) temp_group
         deallocate(result)
       end if
 
-      ! Readjust ires
-      if (.not. no_exit) then
+      ! Adjust ires
+      if ((.not. no_exit) .or. (ires > nab)) then
         ires = ires - 1
       end if
 
