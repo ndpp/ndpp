@@ -44,6 +44,7 @@ module sab
       if (sab % threshold_elastic == ZERO) then
         return
       end if
+      !!!TD: Parallelize this over Ein
 
       do iEin = 1, size(ein_grid)
         Ein = ein_grid(iEin)
@@ -100,7 +101,6 @@ module sab
         else
           ! pass
         end if
-write(*,*) Ein, sab_int(:, g, iEin)
       end do
 
     end subroutine integrate_sab_el
@@ -135,6 +135,30 @@ write(*,*) Ein, sab_int(:, g, iEin)
       groups = size(e_bins) - 1
       allocate(sig(size(ein_grid)))
 
+      ! First lets set up our weighting
+      allocate(Eout_wgt(sab % n_inelastic_e_out))
+      if (sab % secondary_mode == SAB_SECONDARY_EQUAL) then
+        Eout_wgt = ONE / real(sab % n_inelastic_e_out, 8)
+      else if (sab % secondary_mode == SAB_SECONDARY_SKEWED) then
+        if (sab % n_inelastic_e_out > 4) then
+          ! 0.1, 0.4, equally-likely, 0.4, 0.1 (all normalized to 1)
+          Eout_wgt(1) = 0.1_8 / real(sab % n_inelastic_e_out, 8)
+          Eout_wgt(2) = 0.4_8 / real(sab % n_inelastic_e_out, 8)
+          Eout_wgt(3: sab % n_inelastic_e_out - 2) = ONE / &
+            real(sab % n_inelastic_e_out, 8)
+          Eout_wgt(sab % n_inelastic_e_out - 1) = &
+            0.4_8 / real(sab % n_inelastic_e_out, 8)
+          Eout_wgt(sab % n_inelastic_e_out) = &
+            0.1_8 / real(sab % n_inelastic_e_out, 8)
+        else
+          ! Leave this in until I know what to do (if any data has this)
+          message = "Number of Inelastic Outgoing Energies Less Than 4,&
+                    & but Skewed Weighting Requested by Data!"
+          call fatal_error()
+        end if
+      end if
+
+      !!!TD: Parallelize this over Ein
       do iEin = 1, size(ein_grid)
         Ein = ein_grid(iEin)
         ! Find the index and interpolation factor
@@ -158,31 +182,6 @@ write(*,*) Ein, sab_int(:, g, iEin)
         ! equally-likely bins, or skewed (or in the future, continuous)
         if ((sab % secondary_mode == SAB_SECONDARY_EQUAL) .or. &
           (sab % secondary_mode == SAB_SECONDARY_SKEWED)) then
-
-          ! First lets set up our weighting
-          allocate(Eout_wgt(sab % n_inelastic_e_out))
-          if (sab % secondary_mode == SAB_SECONDARY_EQUAL) then
-            Eout_wgt = ONE
-          else if (sab % secondary_mode == SAB_SECONDARY_SKEWED) then
-            if (sab % n_inelastic_e_out > 4) then
-              ! 0.1, 0.4, equally-likely, 0.4, 0.1 (all normalized to 1)
-              Eout_wgt(1) = 0.1_8 * real(sab % n_inelastic_e_out, 8)
-              Eout_wgt(2) = 0.4_8 * real(sab % n_inelastic_e_out, 8)
-              Eout_wgt(3: sab % n_inelastic_e_out - 2) = &
-                ONE !!!TD What is this???
-              Eout_wgt(sab % n_inelastic_e_out - 1) = &
-                0.4_8 * real(sab % n_inelastic_e_out, 8)
-              Eout_wgt(sab % n_inelastic_e_out) = &
-                0.1_8 * real(sab % n_inelastic_e_out, 8)
-
-
-            else
-              ! Leave this in until I know what to do (if any data has this)
-              message = "Number of Inelastic Outgoing Energies Less Than 4,&
-                        & but Skewed Weighting Requested by Data!"
-              call fatal_error()
-            end if
-          end if
 
           ! Loop through each equally likely energy, find its group
           ! and sum legendre moments of discrete mu to it.
@@ -209,7 +208,8 @@ write(*,*) Ein, sab_int(:, g, iEin)
               ! Probably could write a function to do this using Legendre recursion
               ! avoiding the loop over order. Oh well, this should be pretty cheap
               do l = 1, order + 1
-                sab_int(l, g, iEin) = sab_int(l, g, iEin) + calc_pn(l - 1, mu)
+                sab_int(l, g, iEin) = sab_int(l, g, iEin) + &
+                  calc_pn(l - 1, mu) * Eout_wgt(iEout)
               end do
             end do
           end do
@@ -220,5 +220,31 @@ write(*,*) Ein, sab_int(:, g, iEin)
       end do
 
     end subroutine integrate_sab_inel
+
+!===============================================================================
+! COMBINE_SAB_GRID takes elastic and inelastic integrals and puts them on the
+! same grid by weighting by the x/s
+!===============================================================================
+
+  subroutine combine_sab_grid(sab_int_el, sab_int_inel, sig_el, sig_inel,  &
+                              scatt_mat)
+    real(8), intent(in) :: sab_int_el(:,:,:)   ! Integrated SAB elastic data [L, G, NEin]
+    real(8), intent(in) :: sab_int_inel(:,:,:) ! Integrated SAB inelastic data [L, G, NEin]
+    real(8), intent(in) :: sig_el(:)           ! Elastic microscopic x/s on E_grid
+    real(8), intent(in):: sig_inel(:)          ! Inelastic microscopic x/s on E_grid
+    real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
+
+    integer :: iE
+
+    ! set up our scatt_mat space
+    allocate(scatt_mat(size(sab_int_el, 1), size(sab_int_el, 2), &
+             size(sab_int_el, 3)))
+
+    do iE = 1, size(sab_int_el, 3)
+      scatt_mat(:, :, iE) = (sab_int_el(:, :, iE) + sab_int_inel(:, :, iE)) / &
+        (sig_el(iE) + sig_inel(iE))
+    end do
+  end subroutine combine_sab_grid
+
 
 end module sab

@@ -176,6 +176,8 @@ module scatt_class
 
 
       ! Now combine the results on to E_grid
+      call combine_sab_grid(sab_int_el, sab_int_inel, sig_el, sig_inel, &
+                            scatt_mat)
 
 
     end subroutine calc_scattsab
