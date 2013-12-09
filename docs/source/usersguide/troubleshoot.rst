@@ -68,12 +68,20 @@ ERROR: No cross_sections.xml file was specified in ndpp.xml or in the CROSS_SECT
 **********************************************************************************************************
 
 NDPP needs to know where to find cross section data for each nuclide. This
-information is provided by the `cross_sections.xml` file. You need to tell 
-NDPP where to find the `cross_sections.xml` file either with the 
-`cross_sections` element in ndpp.xml or with the :envvar:`CROSS_SECTIONS` 
+information is provided by the `cross_sections.xml` file. You need to tell
+NDPP where to find the `cross_sections.xml` file either with the
+`cross_sections` element in ndpp.xml or with the :envvar:`CROSS_SECTIONS`
 environment variable. It is recommended to add a line in your ``.profile``,
-``.bash_profile``, ``.bashrc`` (or similar) 
+``.bash_profile``, ``.bashrc`` (or similar)
 setting the :envvar:`CROSS_SECTIONS` environment variable.
+
+ERROR: Invalid usage of L(I) in ACE data; Consider using more recent data set.
+******************************************************************************
+
+The cross-sections requested in ``materials.xml`` do not conform to the current
+standard format.  This typically happens with fissionable nuclides in a ``.6*c``
+library as distributed with MCNP.  Please try a newer library such as any from
+the ``.7*c`` set.
 
 .. _gfortran: http://gcc.gnu.org/wiki/GFortran
 
