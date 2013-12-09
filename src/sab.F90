@@ -213,10 +213,10 @@ write(*,*) Ein, sab_int(:, g, iEin)
               end do
             end do
           end do
-          sab_int(:, :, iEin) = sig(iEin) * sab_int(:, :, iEin)
         else
           ! pass (continuous goes here)
         end if
+        sab_int(:, :, iEin) = sig(iEin) * sab_int(:, :, iEin)
       end do
 
     end subroutine integrate_sab_inel
