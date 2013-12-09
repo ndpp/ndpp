@@ -139,6 +139,8 @@ module scatt_class
       real(8), allocatable :: mu_out(:)      ! Tabular output mu grid
       real(8), allocatable :: sab_int_el(:,:,:) ! Integrated SAB elastic data [L, G, NEin]
       real(8), allocatable :: sab_int_inel(:,:,:) ! Integrated SAB inelastic data [L, G, NEin]
+      real(8), allocatable :: sig_el(:)      ! Elastic microscopic x/s on E_grid
+      real(8), allocatable :: sig_inel(:)    ! Inelastic microscopic x/s on E_grid
       integer :: groups    ! Number of energy groups
       integer :: imu       ! angle bin counter
       real(8) :: dmu       ! angle spacing
@@ -157,9 +159,9 @@ module scatt_class
       ! Calculate our equi-width mu points
       if (scatt_type == SCATT_TYPE_LEGENDRE) then
         call integrate_sab_el(sab, E_grid, energy_bins, scatt_type, order, &
-                              sab_int_el)
+                              sab_int_el, sig_el)
         call integrate_sab_inel(sab, E_grid, energy_bins, scatt_type, order, &
-                                sab_int_inel)
+                                sab_int_inel, sig_inel)
 
       else if (scatt_type == SCATT_TYPE_TABULAR) then
         allocate(mu_out(order))

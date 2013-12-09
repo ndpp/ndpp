@@ -17,25 +17,28 @@ module sab
 ! collisions and places the result in sab_int
 !===============================================================================
 
-    subroutine integrate_sab_el(sab, ein_grid, e_bins, scatt_type, order, sab_int)
+    subroutine integrate_sab_el(sab, ein_grid, e_bins, scatt_type, order, &
+                                sab_int, sig)
       type(SAlphaBeta), pointer, intent(in) :: sab            ! Nuclide
       real(8), intent(in)                   :: ein_grid(:)    ! Pre-set incoming E grid
       real(8), intent(in)                   :: e_bins(:)      ! Energy groups
       integer, intent(in)                   :: scatt_type     ! Scattering output type
       integer, intent(in)                   :: order          ! Scattering data order
       real(8), intent(inout)                :: sab_int(:,:,:) ! Integrated SAB data [L, G, NEin]
+      real(8), allocatable, intent(inout)   :: sig(:)         ! Micros. x/s
 
       integer :: iEin      ! incoming energy counter
-      real(8) :: sigma     ! cross-section
       integer :: groups    ! shorthand for number of energy groups
       integer :: g, imu, l ! indices for: group, angle, legendre order
-      real(8) :: mu        ! angle for coherent elastic
+      real(8) :: mu        ! cosine of angle of scatter
       real(8) :: Ein       ! Incoming energy
       integer :: isab      ! index on sab Ein grid
+      real(8) :: f         ! fraction for interpolation
 
       ! Initialize data
       sab_int = ZERO
       groups = size(e_bins) - 1
+      allocate(sig(size(ein_grid)))
 
       ! We have to exit if there are no elastic reactions
       if (sab % threshold_elastic == ZERO) then
@@ -63,9 +66,13 @@ module sab
         end if
 
         ! Get x/s for normalizing
-        sigma = sab % elastic_P(isab)
+        f = (Ein - sab % elastic_e_in(isab)) / &
+          (sab % elastic_e_in(isab + 1) - sab % elastic_e_in(isab))
         if (sab % elastic_mode == SAB_ELASTIC_EXACT) then
-          sigma = sigma / Ein
+          sig(iEin) = sab % elastic_P(isab) / Ein
+        else if (sab % elastic_mode == SAB_ELASTIC_DISCRETE) then
+          sig(iEin) = (ONE - f) * sab % elastic_P(isab) + &
+            f * sab % elastic_P(isab + 1)
         end if
 
         if (sab % n_elastic_mu == 0) then
@@ -74,21 +81,21 @@ module sab
           do l = 1, order + 1
             sab_int(l, g, iEin) = sab_int(l, g, iEin) + calc_pn(l - 1, mu)
           end do
-          sab_int(:, g, iEin) = sigma * sab_int(:, g, iEin)
+          sab_int(:, g, iEin) = sig(iEin) * sab_int(:, g, iEin)
         else if (sab % elastic_mode == SAB_ELASTIC_DISCRETE) then
           ! Loop over outgoing angles and add legendre of each
-          ! For u/zr, there are 69 Ein, but 0 imu.. basically ITCA does not
-          ! exist. Is this a bug in ace.F90, or does it simply mean
-          ! we should treat angles as isotropic?
           do imu = 1, sab % n_elastic_mu
+            ! Find our interpolated mu
+            mu = (ONE - f) * sab % elastic_mu(imu, isab) + &
+              f * sab % elastic_mu(imu, isab + 1)
             ! Probably could write a function to do this using Legendre recursion
             ! avoiding the loop over order. Oh well, this should be pretty cheap
             do l = 1, order + 1
               sab_int(l, g, iEin) = sab_int(l, g, iEin) + &
-                calc_pn(l - 1, sab % elastic_mu(imu, iEin))
+                calc_pn(l - 1, sab % elastic_mu(imu, isab))
             end do
           end do
-          sab_int(:, g, iEin) = sigma * sab_int(:, g, iEin)
+          sab_int(:, g, iEin) = sig(iEin) * sab_int(:, g, iEin)
         else
           ! pass
         end if
@@ -102,13 +109,15 @@ write(*,*) Ein, sab_int(:, g, iEin)
 ! collisions and places the result in sab_int
 !===============================================================================
 
-    subroutine integrate_sab_inel(sab, ein_grid, e_bins, scatt_type, order, sab_int)
+    subroutine integrate_sab_inel(sab, ein_grid, e_bins, scatt_type, order, &
+                                  sab_int, sig)
       type(SAlphaBeta), pointer, intent(in) :: sab            ! Nuclide
       real(8), intent(in)                   :: ein_grid(:)    ! Pre-set incoming E grid
       real(8), intent(in)                   :: e_bins(:)      ! Energy groups
       integer, intent(in)                   :: scatt_type     ! Scattering output type
       integer, intent(in)                   :: order          ! Scattering data order
       real(8), intent(inout)                :: sab_int(:,:,:) ! Integrated SAB data [L, G, NEin]
+      real(8), allocatable, intent(inout)   :: sig(:)         ! Micros. x/s
 
       integer :: iEin  ! incoming energy counter
 
