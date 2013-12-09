@@ -47,18 +47,22 @@ module sab
 
       do iEin = 1, size(ein_grid)
         Ein = ein_grid(iEin)
+        ! Find the index and interpolation factor
         if (Ein < sab % elastic_e_in(1)) then
-          cycle
+          isab = 1
+          f = ZERO
         else if (Ein > sab % threshold_elastic) then
           return
         else
           isab = binary_search(sab % elastic_e_in, sab % n_elastic_e_in, Ein)
+          f = (Ein - sab % elastic_e_in(isab)) / &
+            (sab % elastic_e_in(isab + 1) - sab % elastic_e_in(isab))
         end if
 
         ! set outgoing group, g.  No outgoing group integration necessary
         ! because Eout does not change for elastic; Ein == Eout
-        if (Ein <= e_bins(1)) then
-          g = 1
+        if (Ein < e_bins(1)) then
+          cycle
         else if (Ein > e_bins(size(e_bins))) then
           return
         else
@@ -66,8 +70,6 @@ module sab
         end if
 
         ! Get x/s for normalizing
-        f = (Ein - sab % elastic_e_in(isab)) / &
-          (sab % elastic_e_in(isab + 1) - sab % elastic_e_in(isab))
         if (sab % elastic_mode == SAB_ELASTIC_EXACT) then
           sig(iEin) = sab % elastic_P(isab) / Ein
         else if (sab % elastic_mode == SAB_ELASTIC_DISCRETE) then
@@ -91,8 +93,7 @@ module sab
             ! Probably could write a function to do this using Legendre recursion
             ! avoiding the loop over order. Oh well, this should be pretty cheap
             do l = 1, order + 1
-              sab_int(l, g, iEin) = sab_int(l, g, iEin) + &
-                calc_pn(l - 1, sab % elastic_mu(imu, isab))
+              sab_int(l, g, iEin) = sab_int(l, g, iEin) + calc_pn(l - 1, mu)
             end do
           end do
           sab_int(:, g, iEin) = sig(iEin) * sab_int(:, g, iEin)
@@ -119,7 +120,104 @@ write(*,*) Ein, sab_int(:, g, iEin)
       real(8), intent(inout)                :: sab_int(:,:,:) ! Integrated SAB data [L, G, NEin]
       real(8), allocatable, intent(inout)   :: sig(:)         ! Micros. x/s
 
-      integer :: iEin  ! incoming energy counter
+      integer :: iEin      ! incoming energy counter
+      integer :: iEout     ! outgoing energy counter
+      integer :: groups    ! shorthand for number of energy groups
+      integer :: g, imu, l ! indices for: group, angle, legendre order
+      real(8) :: mu        ! cosine of angle of scatter
+      real(8) :: Ein, Eout ! Incoming & outgoing energies
+      integer :: isab      ! index on sab Ein grid
+      real(8) :: f         ! fraction for interpolation
+      real(8), allocatable :: Eout_wgt(:) ! weighting (based on skewed or equal mode)
+
+      ! Initialize data
+      sab_int = ZERO
+      groups = size(e_bins) - 1
+      allocate(sig(size(ein_grid)))
+
+      do iEin = 1, size(ein_grid)
+        Ein = ein_grid(iEin)
+        ! Find the index and interpolation factor
+        if (Ein < sab % inelastic_e_in(1)) then
+          isab = 1
+          f = ZERO
+        else if (Ein > sab % threshold_inelastic) then
+          return
+        else
+          isab = binary_search(sab % inelastic_e_in, sab % n_inelastic_e_in, Ein)
+          f = (Ein - sab % inelastic_e_in(isab)) / &
+            (sab % inelastic_e_in(isab + 1) - sab % inelastic_e_in(isab))
+        end if
+
+        ! Get x/s for normalizing
+        sig(iEin) = (ONE - f) * sab % inelastic_sigma(isab) + &
+          f * sab % inelastic_sigma(isab + 1)
+
+        ! Integrate over outgoing energy (outer) and outgoing mu (inner)
+        ! How to do it depends upon if the second energy mode is
+        ! equally-likely bins, or skewed (or in the future, continuous)
+        if ((sab % secondary_mode == SAB_SECONDARY_EQUAL) .or. &
+          (sab % secondary_mode == SAB_SECONDARY_SKEWED)) then
+
+          ! First lets set up our weighting
+          allocate(Eout_wgt(sab % n_inelastic_e_out))
+          if (sab % secondary_mode == SAB_SECONDARY_EQUAL) then
+            Eout_wgt = ONE
+          else if (sab % secondary_mode == SAB_SECONDARY_SKEWED) then
+            if (sab % n_inelastic_e_out > 4) then
+              ! 0.1, 0.4, equally-likely, 0.4, 0.1 (all normalized to 1)
+              Eout_wgt(1) = 0.1_8 * real(sab % n_inelastic_e_out, 8)
+              Eout_wgt(2) = 0.4_8 * real(sab % n_inelastic_e_out, 8)
+              Eout_wgt(3: sab % n_inelastic_e_out - 2) = &
+                ONE !!!TD What is this???
+              Eout_wgt(sab % n_inelastic_e_out - 1) = &
+                0.4_8 * real(sab % n_inelastic_e_out, 8)
+              Eout_wgt(sab % n_inelastic_e_out) = &
+                0.1_8 * real(sab % n_inelastic_e_out, 8)
+
+
+            else
+              ! Leave this in until I know what to do (if any data has this)
+              message = "Number of Inelastic Outgoing Energies Less Than 4,&
+                        & but Skewed Weighting Requested by Data!"
+              call fatal_error()
+            end if
+          end if
+
+          ! Loop through each equally likely energy, find its group
+          ! and sum legendre moments of discrete mu to it.
+          ! Eout and mu need to be interpolated to
+          do iEout = 1, sab % n_inelastic_e_out
+            ! Interpolate to our Eout
+            Eout = (ONE - f) * sab % inelastic_e_out(iEout, isab) + &
+              f * sab % inelastic_e_out(iEout, isab + 1)
+
+            ! Get the outgoing group
+            if (Eout < e_bins(1)) then
+              cycle
+            else if (Eout >= e_bins(size(e_bins))) then
+              cycle
+            else
+              g = binary_search(e_bins, size(e_bins), Eout)
+            end if
+
+            ! Now integrate all the discrete mu values (equal weight)
+            do imu = 1, sab % n_inelastic_mu
+              ! Find our interpolated mu
+              mu = (ONE - f) * sab % inelastic_mu(imu, iEout, isab) + &
+                f * sab % inelastic_mu(imu, iEout, isab + 1)
+              ! Probably could write a function to do this using Legendre recursion
+              ! avoiding the loop over order. Oh well, this should be pretty cheap
+              do l = 1, order + 1
+                sab_int(l, g, iEin) = sab_int(l, g, iEin) + calc_pn(l - 1, mu)
+              end do
+            end do
+          end do
+          sab_int(:, :, iEin) = sig(iEin) * sab_int(:, :, iEin)
+        else
+          ! pass (continuous goes here)
+        end if
+      end do
 
     end subroutine integrate_sab_inel
 
