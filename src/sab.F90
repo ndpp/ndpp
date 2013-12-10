@@ -34,6 +34,7 @@ module sab
       real(8) :: Ein       ! Incoming energy
       integer :: isab      ! index on sab Ein grid
       real(8) :: f         ! fraction for interpolation
+      real(8) :: wgt       ! weighting of each angle
 
       ! Initialize data
       sab_int = ZERO
@@ -45,17 +46,22 @@ module sab
         sig = ZERO
         return
       end if
-      !!!TD: Parallelize this over Ein
 
+      if (sab % elastic_mode == SAB_ELASTIC_DISCRETE) then
+        wgt = ONE / real(sab % n_elastic_mu, 8)
+      end if
+
+      !$omp parallel do schedule(dynamic,20) num_threads(omp_threads) &
+      !$omp default(shared),private(iEin, g, imu, l, mu, Ein, isab, f)
       do iEin = 1, size(ein_grid)
         Ein = ein_grid(iEin)
         ! Find the index and interpolation factor
         if (Ein < sab % elastic_e_in(1)) then
           isab = 1
           f = ZERO
-        else if (Ein > sab % threshold_elastic) then
+        else if (Ein >= sab % threshold_elastic) then
           sig(iEin) = ZERO
-          return
+          cycle
         else
           isab = binary_search(sab % elastic_e_in, sab % n_elastic_e_in, Ein)
           f = (Ein - sab % elastic_e_in(isab)) / &
@@ -67,7 +73,7 @@ module sab
         if (Ein < e_bins(1)) then
           cycle
         else if (Ein > e_bins(size(e_bins))) then
-          return
+          cycle
         else
           g = binary_search(e_bins, size(e_bins), Ein)
         end if
@@ -86,7 +92,6 @@ module sab
           do l = 1, order + 1
             sab_int(l, g, iEin) = sab_int(l, g, iEin) + calc_pn(l - 1, mu)
           end do
-          sab_int(:, g, iEin) = sig(iEin) * sab_int(:, g, iEin)
         else if (sab % elastic_mode == SAB_ELASTIC_DISCRETE) then
           ! Loop over outgoing angles and add legendre of each
           do imu = 1, sab % n_elastic_mu
@@ -96,13 +101,14 @@ module sab
             ! Probably could write a function to do this using Legendre recursion
             ! avoiding the loop over order. Oh well, this should be pretty cheap
             do l = 1, order + 1
-              sab_int(l, g, iEin) = sab_int(l, g, iEin) + calc_pn(l - 1, mu)
+              sab_int(l, g, iEin) = sab_int(l, g, iEin) + wgt * &
+                calc_pn(l - 1, mu)
             end do
           end do
-          sab_int(:, g, iEin) = sig(iEin) * sab_int(:, g, iEin)
         else
           ! pass
         end if
+        sab_int(:, :, iEin) = sig(iEin) * sab_int(:, :, iEin)
       end do
 
     end subroutine integrate_sab_el
@@ -130,7 +136,7 @@ module sab
       real(8) :: Ein, Eout ! Incoming & outgoing energies
       integer :: isab      ! index on sab Ein grid
       real(8) :: f         ! fraction for interpolation
-      real(8), allocatable :: Eout_wgt(:) ! weighting (based on skewed or equal mode)
+      real(8), allocatable :: wgt(:) ! weighting (based on skewed or equal mode)
 
       ! Initialize data
       sab_int = ZERO
@@ -138,20 +144,19 @@ module sab
       allocate(sig(size(ein_grid)))
 
       ! First lets set up our weighting
-      allocate(Eout_wgt(sab % n_inelastic_e_out))
+      allocate(wgt(sab % n_inelastic_e_out))
       if (sab % secondary_mode == SAB_SECONDARY_EQUAL) then
-        Eout_wgt = ONE / real(sab % n_inelastic_e_out, 8)
+        wgt = ONE / (real(sab % n_inelastic_e_out, 8) * &
+                     real(sab % n_inelastic_mu, 8))
       else if (sab % secondary_mode == SAB_SECONDARY_SKEWED) then
         if (sab % n_inelastic_e_out > 4) then
           ! 0.1, 0.4, equally-likely, 0.4, 0.1 (all normalized to 1)
-          Eout_wgt(1) = 0.1_8 / real(sab % n_inelastic_e_out, 8)
-          Eout_wgt(2) = 0.4_8 / real(sab % n_inelastic_e_out, 8)
-          Eout_wgt(3: sab % n_inelastic_e_out - 2) = ONE / &
-            real(sab % n_inelastic_e_out, 8)
-          Eout_wgt(sab % n_inelastic_e_out - 1) = &
-            0.4_8 / real(sab % n_inelastic_e_out, 8)
-          Eout_wgt(sab % n_inelastic_e_out) = &
-            0.1_8 / real(sab % n_inelastic_e_out, 8)
+          wgt(1) = 0.1_8
+          wgt(2) = 0.4_8
+          wgt(3: sab % n_inelastic_e_out - 2) = ONE
+          wgt(sab % n_inelastic_e_out - 1) = 0.4_8
+          wgt(sab % n_inelastic_e_out) = 0.1_8
+          wgt = wgt / (sum(wgt) * real(sab % n_inelastic_mu, 8))
         else
           ! Leave this in until I know what to do (this should be the continuous)
           message = "Number of Inelastic Outgoing Energies Less Than 4,&
@@ -160,16 +165,17 @@ module sab
         end if
       end if
 
-      !!!TD: Parallelize this over Ein
+      !$omp parallel do schedule(dynamic,20) num_threads(omp_threads) &
+      !$omp default(shared),private(iEin, iEout, g, imu, l, mu, Ein, Eout, isab, f)
       do iEin = 1, size(ein_grid)
         Ein = ein_grid(iEin)
         ! Find the index and interpolation factor
         if (Ein < sab % inelastic_e_in(1)) then
           isab = 1
           f = ZERO
-        else if (Ein > sab % threshold_inelastic) then
+        else if (Ein >= sab % threshold_inelastic) then
           sig(iEin) = ZERO
-          return
+          cycle
         else
           isab = binary_search(sab % inelastic_e_in, sab % n_inelastic_e_in, Ein)
           f = (Ein - sab % inelastic_e_in(isab)) / &
@@ -212,7 +218,7 @@ module sab
               ! avoiding the loop over order. Oh well, this should be pretty cheap
               do l = 1, order + 1
                 sab_int(l, g, iEin) = sab_int(l, g, iEin) + &
-                  calc_pn(l - 1, mu) * Eout_wgt(iEout)
+                  calc_pn(l - 1, mu) * wgt(iEout)
               end do
             end do
           end do
@@ -244,6 +250,8 @@ module sab
     allocate(scatt_mat(size(sab_int_el, 1), size(sab_int_el, 2), &
              size(sab_int_el, 3)))
 
+    !$omp parallel do schedule(dynamic,20) num_threads(omp_threads) &
+    !$omp default(shared),private(iE, sig_tot_inv)
     do iE = 1, size(sig_el)
       sig_tot_inv = sig_el(iE) + sig_inel(iE)
       ! Treat a potential division-by-zero

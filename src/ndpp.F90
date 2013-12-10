@@ -554,10 +554,10 @@ module ndpp_class
                              self % thin_tol, self % Ein)
 
           ! Print the results to file
-          ! call timer_start(self % time_print)
-          ! call print_scatt(nuc % name, self % lib_format, scatt_mat, self % Ein, &
-          !   self % print_tol)
-          ! call timer_stop(self % time_print)
+          call timer_start(self % time_print)
+          call print_scatt(sab % name, self % lib_format, scatt_mat, self % Ein, &
+            self % print_tol)
+          call timer_stop(self % time_print)
 
           if (allocated(scatt_mat)) then
             deallocate(scatt_mat)
