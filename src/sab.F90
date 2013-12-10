@@ -42,6 +42,7 @@ module sab
 
       ! We have to exit if there are no elastic reactions
       if (sab % threshold_elastic == ZERO) then
+        sig = ZERO
         return
       end if
       !!!TD: Parallelize this over Ein
@@ -53,6 +54,7 @@ module sab
           isab = 1
           f = ZERO
         else if (Ein > sab % threshold_elastic) then
+          sig(iEin) = ZERO
           return
         else
           isab = binary_search(sab % elastic_e_in, sab % n_elastic_e_in, Ein)
@@ -151,7 +153,7 @@ module sab
           Eout_wgt(sab % n_inelastic_e_out) = &
             0.1_8 / real(sab % n_inelastic_e_out, 8)
         else
-          ! Leave this in until I know what to do (if any data has this)
+          ! Leave this in until I know what to do (this should be the continuous)
           message = "Number of Inelastic Outgoing Energies Less Than 4,&
                     & but Skewed Weighting Requested by Data!"
           call fatal_error()
@@ -166,6 +168,7 @@ module sab
           isab = 1
           f = ZERO
         else if (Ein > sab % threshold_inelastic) then
+          sig(iEin) = ZERO
           return
         else
           isab = binary_search(sab % inelastic_e_in, sab % n_inelastic_e_in, Ein)
@@ -230,19 +233,28 @@ module sab
                               scatt_mat)
     real(8), intent(in) :: sab_int_el(:,:,:)   ! Integrated SAB elastic data [L, G, NEin]
     real(8), intent(in) :: sab_int_inel(:,:,:) ! Integrated SAB inelastic data [L, G, NEin]
-    real(8), intent(in) :: sig_el(:)           ! Elastic microscopic x/s on E_grid
-    real(8), intent(in):: sig_inel(:)          ! Inelastic microscopic x/s on E_grid
+    real(8), intent(in) :: sig_el(:)           ! Elastic x/s on E_grid
+    real(8), intent(in) :: sig_inel(:)         ! Inelastic x/s on E_grid
     real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
 
     integer :: iE
+    real(8) :: sig_tot_inv
 
     ! set up our scatt_mat space
     allocate(scatt_mat(size(sab_int_el, 1), size(sab_int_el, 2), &
              size(sab_int_el, 3)))
 
-    do iE = 1, size(sab_int_el, 3)
-      scatt_mat(:, :, iE) = (sab_int_el(:, :, iE) + sab_int_inel(:, :, iE)) / &
-        (sig_el(iE) + sig_inel(iE))
+    do iE = 1, size(sig_el)
+      sig_tot_inv = sig_el(iE) + sig_inel(iE)
+      ! Treat a potential division-by-zero
+      if (sig_tot_inv > ZERO) then
+        sig_tot_inv = ONE / sig_tot_inv
+        scatt_mat(:, :, iE) = (sab_int_el(:, :, iE) + sab_int_inel(:, :, iE)) * &
+          sig_tot_inv
+      else
+        scatt_mat(:, :, iE) = ZERO
+      end if
+
     end do
   end subroutine combine_sab_grid
 

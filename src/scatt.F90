@@ -179,7 +179,9 @@ module scatt_class
       call combine_sab_grid(sab_int_el, sab_int_inel, sig_el, sig_inel, &
                             scatt_mat)
 
-
+      ! Clear the space so its ready next time
+      deallocate(sab_int_el)
+      deallocate(sab_int_inel)
     end subroutine calc_scattsab
 
 !===============================================================================

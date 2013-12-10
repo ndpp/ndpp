@@ -455,7 +455,7 @@ module ndpp_class
           xs_listings(i_listing) % freegas_cutoff = nuc % freegas_cutoff
 
           ! Setup output for nuclear data library
-          call init_library(self, nuc)
+          call init_library(self, nuc % name, nuc % kT, nuc % fissionable)
 
           ! display message
           message = "....Performing Scattering Integration"
@@ -516,14 +516,11 @@ module ndpp_class
           call timer_stop(self % time_read_xs)
 
           ! Setup output for nuclear data library
-          !!!TD WOULD PREFER OPTIONAL ARGUMENTS IF POSSIBLE
-          ! call init_library(self, sab)
+          call init_library(self, sab % name, sab % kT)
 
           ! display message
           message = "....Performing Scattering Integration"
           call write_message(6)
-
-write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
 
           ! Create energy grid to use (inelastic_e_in, elastic_e_in,
           ! energy_bins)
@@ -542,9 +539,9 @@ write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
           !   self % print_tol)
           ! call timer_stop(self % time_print)
 
-          ! if (allocated(scatt_mat)) then
-          !   deallocate(scatt_mat)
-          ! end if
+          if (allocated(scatt_mat)) then
+            deallocate(scatt_mat)
+          end if
           call timer_stop(self % time_scatt_preproc)
         else
           message = "Invalid Entry in cross_sections listings.  " // &
@@ -879,21 +876,34 @@ write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
 
     end subroutine read_cross_sections_xml
 
-! Routine to initialize each nuclide's library
+!===============================================================================
+! INIT_LIBRARY writes the header for the NDPP output library; it accepts the
+! options and nuclidic information and writes the header lines as appropriate.
+!===============================================================================
 
-    subroutine init_library(this_ndpp, nuc)
+    subroutine init_library(this_ndpp, name, kT, fiss)
       class(nuclearDataPreProc), intent(in) :: this_ndpp ! NDPP data
-      type(Nuclide), pointer, intent(in)   :: nuc       ! Nuclide data
+      character(*), intent(in)              :: name      ! Library name
+      real(8), intent(in)                   :: kT        ! Library Temperature
+      logical, optional, intent(in)         :: fiss      ! Is it fissionable?
 
       character(MAX_LINE_LEN) :: line
       character(MAX_FILE_LEN) :: filename
       integer                 :: chi_present_int, period_loc
+      logical                 :: fissionable
+
+      ! Deal with fissionable value
+      if (.not. present(fiss)) then
+        fissionable = .false.
+      else
+        fissionable = fiss
+      end if
 
       if ((this_ndpp % lib_format == ASCII) .or. &
         (this_ndpp % lib_format == HUMAN)) then
 
         ! Create filename for output library
-        filename = trim(adjustl(nuc % name)) // trim(adjustl(this_ndpp % lib_name))
+        filename = trim(adjustl(name)) // trim(adjustl(this_ndpp % lib_name))
 
         ! Open file for writing
         open(FILE=filename, UNIT=UNIT_NUC, STATUS='replace', ACTION='write')
@@ -901,15 +911,14 @@ write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
         ! Write header information:
         ! Nuclide Name, Temperature, Run Date
         line = ''
-        write(line,'(A20,1PE20.12,I20,A20)') nuc % name, nuc % kT, &
-          this_ndpp % energy_groups
+        write(line,'(A20,1PE20.12,I20,A20)')name, kT, this_ndpp % energy_groups
         write(UNIT_NUC,'(A)') trim(line)
         ! Energy Bin Structure
         call print_ascii_array(this_ndpp % energy_bins, UNIT_NUC)
         ! Scattering Type (Legendre/Hist), Order of this Type, Chi Present, Thinning Tolerance
         ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
         ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then
+        if(this_ndpp % integrate_chi .AND. fissionable) then
           chi_present_int = 1
         else
           chi_present_int = 0
@@ -926,7 +935,7 @@ write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
 
       else if (this_ndpp % lib_format == BINARY) then
         ! Create filename for output library
-        filename = trim(adjustl(nuc % name)) // trim(adjustl(this_ndpp % lib_name))
+        filename = trim(adjustl(name)) // trim(adjustl(this_ndpp % lib_name))
 
         ! Open file for writing
         open(FILE=filename, UNIT=UNIT_NUC, STATUS='replace', ACTION='write', &
@@ -934,8 +943,8 @@ write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
 
         ! Write header information:
         ! Nuclide Name, Temperature, Run Date
-        write(UNIT_NUC) nuc % name
-        write(UNIT_NUC) nuc % kT
+        write(UNIT_NUC) name
+        write(UNIT_NUC) kT
         write(UNIT_NUC) this_ndpp % energy_groups
 
         ! Energy Bin Structure
@@ -945,7 +954,7 @@ write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
         ! Thinning Tolerance
         ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
         ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then
+        if(this_ndpp % integrate_chi .AND. fissionable) then
           chi_present_int = 1
         else
           chi_present_int = 0
@@ -960,7 +969,7 @@ write(*,*) sab % name, sab % zaid, sab % awr, sab % kT
         write(UNIT_NUC) this_ndpp % mu_bins
 #ifdef HDF5
       else if (this_ndpp % lib_format == H5) then
-        filename = trim(adjustl(nuc % name))
+        filename = trim(adjustl(name))
         period_loc = scan(filename, '.')
         filename(period_loc : period_loc) = '_'
         filename = "/" // trim(adjustl(filename))
@@ -971,16 +980,16 @@ write(*,*) temp_group
         ! scatt_type, scatt_order, integrate_chi, thin_tol, mu_bins
         ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
         ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. nuc % fissionable) then
+        if(this_ndpp % integrate_chi .AND. fissionable) then
           chi_present_int = 1
         else
           chi_present_int = 0
         end if
         ! Now we can print (these should be attributes, but for we need
         ! to first incorporate more routines for this in hdf5_interface)
-        call hdf5_write_string(temp_group, 'name', trim(adjustl(nuc % name)), &
+        call hdf5_write_string(temp_group, 'name', trim(adjustl(name)), &
           len(trim(adjustl(nuc % name))))
-        call hdf5_write_double(temp_group, 'kT', nuc % kT)
+        call hdf5_write_double(temp_group, 'kT', kT)
         call hdf5_write_integer(temp_group, 'energy_groups', &
           this_ndpp % energy_groups)
         call hdf5_write_double_1Darray(temp_group, 'energy_bins', &
