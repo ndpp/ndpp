@@ -373,6 +373,7 @@ module ndpp_class
       type(Nuclide), pointer    :: nuc => null() ! Nuclide cross-sections
       type(SAlphaBeta), pointer :: sab => null() ! S(a,b) tables
       integer                   :: i_listing     ! index of xs_listing
+      character(MAX_FILE_LEN)   :: nuc_lib_name  ! nuclidic library's filename
       ! Scattering specific data
       real(8), allocatable :: scatt_mat(:,:,:) !scattering matrix moments,
                                                              ! order x g_out x E_in
@@ -383,6 +384,9 @@ module ndpp_class
       real(8), allocatable   :: e_p_grid(:) ! List of energy points for chi prompt
       real(8), allocatable   :: chi_d(:,:)  ! grp x E_in chi delayed values on a union grid
       real(8), allocatable   :: e_d_grid(:) ! List of energy points for chi delayed
+
+      ! S(a,b) specific data
+      integer :: islash  ! location in name of slash
 
       ! Before we begin, write the metadata for the ndpp_lib.xml file.
       ! The ndpp_lib.xml file is NDPPs version of an
@@ -432,6 +436,9 @@ module ndpp_class
           nuc => nuclides(1)
           call timer_stop(self % time_read_xs)
 
+          nuc_lib_name = trim(adjustl(nuc % name)) // &
+            trim(adjustl(self % lib_name))
+
           ! Set the free gas cutoff point (in MeV now, not MeV/kT)
           ! for this nuclide
           if (xs_listings(i_listing) % freegas_cutoff /= &
@@ -455,7 +462,8 @@ module ndpp_class
           xs_listings(i_listing) % freegas_cutoff = nuc % freegas_cutoff
 
           ! Setup output for nuclear data library
-          call init_library(self, nuc % name, nuc % kT, nuc % fissionable)
+          call init_library(self, nuc_lib_name, nuc % name, nuc % kT, &
+                            nuc % fissionable)
 
           ! display message
           message = "....Performing Scattering Integration"
@@ -515,8 +523,20 @@ module ndpp_class
           sab => sab_tables(1)
           call timer_stop(self % time_read_xs)
 
+          nuc_lib_name = trim(adjustl(sab % name)) // &
+            trim(adjustl(self % lib_name))
+
+          xs_listings(i_listing) % alias = xs_listings(i_listing) % name
+
+          ! Convert old S(a,b) filename (from MCNP RSICC distributed data)
+          ! to new format (i.e., u/o2.10t to u-o2.10t)
+          islash = index(nuc_lib_name, '/')
+          if (islash > 1) then
+            nuc_lib_name(islash:islash) = '-'
+          end if
+
           ! Setup output for nuclear data library
-          call init_library(self, sab % name, sab % kT)
+          call init_library(self, nuc_lib_name, sab % name, sab % kT)
 
           ! display message
           message = "....Performing Scattering Integration"
@@ -551,8 +571,8 @@ module ndpp_class
 
         ! Write this nuclide to the ndpp_lib.xml file
         call timer_start(self % time_print)
-        call print_ndpp_lib_xml_nuclide(xs_listings(i_listing), &
-          self % lib_format, self % lib_name)
+        call print_ndpp_lib_xml_nuclide(nuc_lib_name, &
+          self % lib_format, self % lib_name, xs_listings(i_listing))
         call timer_stop(self % time_print)
 
         ! Deallocate the nuclide/sab data and its member data.
@@ -694,20 +714,18 @@ module ndpp_class
 ! PRINT_NDPP_LIB_XML_NUCLIDE prints the entry for each nuclide
 !===============================================================================
 
-    subroutine print_ndpp_lib_xml_nuclide(nuc, lib_format, lib_name)
-      type(XsListing), intent(inout)         :: nuc        ! The nuclide to print
+    subroutine print_ndpp_lib_xml_nuclide(filename, lib_format, lib_name, nuc)
+      character(*), intent(in)               :: filename   ! Output filename
       integer, intent(in)                    :: lib_format ! Library type
       character(MAX_FILE_LEN), intent(inout) :: lib_name   ! library extension
+      type(XsListing), intent(inout)         :: nuc        ! The nuclide to print
 
-      character(2)            :: indent = '  '
-      character(MAX_FILE_LEN) :: filename
+      character(2) :: indent = '  '
 
       ! This file is unnecessary if no output is chosen, therefore, exit if that
       ! is the case
       if (lib_format == NO_OUT) return
 
-      ! Create filename for output library
-      filename = trim(adjustl(nuc % name)) // trim(adjustl(lib_name))
       if (nuc % metastable) then ! include metastable attribute
         write(UNIT_NDPP, '(A)') indent // '<ndpp_table alias="' // &
           trim(nuc % alias) // '" awr="' // trim(to_str(nuc % awr)) // &
@@ -881,16 +899,18 @@ module ndpp_class
 ! options and nuclidic information and writes the header lines as appropriate.
 !===============================================================================
 
-    subroutine init_library(this_ndpp, name, kT, fiss)
+    subroutine init_library(this_ndpp, filename, name, kT, fiss)
       class(nuclearDataPreProc), intent(in) :: this_ndpp ! NDPP data
+      character(*), intent(in)              :: filename  ! output filename
       character(*), intent(in)              :: name      ! Library name
       real(8), intent(in)                   :: kT        ! Library Temperature
       logical, optional, intent(in)         :: fiss      ! Is it fissionable?
 
       character(MAX_LINE_LEN) :: line
-      character(MAX_FILE_LEN) :: filename
+      character(MAX_FILE_LEN) :: h_filename
       integer                 :: chi_present_int, period_loc
       logical                 :: fissionable
+      integer                 :: i
 
       ! Deal with fissionable value
       if (.not. present(fiss)) then
@@ -902,16 +922,13 @@ module ndpp_class
       if ((this_ndpp % lib_format == ASCII) .or. &
         (this_ndpp % lib_format == HUMAN)) then
 
-        ! Create filename for output library
-        filename = trim(adjustl(name)) // trim(adjustl(this_ndpp % lib_name))
-
         ! Open file for writing
         open(FILE=filename, UNIT=UNIT_NUC, STATUS='replace', ACTION='write')
 
         ! Write header information:
         ! Nuclide Name, Temperature, Run Date
         line = ''
-        write(line,'(A20,1PE20.12,I20,A20)')name, kT, this_ndpp % energy_groups
+        write(line,'(A20,1PE20.12,I20,A20)') name, kT, this_ndpp % energy_groups
         write(UNIT_NUC,'(A)') trim(line)
         ! Energy Bin Structure
         call print_ascii_array(this_ndpp % energy_bins, UNIT_NUC)
@@ -934,8 +951,6 @@ module ndpp_class
         write(UNIT_NUC,'(A)') trim(line)
 
       else if (this_ndpp % lib_format == BINARY) then
-        ! Create filename for output library
-        filename = trim(adjustl(name)) // trim(adjustl(this_ndpp % lib_name))
 
         ! Open file for writing
         open(FILE=filename, UNIT=UNIT_NUC, STATUS='replace', ACTION='write', &
@@ -969,12 +984,12 @@ module ndpp_class
         write(UNIT_NUC) this_ndpp % mu_bins
 #ifdef HDF5
       else if (this_ndpp % lib_format == H5) then
-        filename = trim(adjustl(name))
-        period_loc = scan(filename, '.')
-        filename(period_loc : period_loc) = '_'
-        filename = "/" // trim(adjustl(filename))
+        h_filename = trim(adjustl(name))
+        period_loc = scan(h_filename, '.')
+        h_filename(period_loc : period_loc) = '_'
+        h_filename = "/" // trim(adjustl(h_filename))
 write(*,*) temp_group
-        call hdf5_open_group(filename)
+        call hdf5_open_group(h_filename)
 write(*,*) temp_group
         ! Write name, kt, energy_groups, energy_bins,
         ! scatt_type, scatt_order, integrate_chi, thin_tol, mu_bins
