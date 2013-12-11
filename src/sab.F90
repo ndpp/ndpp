@@ -57,8 +57,8 @@ module sab
         Ein = ein_grid(iEin)
         ! Find the index and interpolation factor
         if (Ein < sab % elastic_e_in(1)) then
-          isab = 1
-          f = ZERO
+          sig(iEin) = ZERO
+          cycle
         else if (Ein >= sab % threshold_elastic) then
           sig(iEin) = ZERO
           cycle
@@ -84,6 +84,11 @@ module sab
         else if (sab % elastic_mode == SAB_ELASTIC_DISCRETE) then
           sig(iEin) = (ONE - f) * sab % elastic_P(isab) + &
             f * sab % elastic_P(isab + 1)
+        end if
+
+        if (Ein < sab % elastic_e_in(1)) then
+          if (iEin == 1) write(*,*) 'sigma = ', sig(iEin), 'f= ',f, 'isab=', isab, &
+            'P= ',sab % elastic_P(isab)
         end if
 
         if (sab % n_elastic_mu == 0) then

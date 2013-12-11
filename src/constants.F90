@@ -134,7 +134,7 @@ module constants
   integer, parameter :: ADAPTIVE_EOUT_ITS = 15
 
   ! Number of Eout points per bin for thermal scatter collisions
-  integer, parameter :: SAB_EPTS_PER_BIN = 3  ! 0 Implies no expansion
+  integer, parameter :: SAB_EPTS_PER_BIN = 0  ! 0 Implies no expansion
 
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
