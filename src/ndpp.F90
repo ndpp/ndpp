@@ -1121,8 +1121,18 @@ write(*,*) temp_group
       do ires = 1, nab
         if (idata1 <= ndata1 .and. idata2 <= ndata2) then
           if (data1(idata1) < data2(idata2)) then
-            ! take data1
-            merged(ires) = data1(idata1)
+            ! take data2 info, unless it is zero
+            ! a zero Ein results in zero scattering, which is not a useful
+            ! point to interpolate to.  MC codes will extrapolate in this case
+            ! from the bottom-two points. This is more desirable than interpolating
+            ! between 0 and the next highest Ein.
+            ! Even more desirable, perhaps, would be interpolating between
+            ! a suitably low, but non-zero Ein, and the next highest Ein
+            if (data1(idata1) == ZERO) then
+              merged(ires) = data2(idata2) * 1.0E-3_8
+            else
+              merged(ires) = data1(idata1)
+            end if
             idata1 = idata1 + 1
           else if (data1(idata1) == data2(idata2)) then
             ! take data1 info, but increment both
