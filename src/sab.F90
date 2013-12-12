@@ -257,7 +257,7 @@ module sab
 
     !$omp parallel do schedule(dynamic,20) num_threads(omp_threads) &
     !$omp default(shared),private(iE, sig_tot_inv)
-    do iE = 1, size(sig_el)
+    do iE = 1, size(sig_el) - 1
       sig_tot_inv = sig_el(iE) + sig_inel(iE)
       ! Treat a potential division-by-zero
       if (sig_tot_inv > ZERO) then
@@ -267,8 +267,13 @@ module sab
       else
         scatt_mat(:, :, iE) = ZERO
       end if
-
     end do
+
+    ! Finally, since we want the interpolation between the very last two
+    ! points to work out right (the threshold scatt_mat will be zero, which is
+    ! not physical), we will set the threshold scatt_mat equal to the scatt_mat
+    ! for the iE just before this
+    scatt_mat(:, :, size(sig_el)) = scatt_mat(:, :, size(sig_el) - 1)
   end subroutine combine_sab_grid
 
 

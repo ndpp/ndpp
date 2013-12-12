@@ -1061,14 +1061,15 @@ write(*,*) temp_group
         ! Now I want to cap this at the maximum value
         max_ein = sab % inelastic_e_in(sab % n_inelastic_e_in)
       end if
-      i_max_ein = binary_search(Ein, size(Ein), max_ein) + 1
+      ! Now find where the threshold energy is for s(a,b)
+      i_max_ein = binary_search(Ein, size(Ein), max_ein)
 
       if (allocated(e_grid_tmp)) deallocate(e_grid_tmp)
       allocate(e_grid_tmp(size(Ein)))
       e_grid_tmp = Ein
       deallocate(Ein)
 
-      num_pts = (i_max_ein - 1) * (SAB_EPTS_PER_BIN) + i_max_ein
+      num_pts = (i_max_ein) * (SAB_EPTS_PER_BIN) + i_max_ein
 
       allocate(Ein(num_pts))
       j = 0
