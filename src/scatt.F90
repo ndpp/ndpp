@@ -213,7 +213,7 @@ module scatt_class
       last_iE_pct = -1
 
       ! Allocate the scatt_mat according to the groups, order and number of E pts
-      allocate(scatt_mat(order + 1, groups, NE))
+      allocate(scatt_mat(order, groups, NE))
 
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
       !$omp parallel do schedule(dynamic,50) num_threads(omp_threads) default(shared),private(iE,mySD,norm_tot,irxn)
