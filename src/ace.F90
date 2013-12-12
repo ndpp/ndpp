@@ -114,9 +114,9 @@ contains
         ! search through the list of nuclides for one which has a matching zaid
         sab => sab_tables(mat % i_sab_tables(k))
 
-        ! Loop through nuclides and find  match
+        ! Loop through nuclides and find match
         FIND_NUCLIDE: do j = 1, mat % n_nuclides
-          if (nuclides(mat % nuclide(j)) % zaid == sab % zaid) then
+          if (any(sab % zaid == nuclides(mat % nuclide(j)) % zaid)) then
             mat % i_sab_nuclides(k) = j
             exit FIND_NUCLIDE
           end if
@@ -324,7 +324,15 @@ contains
       sab % name = name
       sab % awr  = awr
       sab % kT   = kT
-      sab % zaid = zaids(1)
+      ! Find sab % n_zaid
+      do i = 1, 16
+        if (zaids(i) == 0) then
+          sab % n_zaid = i - 1
+          exit
+        end if
+      end do
+      allocate(sab % zaid(sab % n_zaid))
+      sab % zaid = zaids(1: sab % n_zaid)
 
       call read_thermal_data(sab)
     end select
