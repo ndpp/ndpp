@@ -152,10 +152,11 @@ module ace_header
 !===============================================================================
      
   type SAlphaBeta
-    character(10) :: name ! name of table, e.g. lwtr.10t
-    integer       :: zaid ! Z and A identifier, e.g. 6012 for Carbon-12
-    real(8)       :: awr  ! weight of nucleus in neutron masses
-    real(8)       :: kT   ! temperature in MeV (k*T)
+    character(10) :: name     ! name of table, e.g. lwtr.10t
+    real(8)       :: awr      ! weight of nucleus in neutron masses
+    real(8)       :: kT       ! temperature in MeV (k*T)
+    integer       :: n_zaid   ! Number of valid zaids
+    integer, allocatable :: zaid(:) ! List of valid Z and A identifiers, e.g. 6012
 
     ! threshold for S(a,b) treatment (usually ~4 eV)
     real(8) :: threshold_inelastic

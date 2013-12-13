@@ -11,6 +11,7 @@ freegas.o \
 initialize.o \
 legendre.o \
 output.o \
+sab.o \
 scatt.o \
 scattdata.o
 

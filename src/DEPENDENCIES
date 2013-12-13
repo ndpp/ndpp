@@ -88,6 +88,14 @@ output.o: constants.o
 output.o: global.o
 output.o: string.o
 
+sab.o: ace_header.o
+sab.o: constants.o
+sab.o: error.o
+sab.o: global.o
+sab.o: legendre.o
+sab.o: search.o
+sab.o: string.o
+
 scatt.o: ace_header.o
 scatt.o: constants.o
 scatt.o: dict_header.o
@@ -96,6 +104,7 @@ scatt.o: error.o
 scatt.o: global.o
 scatt.o: interpolation.o
 scatt.o: output.o
+scatt.o: sab.o
 scatt.o: scattdata.o
 scatt.o: search.o
 scatt.o: string.o

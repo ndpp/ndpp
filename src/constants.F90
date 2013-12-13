@@ -14,7 +14,7 @@ module constants
 !   integer, parameter :: REVISION_SOURCE     = 0
 
   ! ============================================================================
-  ! ADJUSTABLE PARAMETERS 
+  ! ADJUSTABLE PARAMETERS
 
   ! NOTE: This is the only section of the constants module that should ever be
   ! adjusted. Modifying constants in other sections may cause the code to fail.
@@ -55,20 +55,20 @@ module constants
        ZERO           = 0.0_8,             &
        ONE            = 1.0_8,             &
        TWO            = 2.0_8
-  
+
   ! ============================================================================
   ! NDPP OBJECT CONSTANTS
   ! Type of output to produce for the scattering portion of NDPP
   integer, parameter ::           &
        SCATT_TYPE_LEGENDRE  =  0, & ! Produce Legendre moments of the distro
        SCATT_TYPE_TABULAR   =  1    ! Produce Tabular Representation of distro
-  
+
   ! The Index in scattdata % mu_bounds(:,g) which contains the low and high
   ! boundaries of integration of the angular variable.
   integer, parameter :: &
-       MU_LO =  1,      & 
+       MU_LO =  1,      &
        MU_HI =  2
-       
+
   ! HDF5 output type (ascii and binary defined below)
   integer, parameter :: &
        H5     = 3,      &
@@ -99,24 +99,24 @@ module constants
        INTEGRATE_CHI_DEFAULT = .false., & ! Integrate Chi?
        USE_FREEGAS_DEFAULT   = .true.     ! Use free-gas treatment?
 
-  
+
   ! ============================================================================
-  ! SCATTDATA OBJECT CONSTANTS  
+  ! SCATTDATA OBJECT CONSTANTS
   integer, parameter :: MAX_LEGENDRE_ORDER   = 10
-                                                     
+
   ! Number of equiprobable bins
   integer, parameter :: NUM_EP = 32
   ! Reciprocal of NUM_EP
   real(8), parameter :: R_NUM_EP = ONE / 32.0_8
-  
-  ! Flag to interpolate on angular distributions with nearest neighbor or 
+
+  ! Flag to interpolate on angular distributions with nearest neighbor or
   ! linear interpolation
   logical, parameter :: INTERP_NEAREST = .false.
   ! logical, parameter :: INTERP_NEAREST = .true.
 
   ! Fraction of maximum s(a,b) value to use as cutoff for determining
   ! the range of integration
-  real(8), parameter :: SAB_THRESHOLD = 1.0E-6_8 
+  real(8), parameter :: SAB_THRESHOLD = 1.0E-6_8
 
   ! Brent root finding algorithm threshold for the mu variable
   real(8), parameter :: BRENT_MU_THRESH = 1.0E-6_8
@@ -132,7 +132,10 @@ module constants
 
   ! Adaptive Simpsons integration (of Eout) maximum recursion depth/iterations
   integer, parameter :: ADAPTIVE_EOUT_ITS = 15
-  
+
+  ! Number of Eout points per bin for thermal scatter collisions
+  integer, parameter :: SAB_EPTS_PER_BIN = 0  ! 0 Implies no expansion
+
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
 
@@ -151,7 +154,7 @@ module constants
        ELECTRON = 3
 
   ! Angular distribution type
-  integer, parameter :: & 
+  integer, parameter :: &
        ANGLE_ISOTROPIC = 1, & ! Isotropic angular distribution
        ANGLE_32_EQUI   = 2, & ! 32 equiprobable bins
        ANGLE_TABULAR   = 3    ! Tabular angular distribution
@@ -256,9 +259,9 @@ module constants
   ! input file!
   integer, parameter :: ERROR_INT  = -huge(0)
   real(8), parameter :: ERROR_REAL = -huge(0.0_8) * 0.917826354_8
-  
+
   ! Unit numbers
   integer, parameter :: UNIT_NDPP  = 20 ! unit # for writing ndpp_lib.xml file
-  integer, parameter :: UNIT_NUC   = 21 ! unit # for writing nuclide library  
+  integer, parameter :: UNIT_NUC   = 21 ! unit # for writing nuclide library
 
 end module constants
