@@ -1324,12 +1324,12 @@ contains
         XSS_index = LOCC(i)
         NE_out = table % inelastic_data(i) % n_e_out
         do j = 1, NE_out
-          table % inelastic_data(i) % e_out(j) = XSS(XSS_index + j)
-          table % inelastic_data(i) % e_out_pdf(j) = XSS(XSS_index + j + 1)
-          table % inelastic_data(i) % e_out_cdf(j) = XSS(XSS_index + j + 2)
+          table % inelastic_data(i) % e_out(j) = XSS(XSS_index + 1)
+          table % inelastic_data(i) % e_out_pdf(j) = XSS(XSS_index + 2)
+          table % inelastic_data(i) % e_out_cdf(j) = XSS(XSS_index + 3)
           table % inelastic_data(i) % mu(:, j) = &
-            XSS(XSS_index + j + 3: XSS_index + j + 3 + NMU - 1)
-          XSS_index = XSS_index + j + 3 + NMU - 2
+            XSS(XSS_index + 4: XSS_index + 4 + NMU - 1)
+          XSS_index = XSS_index + 4 + NMU - 1
         end do
       end do
     end if

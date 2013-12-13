@@ -285,7 +285,7 @@ module sab
       real(8) :: f_lo, f_hi   ! Interpolation for lo and hi
       integer :: NEout
       real(8), allocatable :: pdf(:)
-      real(8), pointer :: Eout_arr(:)
+      real(8), pointer :: Eout_arr(:), mu_arr(:,:)
       real(8) :: mult
 
       ! Initialize data
@@ -306,11 +306,13 @@ module sab
         NEout = sab % inelastic_data(iEin) % n_e_out
         allocate(pdf(NEout))
         Eout_arr => sab % inelastic_data(iEin) % e_out
+        mu_arr => sab % inelastic_data(iEin) % mu
         ! First we normalize the pdf
         do iE_lo = 1, NEout - 1
           pdf(iE_lo) = sab % inelastic_data(iEin) % e_out_pdf(iE_lo) * &
             (Eout_arr(iE_lo + 1) - Eout_arr(iE_lo))
         end do
+        pdf(NEout) = ZERO
         do g = 1, groups
           ! Find iE_lo, and add first term to distro
           if (e_bins(g) < Eout_arr(1)) then
@@ -330,8 +332,8 @@ module sab
             mult = f_lo * pdf(iE_lo)
             do imu = 1, sab % n_inelastic_mu
               ! Find our interpolated mu
-              mu = (ONE - f_lo) * sab % inelastic_mu(imu, iE_lo, isab) + &
-                f_lo * sab % inelastic_mu(imu, iE_lo, isab + 1)
+              mu = (ONE - f_lo) * mu_arr(imu, iE_lo) + &
+                f_lo * mu_arr(imu, iE_lo + 1)
               do l = 1, order + 1
                 distro(l, g, iEin) = distro(l, g, iEin) + &
                   calc_pn(l - 1, mu) * mult
@@ -357,8 +359,8 @@ module sab
             mult = f_hi * pdf(iE_hi)
             do imu = 1, sab % n_inelastic_mu
               ! Find our interpolated mu
-              mu = (ONE - f_hi) * sab % inelastic_mu(imu, iE_hi, isab) + &
-                f_hi * sab % inelastic_mu(imu, iE_hi, isab + 1)
+              mu = (ONE - f_hi) * mu_arr(imu, iE_hi) + &
+                f_hi * mu_arr(imu, iE_hi + 1)
               do l = 1, order + 1
                 distro(l, g, iEin) = distro(l, g, iEin) + &
                   calc_pn(l - 1, mu) * mult
@@ -373,16 +375,15 @@ module sab
             do imu = 1, sab % n_inelastic_mu
               do l = 1, order + 1
                 distro(l, g, iEin) = distro(l, g, iEin) + &
-                  calc_pn(l - 1, sab % inelastic_mu(imu, iE, isab)) * pdf(iE)
+                  calc_pn(l - 1, mu_arr(imu, iE)) * pdf(iE)
               end do
             end do
           end do
 
           ! Divide by two from the trapezoidal integration
-          distro(:, g, iEin) = 0.5_8 * distro(:, g, iEin)
+          distro(:, g, iEin) = distro(:, g, iEin)  / real(sab % n_inelastic_mu, 8)
         end do
-
-
+        deallocate(pdf)
       end do
 
       ! Now interpolate to the ein_grid, while also finding sig
@@ -407,9 +408,8 @@ module sab
         sig(iEin) = (ONE - f) * sab % inelastic_sigma(isab) + &
           f * sab % inelastic_sigma(isab + 1)
 
-        sab_int(:,:,iEin) = (ONE - f) * distro(:,:,iEin) + &
-          f * distro(:,:,iEin + 1)
-
+        sab_int(:,:,iEin) = (ONE - f) * distro(:,:,isab) + &
+          f * distro(:,:,isab + 1)
         ! And finally multiply by sig for normalization later on
         sab_int(:,:,iEin) = sig(iEin) * sab_int(:,:,iEin)
       end do
