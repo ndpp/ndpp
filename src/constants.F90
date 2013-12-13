@@ -163,6 +163,10 @@ module constants
   integer, parameter :: &
        SAB_SECONDARY_EQUAL  = 0, & ! Equally-likely outgoing energy bins
        SAB_SECONDARY_SKEWED = 1    ! Skewed outgoing energy bins
+       SAB_SECONDARY_CONT   = 3    ! Continuous, linear-linear interpolation
+       !!! MCNP6 just uses a discriminator that value is > 1 to denote continuous
+       !!! I suspect this is for future expansion.  Will keep equal to 3 until
+       !!! a reason is found otherwise.
 
   ! Elastic mode for S(a,b) elastic scattering
   integer, parameter :: &
