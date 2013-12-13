@@ -1189,6 +1189,5 @@ write(*,*) temp_group
       deallocate(merged)
     end subroutine merge
 
-
   end module ndpp_class
 
