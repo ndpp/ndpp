@@ -301,7 +301,7 @@ module sab
 
       ! So, start with the energy-angle double integral of the S(a,b) data
       !$omp parallel do schedule(dynamic,20) num_threads(omp_threads) &
-      !$omp default(shared),private(iEin, iEout, g, imu, l, mu, Ein, Eout, isab, f)
+      !$omp default(private),shared(sab,groups,e_bins,distro)
       do iEin = 1, sab % n_inelastic_e_in
         NEout = sab % inelastic_data(iEin) % n_e_out
         allocate(pdf(NEout))
@@ -388,7 +388,7 @@ module sab
 
       ! Now interpolate to the ein_grid, while also finding sig
       !$omp parallel do schedule(dynamic,20) num_threads(omp_threads) &
-      !$omp default(shared),private(iEin, iEout, Ein, Eout, isab, f)
+      !$omp default(shared),private(iEin,Ein,isab,f)
       do iEin = 1, size(ein_grid)
         Ein = ein_grid(iEin)
         ! Find the index and interpolation factor
@@ -413,8 +413,6 @@ module sab
         ! And finally multiply by sig for normalization later on
         sab_int(:,:,iEin) = sig(iEin) * sab_int(:,:,iEin)
       end do
-
-
     end subroutine integrate_sab_inel_cont
 
 !===============================================================================
