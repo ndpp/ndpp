@@ -1069,25 +1069,29 @@ write(*,*) temp_group
       e_grid_tmp = Ein
       deallocate(Ein)
 
-      num_pts = (i_max_ein) * (SAB_EPTS_PER_BIN) + i_max_ein
+      if (SAB_EPTS_PER_BIN == 0) then
+        allocate(Ein(i_max_ein))
+        Ein = e_grid_tmp(1:i_max_ein)
+      else
+        num_pts = (i_max_ein - 1) * (SAB_EPTS_PER_BIN) + i_max_ein
 
-      allocate(Ein(num_pts))
-      j = 0
-      do iE = 1, i_max_ein - 1
-        if (SAB_EPTS_PER_BIN > ZERO) then
+        allocate(Ein(num_pts))
+        j = 0
+        do iE = 1, i_max_ein - 1
           !!!TD: Logarithmic or linear? Right now its linear (uncomment for ln)
           dE = (e_grid_tmp(iE + 1) - e_grid_tmp(iE)) / real(SAB_EPTS_PER_BIN + 1, 8)
           ! dE = (log(e_grid_tmp(iE + 1)) - log(e_grid_tmp(iE))) / real(SAB_EPTS_PER_BIN + 1, 8)
-        end if
-        j = j + 1
-        Ein(j) = e_grid_tmp(iE)
-        do i = 1, SAB_EPTS_PER_BIN
           j = j + 1
-          Ein(j) = Ein(j - 1) + dE
-          ! Ein(j) = Ein(j - 1) * exp(dE)
+          Ein(j) = e_grid_tmp(iE)
+          do i = 1, SAB_EPTS_PER_BIN
+            j = j + 1
+            Ein(j) = Ein(j - 1) + dE
+            ! Ein(j) = Ein(j - 1) * exp(dE)
+          end do
         end do
-      end do
-      Ein(num_pts) = e_grid_tmp(i_max_ein)
+        Ein(num_pts) = e_grid_tmp(i_max_ein)
+      end if
+
     end subroutine sab_egrid
 
 !===============================================================================
