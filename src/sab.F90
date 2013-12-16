@@ -86,11 +86,6 @@ module sab
             f * sab % elastic_P(isab + 1)
         end if
 
-        if (Ein < sab % elastic_e_in(1)) then
-          if (iEin == 1) write(*,*) 'sigma = ', sig(iEin), 'f= ',f, 'isab=', isab, &
-            'P= ',sab % elastic_P(isab)
-        end if
-
         if (sab % n_elastic_mu == 0) then
           ! Perform calculations for coherent elastic (u = 1-E_{bragg}/E)
           mu = ONE - sab % elastic_e_in(isab) / Ein
@@ -301,7 +296,7 @@ module sab
 
       ! So, start with the energy-angle double integral of the S(a,b) data
       !$omp parallel do schedule(dynamic,20) num_threads(omp_threads) &
-      !$omp default(private),shared(sab,groups,e_bins,distro)
+      !$omp default(private),shared(sab,groups,order,e_bins,distro,sab_int,sig)
       do iEin = 1, sab % n_inelastic_e_in
         NEout = sab % inelastic_data(iEin) % n_e_out
         allocate(pdf(NEout))
