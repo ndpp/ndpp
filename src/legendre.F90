@@ -16,7 +16,7 @@ module legendre
 ! Since this function is called repeatedly,
 ! neither n or x is checked to see if they are in the applicable range.
 ! This is left to the client developer to use where applicable. x is to be in
-! the domain of [-1,1], and 0<=n<=5. If x is outside of the range, the return
+! the domain of [-1,1], and 0<=n<=10. If x is outside of the range, the return
 ! value will be outside the expected range; if n is outside the stated range,
 ! the return value will be 1.0_8.
 !===============================================================================

@@ -302,12 +302,16 @@ module sab
         allocate(pdf(NEout))
         Eout_arr => sab % inelastic_data(iEin) % e_out
         mu_arr => sab % inelastic_data(iEin) % mu
+
         ! First we normalize the pdf
         do iE_lo = 1, NEout - 1
           pdf(iE_lo) = sab % inelastic_data(iEin) % e_out_pdf(iE_lo) * &
             (Eout_arr(iE_lo + 1) - Eout_arr(iE_lo))
         end do
         pdf(NEout) = ZERO
+
+        ! Now go through each group and integrate within the energy bounds of
+        ! that group.
         do g = 1, groups
           ! Find iE_lo, and add first term to distro
           if (e_bins(g) < Eout_arr(1)) then
@@ -337,7 +341,7 @@ module sab
             iE_lo = iE_lo + 1
           end if
 
-          ! Find iE_hi and add the last term to fEmu_int
+          ! Find iE_hi and add the last term to distro
           if (e_bins(g + 1) < Eout_arr(1)) then
             ! We can skip this group completely then
             distro(:, g, iEin) = ZERO
