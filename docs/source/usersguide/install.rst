@@ -64,7 +64,7 @@ All NDPP source code is hosted on BitBucket_. You can download the source code
 directly from BitBucket or, if you have the git_ version control software installed
 on your computer, you can use git to obtain the source code. The latter method
 has the benefit that it is easy to receive updates directly from the BitBucket
-repository. With git installed and setup, the following command will download 
+repository. With git installed and setup, the following command will download
 the full source code from the BitBucket repository::
 
     git clone git@bitbucket.org:nelsonag/ndpp.git
@@ -210,29 +210,40 @@ This will build an executable named ``ndpp``.
 Cross Section Configuration
 ---------------------------
 
-In order to perform the pre-processing with NDPP, you will need cross section 
-data for each nuclide to be analyzed. Since NDPP uses ACE format cross sections, 
+In order to perform the pre-processing with NDPP, you will need cross section
+data for each nuclide to be analyzed. Since NDPP uses ACE format cross sections,
 you can use nuclear data that was processed with NJOY, such as that distributed with
 MCNP_ or Serpent_. The TALYS-based evaluated nuclear data library, TENDL_, is
 openly available in ACE format.
 
-Using JEFF Cross Sections from OECD/NEA
----------------------------------------
+Using ACE Cross Sections Data Sets
+----------------------------------
 
-The NEA_ provides processed ACE data from the JEFF_ nuclear library upon
-request. A DVD of the data can be requested here_. To use this data with NDPP,
-the following steps must be taken:
+ACE cross section libraries can be obtained from the NEA_ (which provides
+processed JEFF_ nuclear libraries), or from the RSICC_ distributions of MCNP_
+and Serpent_.  The JEFF and MCNP data are distributed with a file named
+``xsdir`` (or some variant thereof).  This file contains a listing of all the
+cross sections in a file usable by MCNP.  The Serpent distribution provides the
+data with a file named ``xsdata`` (or some variant thereof).  The ``xsdata``
+file is analogous to the ``xsdir`` file, but is specific to Serpent.  Both of
+these file types will need to be converted to the analogous format used by both
+OpenMC_ and NDPP, the ``cross_sections.xml`` file.  Python scripts are provided
+in the NDPP distribution to convert the ``xsdir`` and ``xsdata`` files to the
+``cross_sections.xml`` format.
 
-1. Copy and unzip the data on the DVD to a directory on your computer.
-2. In the root directory, a file named ``xsdir``, or some variant thereof,
-   should be present. This file contains a listing of all the cross sections and
-   is used by MCNP. This file should be converted to a ``cross_sections.xml``
-   file for use with NDPP. A Python script is provided in the NDPP
-   distribution for this purpose:
+The usage of these script are as follows:
+
+1. For ``xsdir`` files, enter the following from the command line:
 
    .. code-block:: sh
 
-       ndpp/src/utils/convert_xsdir.py xsdir31 cross_sections.xml
+       ndpp/src/utils/convert_xsdir.py xsdir cross_sections.xml
+
+   For ``xsdata`` files, enter the following from the command line:
+
+   .. code-block:: sh
+
+       ndpp/src/utils/convert_xsdata.py xsdata cross_sections.xml
 
 3. In the converted ``cross_sections.xml`` file, change the contents of the
    <directory> element to the absolute path of the directory containing the
@@ -243,38 +254,20 @@ the following steps must be taken:
    :envvar:`CROSS_SECTIONS` environment variable to the absolute path of the
    ``cross_sections.xml`` file.
 
-Using Cross Sections from MCNP
-------------------------------
-
-To use cross sections distributed with MCNP, change the <directory> element in
-the ``cross_sections.xml`` file in the data directory of the NDPP distribution
-to the location of the MCNP cross sections. Then, either set the
-:ref:`cross_sections` in a settings.xml file or the :envvar:`CROSS_SECTIONS`
-environment variable to the absolute path of the ``cross_sections.xml`` file.
-
-Using Cross Sections from Serpent
----------------------------------
-
-To use cross sections distributed with Serpent, change the <directory> element
-in the ``cross_sections_serpent.xml`` file in the root directory of the NDPP
-distribution to the location of the Serpent cross sections. Then, either set the
-:ref:`cross_sections` in a settings.xml file or the :envvar:`CROSS_SECTIONS`
-environment variable to the absolute path of the ``cross_sections_serpent.xml``
-file.
-
 .. _NEA: http://www.oecd-nea.org
 .. _JEFF: http://www.oecd-nea.org/dbdata/jeff/
-.. _here: http://www.oecd-nea.org/dbdata/pubs/jeff312-cd.html
+.. _RSICC: https://rsicc.ornl.gov/Default.aspx
 .. _MCNP: http://mcnp.lanl.gov
 .. _Serpent: http://montecarlo.vtt.fi
 .. _TENDL: ftp://ftp.nrg.eu/pub/www/talys/tendl2012/tendl2012.html
+.. _OpenMC: https://github.com/mit-crpg/openmc
 
 ------------
 Running NDPP
 ------------
 
-Once an NDPP input file has been created (see :ref:`usersguide_input`), you can 
-either run the ``ndpp`` executable directly from the directory containing your 
+Once an NDPP input file has been created (see :ref:`usersguide_input`), you can
+either run the ``ndpp`` executable directly from the directory containing your
 XML input files, or you can specify as a command-line argument the directory containing
 the XML input files. For example, if the path of your NDPP executable is
 ``/home/username/ndpp/src/ndpp`` and your XML input files are in the
