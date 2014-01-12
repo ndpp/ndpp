@@ -1355,6 +1355,14 @@ module scattdata_class
       scatter_event = .false.
     end if
 
+    ! Lets disregard (n,xn), (n,xnyd), (n,xnya), (n,xnyp)
+    ! until CM to Lab equations can be verified (or found to only be reported
+    ! in lab system)
+    ! These are between MT==11 and MT==45 (inclusive)
+    if ((MT >= N_2ND) .and. (MT <= N_NPA)) then
+      scatter_event = .false.
+    end if
+
   end function is_valid_scatter
 
 end module scattdata_class
