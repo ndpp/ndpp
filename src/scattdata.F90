@@ -871,14 +871,21 @@ module scattdata_class
           end if
           ! Now find fwi at wi (linear interpolation)
           iwi    = int((wi + ONE) / dmu) + 1
-          interp = (wi - mu(iwi)) / (mu(iwi + 1) - mu(iwi))
-          ! Now we can get fwi easily, lets do Eout loop now to not have
-          ! to recalculate all the above paramters at every imu
-          do iEout = 1, size(data, dim = 2)
-            fwi = (ONE - interp) * data(iwi, iEout) + &
-                  interp * data(iwi + 1, iEout)
-            distro_out(imu, iEout) = fwi * dwdui
-          end do
+          if (imu < mu_bins) then
+            interp = (wi - mu(iwi)) / (mu(iwi + 1) - mu(iwi))
+            ! Now we can get fwi easily, lets do Eout loop now to not have
+            ! to recalculate all the above paramters at every imu
+            do iEout = 1, size(data, dim = 2)
+              fwi = (ONE - interp) * data(iwi, iEout) + &
+                    interp * data(iwi + 1, iEout)
+              distro_out(imu, iEout) = fwi * dwdui
+            end do
+          else
+            do iEout = 1, size(data, dim = 2)
+              fwi = data(iwi, iEout)
+              distro_out(imu, iEout) = fwi * dwdui
+            end do
+          end if
         end do
       else
         do imu = 1, mu_bins
@@ -889,14 +896,21 @@ module scattdata_class
           dwdui = Rinv * (TWO * mu(imu) + S + mu2 / S)
           ! Now find fwi at wi (linear interpolation)
           iwi    = int((wi + ONE) / dmu) + 1
-          interp = (wi - mu(iwi)) / (mu(iwi + 1) - mu(iwi))
-          ! Now we can get fwi easily, lets do Eout loop now to not have
-          ! to recalculate all the above paramters at every imu
-          do iEout = 1, size(data, dim = 2)
-            fwi = (ONE - interp) * data(iwi, iEout) + &
-                  interp * data(iwi + 1, iEout)
-            distro_out(imu, iEout) = fwi * dwdui
-          end do
+          if (imu < mu_bins) then
+            interp = (wi - mu(iwi)) / (mu(iwi + 1) - mu(iwi))
+            ! Now we can get fwi easily, lets do Eout loop now to not have
+            ! to recalculate all the above paramters at every imu
+            do iEout = 1, size(data, dim = 2)
+              fwi = (ONE - interp) * data(iwi, iEout) + &
+                    interp * data(iwi + 1, iEout)
+              distro_out(imu, iEout) = fwi * dwdui
+            end do
+          else
+            do iEout = 1, size(data, dim = 2)
+              fwi = data(iwi, iEout)
+              distro_out(imu, iEout) = fwi * dwdui
+            end do
+          end if
         end do
       end if
 
