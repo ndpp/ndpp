@@ -96,7 +96,7 @@ module scattdata_class
       ! This test will leave this as uninitialized (and is_init == .false.),
       ! which will be used as a flag when the reactions are combined.
       ! Test reactions to ensure we have a scattering reaction.
-      if (.not. is_valid_scatter(rxn % MT)) return
+      if (.not. is_valid_scatter(rxn % MT, rxn % scatter_in_cm)) return
 
       ! Now, check edist, if passed, and ensure it is of the right law type
       ! before proceeding
@@ -165,7 +165,6 @@ module scattdata_class
           allocate(rxn % adist % data(2))
           rxn % adist % data = ZERO
           this % adist => rxn % adist
-          rxn % scatter_in_cm = .true.
         else
           this % adist => null()
           this % edist => edist ! We dont use rxn % edist because this allows
@@ -528,46 +527,58 @@ module scattdata_class
         if ((associated(this % adist)) .and. &
           (.not. associated(this % edist))) then
           if (Ein < this % freegas_cutoff) then
+            distro_lab = distro_int
             call integrate_freegas_leg(Ein, this % awr, this % kT, &
               distro_lab(:, 1), this % mu, this % E_bins, this % order, &
               result_distro)
             temp_Enorm = ONE
           else
+            if (this % rxn % scatter_in_cm) then
+              call cm2lab(Ein, this % rxn % Q_value, this % awr, this % mu, &
+                distro_int, distro_lab)
+            else
+              distro_lab = distro_int
+            end if
             call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
               this % E_bins, this % mu, interp, vals, bins, temp_Enorm)
             ! integrate according to scatt_type
             call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
               interp, vals, bins, this % order, result_distro)
           end if
-        else if ((associated(this % adist)) .and. &
-          (associated(this % edist))) then
-          distro_lab = distro_int
-          ! Here, we have angular info in adist, but it goes to a single energy
-          ! specified in edist. This is for level inelastic scattering and some
-          ! (n,xn) reactions.
-          if (this % edist % law == 3) then
-            ! To accomodate level inelastic scattering, we will find which
-            ! outgoing group gets the data,
-            ! and set up interp, vals, and bins, accordingly, then we can call
-            ! integrate_energyangle_file4.
-            call inelastic_level(this % awr, this % rxn % Q_value, Ein, &
-              this % E_bins, this % mu, interp, vals, bins, temp_Enorm)
-            call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
-              interp, vals, bins, this % order, result_distro)
-          else if (this % edist % law == 9) then
-            ! For these cases, we need to find out which outgoing groups get the
-            ! isotropic (and then converted from CM to Lab) angular
-            ! distribution data, which will be the same for each group.
-            ! The group transfer should also be normalized by the probability of
-            ! transfer to that group.
-            call law9_scatter_leg(distro_lab(:, 1), this % edist, Ein, &
-              this % E_bins, this % mu, this % order, result_distro, temp_Enorm)
-          end if
         else if (associated(this % edist)) then
-          ! 3) integrate according to scatt_type
-          call integrate_energyangle_file6_leg(distro_lab, this % mu, &
-            this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
-            this % E_bins, this % order, result_distro, temp_Enorm)
+          if (this % rxn % scatter_in_cm) then
+            ! Need code here
+            temp_Enorm = ONE
+          else
+            distro_lab = distro_int
+            if (associated(this % adist)) then
+              ! Here, we have angular info in adist, but it goes to a single energy
+              ! specified in edist. This is for level inelastic scattering and some
+              ! (n,xn) reactions.
+              if (this % edist % law == 3) then
+                ! To accomodate level inelastic scattering, we will find which
+                ! outgoing group gets the data,
+                ! and set up interp, vals, and bins, accordingly, then we can call
+                ! integrate_energyangle_file4.
+                call inelastic_level(this % awr, this % rxn % Q_value, Ein, &
+                  this % E_bins, this % mu, interp, vals, bins, temp_Enorm)
+                call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
+                  interp, vals, bins, this % order, result_distro)
+              else if (this % edist % law == 9) then
+                ! For these cases, we need to find out which outgoing groups
+                ! get the isotropic angular distribution data, which will be
+                ! the same for each group.
+                ! The group transfer should also be normalized by the prob. of
+                ! transfer to that group.
+                call law9_scatter_lab_leg(distro_lab(:, 1), this % edist, Ein, &
+                  this % E_bins, this % mu, this % order, result_distro, temp_Enorm)
+              end if
+            else
+              call integrate_energyangle_file6_leg(distro_lab, this % mu, &
+                this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
+                this % E_bins, this % order, result_distro, temp_Enorm)
+            end if
+          end if
         end if
       case (SCATT_TYPE_TABULAR)
 
@@ -1083,12 +1094,12 @@ module scattdata_class
     end subroutine inelastic_level
 
 !===============================================================================
-! LAW9_SCATTER_LEG Finds the legendre moments of the incoming adistro and
+! LAW9_SCATTER_LAB_LEG Finds the legendre moments of the incoming adistro and
 ! assigns the results to each of the outgoing energy groups (according to a
 ! law 9 evaporation spectrum) according to the probabilities.
 !===============================================================================
 
-    subroutine law9_scatter_leg(fmu, edist, Ein, E_bins, mu, order, distro, &
+    subroutine law9_scatter_lab_leg(fmu, edist, Ein, E_bins, mu, order, distro, &
       Enorm)
 
       real(8), intent(in)  :: fmu(:)      ! Angle distro to act on
@@ -1109,8 +1120,6 @@ module scattdata_class
       pE_xfer = ZERO
       Enorm = ZERO
 
-      ! First begin by calculating the group transfer probabilities
-
       ! read number of interpolation regions and incoming energies
       NR  = int(edist % data(1))
       NE  = int(edist % data(2 + 2*NR))
@@ -1127,6 +1136,7 @@ module scattdata_class
       U = edist % data(lc + 1)
       x = (Ein - U) / T
       I = T * T * (ONE - exp(-x) * (ONE + x))
+      if (U == Ein) return
       if (U < ZERO) U = Ein - U
       do g = 1, size(E_bins) - 1
         Egp1 = E_bins(g + 1)
@@ -1147,7 +1157,7 @@ module scattdata_class
         Enorm = Enorm + pE_xfer
       end do
 
-    end subroutine law9_scatter_leg
+    end subroutine law9_scatter_lab_leg
 
 !===============================================================================
 ! INTEGRATE_ENERGYANGLE_*_LEG Finds Legendre moments of the energy-angle
@@ -1339,14 +1349,15 @@ module scattdata_class
 ! IS_VALID_SCATTER determines if a given MT number is that of a scattering event
 !===============================================================================
 
-  function is_valid_scatter(MT) result(scatter_event)
+  function is_valid_scatter(MT, cm) result(scatter_event)
 
-    integer, intent(in) :: MT
+    integer, intent(in) :: MT ! Reaction channel
+    logical, intent(in) :: cm ! Is scatter in CM?
     logical             :: scatter_event
 
     if (MT < 100) then
       if (MT == N_FISSION .or. MT == N_F .or. MT == N_NF .or. MT == N_2NF &
-           .or. MT == N_3NF .or. MT == N_LEVEL) then
+           .or. MT == N_3NF .or. MT == N_LEVEL .or. MT == NONELASTIC) then
         scatter_event = .false.
       else
         scatter_event = .true.
@@ -1355,12 +1366,15 @@ module scattdata_class
       scatter_event = .false.
     end if
 
-    ! Lets disregard (n,xn), (n,xnyd), (n,xnya), (n,xnyp)
-    ! until CM to Lab equations can be verified (or found to only be reported
-    ! in lab system)
+    ! Lets disregard (n,xn), (n,xnyd), (n,xnya), (n,xnyp) in CM
+    ! until CM to Lab equations can be verified
     ! These are between MT==11 and MT==45 (inclusive)
     if ((MT >= N_2ND) .and. (MT <= N_NPA)) then
-      scatter_event = .false.
+      if (cm) then
+        scatter_event = .false.
+      else
+        scatter_event = .true.
+      end if
     end if
 
   end function is_valid_scatter

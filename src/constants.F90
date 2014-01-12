@@ -174,6 +174,7 @@ module constants
   integer, parameter :: &
        TOTAL_XS    = 1, &
        ELASTIC     = 2, &
+       NONELASTIC  = 3, &
        N_LEVEL     = 4, &
        MISC        = 5, &
        N_2ND       = 11, &

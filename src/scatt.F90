@@ -238,6 +238,14 @@ module scatt_class
             mySD => rxn_data(irxn)
             ! If we do not have a scatter reaction, don't score it.
             if (.not. mySD % is_init) cycle
+            ! Some reactions, ENDF-VII.0's Ca-40 e.g., have two angdist Ein
+            ! points in a row being the same value. Check for this and just skip
+            ! the first point
+            if (iE < mySD % NE) then
+              if (mySD % E_grid(iE) >= mySD % E_grid(iE + 1)) then
+                cycle
+              end if
+            end if
             ! Add the scattering distribution to the union scattering grid
             scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + &
               mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
