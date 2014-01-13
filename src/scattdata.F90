@@ -1369,11 +1369,13 @@ module scattdata_class
     ! Lets disregard (n,xn), (n,xnyd), (n,xnya), (n,xnyp) in CM
     ! until CM to Lab equations can be verified
     ! These are between MT==11 and MT==45 (inclusive)
-    if ((MT >= N_2ND) .and. (MT <= N_NPA)) then
-      if (cm) then
-        scatter_event = .false.
-      else
-        scatter_event = .true.
+    if (scatter_event) then
+      if ((MT >= N_2ND) .and. (MT <= N_NPA)) then
+        if (cm) then
+          scatter_event = .false.
+        else
+          scatter_event = .true.
+        end if
       end if
     end if
 
