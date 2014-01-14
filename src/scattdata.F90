@@ -247,7 +247,7 @@ module scattdata_class
       this % groups = size(E_bins) - 1
 
       ! The final initialization. If we made it here then this bad boy was
-      ! successful.
+      ! successful
       this % is_init = .true.
     end subroutine scatt_init
 
@@ -440,18 +440,42 @@ module scattdata_class
           distro = integrate_distro(this, Ein, iE, ONE, distro_int, Enorm)
 
         else ! Linear interpolation it is
-          ! Do the lower distribution
-          allocate(distro_int(size(this % distro(iE) % data, dim=1), &
-            size(this % distro(iE) % data, dim=2)))
-          distro_int = this % distro(iE) % data
-          distro = integrate_distro(this, Ein, iE, (ONE - f), distro_int, Enorm)
-          deallocate(distro_int)
-          ! Do the upper distribution
-          allocate(distro_int(size(this % distro(iE + 1) % data, dim=1), &
-            size(this % distro(iE + 1) % data, dim=2)))
-          distro_int = this % distro(iE + 1) % data
-          distro = distro + integrate_distro(this, Ein, iE + 1, f, distro_int, &
-            Enorm)
+          ! Unless we have a law 3 reaction, which Ein is calculated on the fly
+          ! so we dont have any interpolation at all
+          if (associated(this % edist)) then
+            if (this % edist % law == 3) then
+              allocate(distro_int(size(this % distro(iE) % data, dim=1), &
+              size(this % distro(iE) % data, dim=2)))
+              distro_int = this % distro(iE) % data
+              distro = integrate_distro(this, Ein, iE, ONE, distro_int, Enorm)
+            else
+              ! Do the lower distribution
+              allocate(distro_int(size(this % distro(iE) % data, dim=1), &
+                size(this % distro(iE) % data, dim=2)))
+              distro_int = this % distro(iE) % data
+              distro = integrate_distro(this, Ein, iE, (ONE - f), distro_int, Enorm)
+              deallocate(distro_int)
+              ! Do the upper distribution
+              allocate(distro_int(size(this % distro(iE + 1) % data, dim=1), &
+                size(this % distro(iE + 1) % data, dim=2)))
+              distro_int = this % distro(iE + 1) % data
+              distro = distro + integrate_distro(this, Ein, iE + 1, f, distro_int, &
+                Enorm)
+            end if
+          else
+            ! Do the lower distribution
+            allocate(distro_int(size(this % distro(iE) % data, dim=1), &
+              size(this % distro(iE) % data, dim=2)))
+            distro_int = this % distro(iE) % data
+            distro = integrate_distro(this, Ein, iE, (ONE - f), distro_int, Enorm)
+            deallocate(distro_int)
+            ! Do the upper distribution
+            allocate(distro_int(size(this % distro(iE + 1) % data, dim=1), &
+              size(this % distro(iE + 1) % data, dim=2)))
+            distro_int = this % distro(iE + 1) % data
+            distro = distro + integrate_distro(this, Ein, iE + 1, f, distro_int, &
+              Enorm)
+          end if
         end if
 
       end if
@@ -547,24 +571,25 @@ module scattdata_class
           end if
         else if (associated(this % edist)) then
           if (this % rxn % scatter_in_cm) then
-            ! Need code here
-            temp_Enorm = ONE
+            if (associated(this % adist)) then
+              if (this % edist % law == 3) then
+                distro_lab = distro_int
+                call law3_scatter_cm_leg(distro_lab(:, 1), this % edist, Ein, &
+                  this % awr, this % E_bins, this % mu, this % order, &
+                  result_distro, temp_Enorm)
+              end if
+            else
+              ! This case is not needed, at least for ENDF-VII.0 and -VII.1
+              distro_lab = distro_int
+              temp_Enorm = ONE
+            end if
           else
             distro_lab = distro_int
             if (associated(this % adist)) then
               ! Here, we have angular info in adist, but it goes to a single energy
               ! specified in edist. This is for level inelastic scattering and some
               ! (n,xn) reactions.
-              if (this % edist % law == 3) then
-                ! To accomodate level inelastic scattering, we will find which
-                ! outgoing group gets the data,
-                ! and set up interp, vals, and bins, accordingly, then we can call
-                ! integrate_energyangle_file4.
-                call inelastic_level(this % awr, this % rxn % Q_value, Ein, &
-                  this % E_bins, this % mu, interp, vals, bins, temp_Enorm)
-                call integrate_energyangle_file4_leg(distro_lab(:, 1), this % mu, &
-                  interp, vals, bins, this % order, result_distro)
-              else if (this % edist % law == 9) then
+              if (this % edist % law == 9) then
                 ! For these cases, we need to find out which outgoing groups
                 ! get the isotropic angular distribution data, which will be
                 ! the same for each group.
@@ -1046,52 +1071,73 @@ module scattdata_class
     end subroutine calc_mu_bounds
 
 !===============================================================================
-! INELASTIC_LEVEL Finds which group contains the inelastic level outgoing energy
+! LAW3_SCATTER_CM_LEG Finds which group contains the inelastic level outgoing energy
 ! and sets interp, vals, bins, and Enorm accordingly for later integration.
 !===============================================================================
 
-    subroutine inelastic_level(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
-      real(8), intent(in)  :: awr         ! Atomic-weight ratio
-      real(8), intent(in)  :: Q           ! Reaction Q-Value
+    subroutine law3_scatter_cm_leg(fmu, edist, Ein, awr, E_bins, mu, order, &
+                                   distro, Enorm)
+      real(8), intent(in)  :: fmu(:)      ! Angle distro to act on
+      type(DistEnergy), pointer, intent(in) :: edist ! My energy dist
       real(8), intent(in)  :: Ein         ! Incoming energy
+      real(8), intent(in)  :: awr         ! atomic weight ratio
       real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
-      real(8), intent(in)  :: mu(:)       ! tabular mu values
-      real(8), intent(out) :: interp(:,:) ! Outgoing mu interpolants
-                                          ! corresponding to the energy groups
-      real(8), intent(out) :: vals(:,:)   ! Outgoing mu values corresponding
-                                          ! to the energy groups
-      integer, intent(out) :: bins(:,:)   ! Outgoing mu indices corresponding
-                                          ! to the energy groups
+      real(8), intent(in)  :: mu(:)       ! fEmu angular grid
+      integer, intent(in)  :: order       ! Number of moments to find
+      real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
       real(8), intent(out) :: Enorm       ! Fraction of possible energy space
                                           ! of this Ein reaction represented by
                                           ! the energy group structure of the
                                           ! problem
 
-      integer :: g    ! Group index variable
-      real(8) :: Eout ! Deterministic outgoing energy
+      integer :: g, imu     ! Group index variable, mu point index
+      real(8) :: Eo_cm, Eo  ! CM Outgoing Energy, Lab outgoing energy
+      real(8) :: dEo        ! change in outgoing energy points
+      integer :: iE         ! Outgoing energy counter
+      real(8) :: mu_l, mu_c ! lab angle, cm angle
+      real(8) :: c          ! c from eq 359
+      integer :: NUM_E = 500 ! Number of Eout points per group
+      integer :: l          ! Scattering order counter
+      real(8) :: proby, f   ! fmu at mu_c, interpolant between fmu points
+      real(8) :: integ      ! the integrand
 
-      ! Calc Eout
-      Eout = ((awr / (awr + ONE)) ** 2) * (Ein - abs(Q) * (awr + ONE) / awr)
+      ! Calc Eout in CM
+      Eo_cm = edist % data(2) * (Ein - edist % data(1))
 
       ! Now find which group has Eout
       do g = 1, size(E_bins) - 1
-        if ((Eout > E_bins(g)) .and. (Eout <= E_bins(g + 1))) then
-          bins(MU_LO, g) = 1
-          vals(MU_LO, g) = -ONE
-          interp(MU_LO, g) = ZERO
-          bins(MU_HI, g) = size(mu) - 1
-          vals(MU_HI, g) = ONE
-          interp(MU_HI, g) = ONE
-          Enorm = ONE
-        else
-          bins(:, g) = size(mu) - 1
-          vals(:, g) = ONE
-          interp(:, g) = ONE
-          Enorm = ZERO
-        end if
+        dEo = (E_bins(g + 1) - E_bins(g)) / real(NUM_E - 1, 8)
+        Eo = E_bins(g) - dEo
+        do iE = 1, NUM_E
+          Eo = Eo + dEo
+          if (Eo == ZERO) cycle
+          c = sqrt(Ein / Eo) / (awr + ONE)
+          mu_c = sqrt(TWO * c * c + Eo_cm / Eo)
+          if ((mu_c < -ONE) .or. (mu_c > ONE)) then
+            cycle
+          end if
+          mu_l = (ONE + c * c - Eo_cm / Eo) / (TWO * c)
+          if ((mu_l < -ONE) .or. (mu_l > ONE)) then
+            cycle
+          end if
+          imu = binary_search(mu, size(mu), mu_c)
+          f = (mu_c - mu(imu)) / (mu(imu + 1) - mu(imu))
+          proby =(ONE - f) * fmu(imu) + f * fmu(imu + 1)
+          do l = 1, order
+            integ = -0.5_8 * calc_pn(l - 1, mu_l) * sqrt(Eo / Eo_cm) / (c * Eo)
+            if ((iE == 1) .or. (iE == NUM_E)) then
+              distro(:, g) = distro(:, g) + integ
+            else
+              distro(:, g) = distro(:, g) + TWO * integ
+            end if
+          end do
+        end do
+        distro(:, g) = distro(:, g) * (E_bins(g + 1) - E_bins(g)) / &
+          real(2 * NUM_E, 8)
       end do
+      Enorm = ONE
 
-    end subroutine inelastic_level
+    end subroutine law3_scatter_cm_leg
 
 !===============================================================================
 ! LAW9_SCATTER_LAB_LEG Finds the legendre moments of the incoming adistro and
