@@ -110,7 +110,7 @@ module scatt_class
       end if
 
       ! Now combine the results on to E_grid
-      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
+      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, energy_bins, scatt_mat)
 
       ! Now clear rxn_datas members
       do i_rxn = 1, num_tot_rxn
@@ -189,11 +189,12 @@ module scatt_class
 ! energy grid.
 !===============================================================================
 
-    subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
+    subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, E_bins, scatt_mat)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
       type(ScattData), intent(inout), target :: rxn_data(:) ! The converted distros
       real(8), allocatable, intent(in)     :: E_grid(:) ! Ein grid
+      real(8), intent(in)                  :: E_bins(:) ! Energy groups
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
 
       integer :: iE, NE                          ! Ein counter, # Ein
@@ -231,7 +232,7 @@ module scatt_class
           end if
         end if
 #endif
-        if (E_grid(iE) <= rxn_data(1) % E_bins(size(rxn_data(1) % E_bins))) then
+        if (E_grid(iE) <= E_bins(size(E_bins))) then
           scatt_mat(:, :, iE) = ZERO
           norm_tot = ZERO
           do irxn = 1, Nrxn
