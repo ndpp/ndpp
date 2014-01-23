@@ -30,7 +30,7 @@ module scatt_class
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
-      integer, intent(in)                 :: order          ! Scattering data order
+      integer, intent(inout)              :: order          ! Scattering data order
       real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
       integer, intent(in)                 :: mu_bins        ! Number of angular points
                                                             ! to use during f_{n,MT} conversion
@@ -107,10 +107,13 @@ module scatt_class
         do imu = 1, order
           mu_out(imu) = -ONE + real(imu - 1, 8) * dmu
         end do
+      else
+        order = order + 1
       end if
 
       ! Now combine the results on to E_grid
-      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, energy_bins, scatt_mat)
+      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, order, energy_bins, &
+                           scatt_mat)
 
       ! Now clear rxn_datas members
       do i_rxn = 1, num_tot_rxn
@@ -189,25 +192,25 @@ module scatt_class
 ! energy grid.
 !===============================================================================
 
-    subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, E_bins, scatt_mat)
+    subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, order, E_bins, scatt_mat)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
       type(ScattData), intent(inout), target :: rxn_data(:) ! The converted distros
       real(8), allocatable, intent(in)     :: E_grid(:) ! Ein grid
+      integer, intent(in)                  :: order     ! Angular order
       real(8), intent(in)                  :: E_bins(:) ! Energy groups
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
 
-      integer :: iE, NE                          ! Ein counter, # Ein
-      integer :: irxn, Nrxn                      ! reaction counter, # Reactions
-      integer :: groups, order                   ! # Groups, # Orders
+      integer :: iE, NE              ! Ein counter, # Ein
+      integer :: irxn, Nrxn          ! reaction counter, # Reactions
+      integer :: groups              ! # Groups
       type(ScattData), pointer, SAVE :: mySD => NULL() ! Current working ScattData object
-      real(8) :: norm_tot                        ! Sum of all normalization consts
-      integer :: iE_print                 ! iE range to print status of
-      integer :: iE_pct, last_iE_pct      ! Current and previous pct complete
+      real(8) :: norm_tot            ! Sum of all normalization consts
+      integer :: iE_print            ! iE range to print status of
+      integer :: iE_pct, last_iE_pct ! Current and previous pct complete
 
 
-      groups = rxn_data(1) % groups
-      order = rxn_data(1) % order
+      groups = size(E_bins) - 1
       NE = size(E_grid)
       Nrxn = size(rxn_data)
       iE_print = NE / 20

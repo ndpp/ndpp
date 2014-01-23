@@ -394,7 +394,7 @@ module scattdata_class
       end if
 
       ! Get sigS and the integrated distro
-      if (((Ein < nuc % energy(rxn % threshold)) .and. &
+      if (((Ein <= nuc % energy(rxn % threshold)) .and. &
           (rxn % threshold > 1)) .or. &
         (Ein > this % E_bins(size(this % E_bins)))) then
         ! This is a catch-all, our energy was below the threshold or above the
@@ -429,6 +429,17 @@ module scattdata_class
         nuc_iE = nuc_iE - rxn % threshold + 1
         sigS = (ONE - f) * sigS_array(nuc_iE) + f * sigS_array(nuc_iE + 1)
 
+        ! Some reactions have an upper limit on reactions (set by NJOY thresholds)
+        ! So, if sigS is zero, (and we already checked for below threshold)
+        ! we know that we are above the threshold and can just stop processing
+        ! this particular Ein.
+        ! One would think that we can stop processing this MT altogether, but
+        ! its possible that a x/s was just set to 0 for this particular pt because
+        ! its value was below the threshold (perhaps in a resonance dip?)
+        if (sigs == ZERO) then
+          distro = ZERO
+          return
+        end if
         ! Search on the angular distribution's energy grid to find what energy
         ! index Ein is at.
         if (Ein < this % E_grid(1)) then
@@ -495,7 +506,7 @@ module scattdata_class
       ! Add this contribution to the normalization constant
       ! divide by multiplicity since we dont want to take that in to account
       ! when normalizing
-      norm_tot = norm_tot + sigS! / real(rxn % multiplicity, 8)
+      norm_tot = norm_tot + sigS / real(rxn % multiplicity, 8)
 
     end function scatt_interp_distro
 
@@ -559,17 +570,17 @@ module scattdata_class
           end if
         else if (associated(this % edist)) then
           if (this % rxn % scatter_in_cm) then
-            if (associated(this % adist)) then
-              if (this % edist % law == 3) then
+            if (this % law == 3) then
                 distro_lab = distro_int
                 call law3_scatter_cm_leg(distro_lab(:, 1), this % edist, Ein, &
                   this % awr, this % E_bins, this % mu, this % order, &
                   result_distro, temp_Enorm)
-              end if
             else
               distro_lab = distro_int
-              temp_Enorm = ONE
-              call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
+              !call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
+              !  this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
+              !  this % E_bins, this % order, result_distro, temp_Enorm)
+              call integrate_file6_lab_leg(distro_lab, this % mu, &
                 this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
                 this % E_bins, this % order, result_distro, temp_Enorm)
             end if
@@ -1085,9 +1096,8 @@ module scattdata_class
       real(8) :: dEo        ! change in outgoing energy points
       integer :: iE         ! Outgoing energy counter
       real(8) :: mu_l, mu_c ! lab angle, cm angle
-      real(8) :: mu_l_min   ! Minimum lab angle
       real(8) :: c          ! c from eq 359
-      integer :: NUM_E = 50 ! Number of Eout points per group
+      integer :: NUM_E = 10 ! Number of Eout points per group
       integer :: l          ! Scattering order counter
       real(8) :: proby, f   ! fmu at mu_c, interpolant between fmu points
       real(8) :: integ      ! the integrand
@@ -1095,28 +1105,31 @@ module scattdata_class
       real(8) :: Eo_lo, Eo_hi ! Laboratory Eout bounds
       integer :: g_lo, g_hi ! Lower and upper groups
       real(8), allocatable :: E_bnds(:)
+      real(8) :: ap1inv     ! 1/(AWR+1)
+
+      ap1inv = ONE / (awr + ONE)
 
       Eo_cm = edist % data(2) * (Ein - edist % data(1))
-      Eo_lo = Eo_cm + (Ein - TWO * (awr + ONE) * sqrt(Ein * Eo_cm)) / &
-        ((awr + ONE)**2)
-      Eo_hi = Eo_cm + (Ein + TWO * (awr + ONE) * sqrt(Ein * Eo_cm)) / &
-        ((awr + ONE)**2)
+      Eo_lo = Ein * (sqrt(Eo_cm / Ein) - ap1inv)**2
+      Eo_hi = Ein * (sqrt(Eo_cm / Ein) + ap1inv)**2
 
       ! To find Enorm (the total prob'y encapsulated by lower and upper group bnds)
       ! we will solve for mu_l at E_bins(1) and E_bins(size(E_bins)),
       ! and find the fraction of mu_l=[-1,1] that is spanned by this domain.
       ! If this is larger than one, then the energy groups more than cover it.
-      c = sqrt(Ein / E_bins(size(E_bins))) / (awr + ONE)
-      Enorm = (ONE + c *c - E_bins(size(E_bins)) / Eo_cm) / (TWO * c)
+      c = ap1inv * sqrt(Ein / E_bins(size(E_bins)))
+      Enorm = 0.5_8 * (ONE + c * c - Eo_cm / E_bins(size(E_bins))) / c
       if (E_bins(1) == ZERO) then
         Enorm = Enorm + ONE
       else
-        c = sqrt(Ein / E_bins(1)) / (awr + ONE)
-        Enorm = Enorm - (ONE + c *c - E_bins(1) / Eo_cm) / (TWO * c)
+        c = ap1inv * sqrt(Ein / E_bins(1))
+        Enorm = Enorm - 0.5_8 * (ONE + c * c - Eo_cm / E_bins(1)) / c
       end if
-      Enorm = 0.5_8 * Enorm
-      if (Enorm > ONE) Enorm = ONE
-      Enorm = ONE
+      if (abs(Enorm) > TWO) then
+        Enorm = ONE
+      else
+        Enorm = 0.5_8 * Enorm ! Divide by total span of mu_l (1-(-1))
+      end if
 
       g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
       g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
@@ -1129,25 +1142,42 @@ module scattdata_class
         Eo = E_bnds(g)
         dEo = (E_bnds(g + 1) - E_bnds(g)) / real(NUM_E - 1, 8)
         do iE = 1, NUM_E
+          ! Adjust Eo to be the top value so that the if Eo==Eo_hi check
+          ! will work despite FP precision issues
+          if (iE == NUM_E) Eo = E_bnds(g + 1)
+          ! Now that we have Ein, Eo, and Eo_cm, find c, mu_l, mu_c, J
+          c = ap1inv * sqrt(Ein / Eo)
           J = sqrt(Eo / Eo_cm)
-          c = sqrt(Ein / Eo) / (awr + ONE)
-          mu_l = (ONE + c *c - Eo / Eo_cm) / (TWO * c)
-          mu_c = (mu_l - c) * J
-          if (mu_c < -ONE) cycle
-          if (mu_c >  ONE) cycle
-          imu_c = binary_search(mu, size(mu), mu_c)
-          f = (mu_c - mu(imu_c)) / (mu(imu_c + 1) - mu(imu_c))
-          proby = (ONE - f) * fmu(imu_c) + f * fmu(imu_c + 1)
+          if (Eo == Eo_lo) then
+            mu_l = 0.5_8 * (ONE + c * c - Eo_cm / Eo) / c
+            mu_c = -ONE
+          else if (Eo == Eo_hi) then
+            mu_l = 0.5_8 * (ONE + c * c - Eo_cm / Eo) / c
+            mu_c = ONE
+          else
+            mu_l = 0.5_8 * (ONE + c * c - Eo_cm / Eo) / c
+            mu_c = J * (mu_l - c)
+          end if
+          ! Now we can find fmu(mu=mu_c), using lin-lin interpolation
+          if (mu_c == -ONE) then
+            proby = fmu(1)
+          else if (mu_c == ONE) then
+            proby = fmu(size(mu))
+          else
+            imu_c = binary_search(mu, size(mu), mu_c)
+            f = (mu_c - mu(imu_c)) / (mu(imu_c + 1) - mu(imu_c))
+            proby = (ONE - f) * fmu(imu_c) + f * fmu(imu_c + 1)
+          end if
           integ = proby * J
-          if ((iE /= 1) .and. (iE /= NUM_E)) then
+          if ((iE > 1) .and. (iE < NUM_E)) then
             integ = TWO * integ
           end if
           do l = 1, order
-            distro(l, g) = distro(l, g) + integ * calc_pn(l - 1, mu_l)
+            distro(:, g) = distro(:, g) + integ * calc_pn(l - 1, mu_l)
           end do
           Eo = Eo + dEo
         end do
-        distro(:, g) = distro(:, g) * 0.5_8 * dEo
+        distro(:, g) = distro(:, g) * dEo * 0.5_8
       end do
 
     end subroutine law3_scatter_cm_leg
@@ -1179,7 +1209,7 @@ module scattdata_class
       real(8) :: Eo_cm, Eo  ! CM Outgoing Energy, Lab outgoing energy
       real(8) :: dEo        ! change in outgoing energy points
       integer :: iE         ! Outgoing energy counter
-      real(8) :: mu_l, mu_c ! lab angle, cm angle
+      real(8) :: mu_c ! cm angle
       real(8) :: mu_l_min   ! Minimum lab angle
       real(8) :: dmu        ! change in lab angle
       real(8) :: c          ! c from eq 359
@@ -1196,9 +1226,12 @@ module scattdata_class
       real(8)              :: fEo    ! interpolant for Eo on Eout grid
       integer :: g_lo, g_hi ! Lower and upper groups
       real(8), allocatable :: E_bnds(:)
+      real(8), allocatable :: fmu(:), mu_l(:)
 
       Enorm = ONE
       allocate(fEl(order))
+      allocate(fmu(size(mu)))
+      allocate(mu_l(size(mu)))
 
       ! First lets normalize the PDF
       allocate(pdf(size(Eout)))
@@ -1208,10 +1241,10 @@ module scattdata_class
       end do
 
       ! Set up lower and upper lab energy boundaries
-      Eo_lo = Eout(1) + (Ein - TWO * (awr + ONE) * sqrt(Ein * Eout(1))) / &
-        ((awr + ONE)**2)
+      Eo_lo = Eout(1) + (Ein - TWO * (awr + ONE) * sqrt(Ein * Eout(1))) &
+        / ((awr + ONE)*(awr + ONE))
       Eo_hi = Eout(size(Eout)) + (Ein + TWO * (awr + ONE) * &
-        sqrt(Ein * Eout(size(Eout)))) / ((awr + ONE)**2)
+        sqrt(Ein * Eout(size(Eout)))) / ((awr + ONE)*(awr + ONE))
 
       g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
       g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
@@ -1223,54 +1256,47 @@ module scattdata_class
       do g = g_lo, g_hi
         Eo = E_bnds(g)
         dEo = (E_bnds(g + 1) - E_bnds(g)) / real(NUM_E - 1, 8)
+        Eo = Eo - dEo
         do iE = 1, NUM_E
-          if (Eo <= Eout(1)) then
-            Eo = Eo + dEo
-            cycle
-          else if (Eo >= Eout(size(Eout))) then
-            Eo = Eo + dEo
-            cycle
-          else
-            iEo = binary_search(Eout, size(Eout), Eo)
-          end if
-          if (INTT == HISTOGRAM) then
-            fEo = ZERO
-            pEo = pdf(iEo)
-          else
-            fEo = (Eo - Eout(iEo)) / (Eout(iEo + 1) - Eout(iEo))
-            pEo = (ONE - fEo) * pdf(iEo) + fEo * pdf(iEo + 1)
-          end if
-          fEl = zero
+          Eo = Eo + dEo
+          fEl = ZERO
+          fmu = ZERO
           c = sqrt(Ein / Eo) / (awr + ONE)
-          mu_l = (ONE + c * c - Eout(size(Eout)) / Eo_hi) / (TWO * c)
-          if (mu_l < -ONE) then
-            mu_l = -ONE
-          else if (mu_l >= ONE) then
-            Eo = Eo + dEo
+          mu_l_min = (ONE + c * c - Eout(size(Eout)) / Eo) / (TWO * c)
+          if (mu_l_min < -ONE) then
+            mu_l_min = -ONE
+          else if (mu_l_min >= ONE) then
             cycle
           end if
-          dmu = (ONE - mu_l) / real(size(mu) - 1, 8)
+          dmu = (ONE - mu_l_min) / real(size(mu) - 1, 8)
           do imu = 1, size(mu)
-            Eo_cm = Eo * (ONE + c * c - TWO * c * mu_l)
+            mu_l(imu) = mu_l_min + dmu * real(imu - 1, 8)
+            Eo_cm = Eo * (ONE + c * c - TWO * c * mu_l(imu))
+            if (Eo_cm <= ZERO) cycle
+            if (Eo_cm <= Eout(1)) then
+              iEo = 1
+            else if (Eo_cm >= Eout(size(Eout))) then
+              iEo = size(Eout) - 1
+            else
+              iEo = binary_search(Eout, size(Eout), Eo_cm)
+            end if
+            if (INTT == HISTOGRAM) then
+              fEo = ZERO
+              pEo = pdf(iEo)
+            else
+              fEo = (Eo_cm - Eout(iEo)) / (Eout(iEo + 1) - Eout(iEo))
+              pEo = (ONE - fEo) * pdf(iEo) + fEo * pdf(iEo + 1)
+            end if
             J = sqrt(Eo / Eo_cm)
-            if (mu_l == -ONE) then
+            if (mu_l(imu) == -ONE) then
               mu_c = -ONE
-            else if (mu_l == ONE) then
+            else if (mu_l(imu) == ONE) then
               mu_c = ONE
             else
-              mu_c = (mu_l - c) * J
-              if (abs(mu_c) > ONE) then
-                mu_l = mu_l + dmu
-                cycle
-              end if
+              mu_c = (mu_l(imu) - c) * J
+              if (abs(mu_c) > ONE) cycle
             end if
-            if (mu_c < -ONE) then
-              mu_l = mu_l + dmu
-              cycle
-            else if (mu_c > ONE) then
-              mu_l = mu_l + dmu
-              cycle
-            end if
+            if ((mu_c < -ONE) .or. (mu_c > ONE)) cycle
             imu_c = binary_search(mu, size(mu), mu_c)
             f = (mu_c - mu(imu_c)) / (mu(imu_c + 1) - mu(imu_c))
             ! Do lower Eout point
@@ -1279,24 +1305,21 @@ module scattdata_class
             ! And now the upper
             proby = proby + fEo * &
               ((ONE - f) * fEmu(imu_c, iEo + 1) + f * fEmu(imu_c + 1, iEo + 1))
-            integ = proby * J * dmu
-            if ((imu /= 1) .and. (imu /= size(mu))) then
-              integ = TWO * integ
-            end if
-            do l = 1, order
-              fEl(l) = fEl(l) + integ * calc_pn(l - 1, mu_l)
-            end do
-            mu_l = mu_l + dmu
+            integ = proby * J
+            fmu(imu) = integ
           end do
-!write(17,*) Eo, pEo * fEl(1)
+          do imu = 1, size(mu) - 1
+            fEl = fEl + &
+              calc_int_pn_tablelin(order, mu_l(imu), mu_l(imu + 1), &
+              fmu(imu), fmu(imu + 1))
+          end do
           if ((iE /= 1) .and. (iE /= NUM_E)) then
             distro(:, g) = distro(:, g) + TWO * pEo * fEl(:)
           else
             distro(:, g) = distro(:, g) + pEo * fEl(:)
           end if
-          Eo = Eo + dEo
         end do
-        distro(:, g) = distro(:, g) * 0.25_8 * dEo
+        distro(:, g) = distro(:, g) * dEo *0.5_8
       end do
 
     end subroutine integrate_file6_cm_leg
@@ -1570,6 +1593,10 @@ module scattdata_class
     else
       scatter_event = .false.
     end if
+
+if ((MT == N_2N) .or. (MT == N_3N) .or. (MT == N_4N)) scatter_event = .false.
+if (MT == N_NC) scatter_event = .false.
+if (MT == ELASTIC) scatter_event = .false.
 
   end function is_valid_scatter
 
