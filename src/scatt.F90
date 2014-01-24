@@ -45,6 +45,7 @@ module scatt_class
       type(ScattData), allocatable, target  :: rxn_data(:)
       type(ScattData), pointer :: mySD
       real(8), allocatable     :: mu_out(:) ! The tabular output mu grid
+      type(ScattData), pointer :: inittedSD => null()
 
       ! This routine will parse through each nuc % reaction entry.
       ! For each, it will determine if the rxn is a scattering reaction, and if
@@ -91,6 +92,7 @@ module scatt_class
               mu_bins)
           end do
         end if
+        if (mySD % is_init) inittedSD => rxn_data(i_nested_rxn)
       end do
 
       do i_rxn = 1, num_tot_rxn
@@ -107,13 +109,11 @@ module scatt_class
         do imu = 1, order
           mu_out(imu) = -ONE + real(imu - 1, 8) * dmu
         end do
-      else
-        order = order + 1
       end if
 
       ! Now combine the results on to E_grid
-      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, order, energy_bins, &
-                           scatt_mat)
+      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
+                           energy_bins, scatt_mat)
 
       ! Now clear rxn_datas members
       do i_rxn = 1, num_tot_rxn
@@ -176,7 +176,6 @@ module scatt_class
         ! call integrate_sab_el_tab(sab, energy_bins, scatt_type, order, sab_int(1))
         ! call integrate_sab_inel_tab(sab, energy_bins, scatt_type, order, sab_int(2))
       end if
-
 
       ! Now combine the results on to E_grid
       call combine_sab_grid(sab_int_el, sab_int_inel, sig_el, sig_inel, &
@@ -242,6 +241,7 @@ module scatt_class
             mySD => rxn_data(irxn)
             ! If we do not have a scatter reaction, don't score it.
             if (.not. mySD % is_init) cycle
+
             ! Some reactions, ENDF-VII.0's Ca-40 e.g., have two angdist Ein
             ! points in a row being the same value. Check for this and just skip
             ! the first point
@@ -256,8 +256,8 @@ module scatt_class
           end do
 
           ! Normalize for later multiplication in the MC code
-          if (norm_tot == ZERO) norm_tot = ONE
-          scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
+          !if (norm_tot == ZERO) norm_tot = ONE
+          !scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
         else
           ! This step is taken so that interpolation works OK if the MC code
           ! has a particle with an energy == the top energy group value.

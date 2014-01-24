@@ -499,14 +499,14 @@ module scattdata_class
       ! from all energies to the energy range represented in the outgoing groups
 
       ! Combine the terms in to one before multiplying
-      sigS = sigS * p_valid * real(rxn % multiplicity, 8)
+      sigS = sigS * p_valid! * real(rxn % multiplicity, 8)
       do g = 1, this % groups
         distro(:, g) = distro(:, g) * sigS
       end do
       ! Add this contribution to the normalization constant
       ! divide by multiplicity since we dont want to take that in to account
       ! when normalizing
-      norm_tot = norm_tot + sigS / real(rxn % multiplicity, 8)
+      norm_tot = norm_tot + sigS! / real(rxn % multiplicity, 8)
 
     end function scatt_interp_distro
 
@@ -577,12 +577,12 @@ module scattdata_class
                   result_distro, temp_Enorm)
             else
               distro_lab = distro_int
-              !call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
-              !  this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
-              !  this % E_bins, this % order, result_distro, temp_Enorm)
-              call integrate_file6_lab_leg(distro_lab, this % mu, &
+              call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
                 this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
                 this % E_bins, this % order, result_distro, temp_Enorm)
+              !call integrate_file6_lab_leg(distro_lab, this % mu, &
+              !  this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
+              !  this % E_bins, this % order, result_distro, temp_Enorm)
             end if
           else
             distro_lab = distro_int
@@ -1106,6 +1106,10 @@ module scattdata_class
       integer :: g_lo, g_hi ! Lower and upper groups
       real(8), allocatable :: E_bnds(:)
       real(8) :: ap1inv     ! 1/(AWR+1)
+      real(8), allocatable :: fmus(:), mus(:)
+
+      allocate(fmus(NUM_E))
+      allocate(mus(NUM_E))
 
       ap1inv = ONE / (awr + ONE)
 
@@ -1139,6 +1143,8 @@ module scattdata_class
       E_bnds(g_hi + 1) = Eo_hi
 
       do g = g_lo, g_hi
+        fmus = ZERO
+        mus = ZERO
         Eo = E_bnds(g)
         dEo = (E_bnds(g + 1) - E_bnds(g)) / real(NUM_E - 1, 8)
         do iE = 1, NUM_E
@@ -1169,15 +1175,14 @@ module scattdata_class
             proby = (ONE - f) * fmu(imu_c) + f * fmu(imu_c + 1)
           end if
           integ = proby * J
-          if ((iE > 1) .and. (iE < NUM_E)) then
-            integ = TWO * integ
-          end if
-          do l = 1, order
-            distro(:, g) = distro(:, g) + integ * calc_pn(l - 1, mu_l)
-          end do
+          mus(iE) = mu_l
+          fmus(iE) = integ
           Eo = Eo + dEo
         end do
-        distro(:, g) = distro(:, g) * dEo * 0.5_8
+        do iE = 1, NUM_E - 1
+          distro(:, g) = distro(:, g) + calc_int_pn_tablelin(order, mus(iE), &
+            mus(iE + 1), fmus(iE), fmus(iE + 1))
+        end do
       end do
 
     end subroutine law3_scatter_cm_leg
@@ -1213,7 +1218,7 @@ module scattdata_class
       real(8) :: mu_l_min   ! Minimum lab angle
       real(8) :: dmu        ! change in lab angle
       real(8) :: c          ! c from eq 359
-      integer :: NUM_E = 10 ! Number of Eout points per group
+      integer :: NUM_E = 200 ! Number of Eout points per group
       integer :: l          ! Scattering order counter
       real(8) :: proby, f   ! fmu at mu_c, interpolant between fmu points
       real(8) :: integ      ! the integrand
@@ -1226,12 +1231,15 @@ module scattdata_class
       real(8)              :: fEo    ! interpolant for Eo on Eout grid
       integer :: g_lo, g_hi ! Lower and upper groups
       real(8), allocatable :: E_bnds(:)
+      real(8) :: ap1inv     ! 1/(AWR+1)
       real(8), allocatable :: fmu(:), mu_l(:)
 
       Enorm = ONE
       allocate(fEl(order))
       allocate(fmu(size(mu)))
       allocate(mu_l(size(mu)))
+
+      ap1inv = ONE / (awr + ONE)
 
       ! First lets normalize the PDF
       allocate(pdf(size(Eout)))
@@ -1242,9 +1250,9 @@ module scattdata_class
 
       ! Set up lower and upper lab energy boundaries
       Eo_lo = Eout(1) + (Ein - TWO * (awr + ONE) * sqrt(Ein * Eout(1))) &
-        / ((awr + ONE)*(awr + ONE))
+        * ap1inv * ap1inv
       Eo_hi = Eout(size(Eout)) + (Ein + TWO * (awr + ONE) * &
-        sqrt(Ein * Eout(size(Eout)))) / ((awr + ONE)*(awr + ONE))
+        sqrt(Ein * Eout(size(Eout)))) * ap1inv * ap1inv
 
       g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
       g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
@@ -1261,11 +1269,14 @@ module scattdata_class
           Eo = Eo + dEo
           fEl = ZERO
           fmu = ZERO
-          c = sqrt(Ein / Eo) / (awr + ONE)
+          c = ap1inv * sqrt(Ein / Eo)
           mu_l_min = (ONE + c * c - Eout(size(Eout)) / Eo) / (TWO * c)
           if (mu_l_min < -ONE) then
             mu_l_min = -ONE
-          else if (mu_l_min >= ONE) then
+          else if (abs(mu_l_min - ONE) < 1E-10_8) then
+            mu_l_min = ONE
+          else if (mu_l_min > ONE) then
+            Eo = Eo + dEo
             cycle
           end if
           dmu = (ONE - mu_l_min) / real(size(mu) - 1, 8)
@@ -1305,7 +1316,7 @@ module scattdata_class
             ! And now the upper
             proby = proby + fEo * &
               ((ONE - f) * fEmu(imu_c, iEo + 1) + f * fEmu(imu_c + 1, iEo + 1))
-            integ = proby * J
+            integ = proby * J * pEo
             fmu(imu) = integ
           end do
           do imu = 1, size(mu) - 1
@@ -1314,12 +1325,12 @@ module scattdata_class
               fmu(imu), fmu(imu + 1))
           end do
           if ((iE /= 1) .and. (iE /= NUM_E)) then
-            distro(:, g) = distro(:, g) + TWO * pEo * fEl(:)
+            distro(:, g) = distro(:, g) + TWO * fEl(:)
           else
-            distro(:, g) = distro(:, g) + pEo * fEl(:)
+            distro(:, g) = distro(:, g) + fEl(:)
           end if
         end do
-        distro(:, g) = distro(:, g) * dEo *0.5_8
+        distro(:, g) = distro(:, g) * dEo * 0.5_8
       end do
 
     end subroutine integrate_file6_cm_leg
@@ -1593,11 +1604,6 @@ module scattdata_class
     else
       scatter_event = .false.
     end if
-
-if ((MT == N_2N) .or. (MT == N_3N) .or. (MT == N_4N)) scatter_event = .false.
-if (MT == N_NC) scatter_event = .false.
-if (MT == ELASTIC) scatter_event = .false.
-
   end function is_valid_scatter
 
 end module scattdata_class
