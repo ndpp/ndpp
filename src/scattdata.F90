@@ -1097,7 +1097,6 @@ module scattdata_class
       integer :: iE         ! Outgoing energy counter
       real(8) :: mu_l, mu_c ! lab angle, cm angle
       real(8) :: c          ! c from eq 359
-      integer :: NUM_E = 10 ! Number of Eout points per group
       integer :: l          ! Scattering order counter
       real(8) :: proby, f   ! fmu at mu_c, interpolant between fmu points
       real(8) :: integ      ! the integrand
@@ -1106,10 +1105,14 @@ module scattdata_class
       integer :: g_lo, g_hi ! Lower and upper groups
       real(8), allocatable :: E_bnds(:)
       real(8) :: ap1inv     ! 1/(AWR+1)
-      real(8), allocatable :: fmus(:), mus(:)
+      real(8), allocatable :: fmus(:), mus(:) ! Arrays to store all results so we
+      ! can use the linear-interpolation based legendre integration routines
+      real(8) :: norm_sum
 
-      allocate(fmus(NUM_E))
-      allocate(mus(NUM_E))
+      norm_sum = ZERO
+
+      allocate(fmus(NE_PER_GRP))
+      allocate(mus(NE_PER_GRP))
 
       ap1inv = ONE / (awr + ONE)
 
@@ -1146,22 +1149,20 @@ module scattdata_class
         fmus = ZERO
         mus = ZERO
         Eo = E_bnds(g)
-        dEo = (E_bnds(g + 1) - E_bnds(g)) / real(NUM_E - 1, 8)
-        do iE = 1, NUM_E
+        dEo = (E_bnds(g + 1) - E_bnds(g)) / real(NE_PER_GRP - 1, 8)
+        do iE = 1, NE_PER_GRP
           ! Adjust Eo to be the top value so that the if Eo==Eo_hi check
           ! will work despite FP precision issues
-          if (iE == NUM_E) Eo = E_bnds(g + 1)
+          if (iE == NE_PER_GRP) Eo = E_bnds(g + 1)
           ! Now that we have Ein, Eo, and Eo_cm, find c, mu_l, mu_c, J
           c = ap1inv * sqrt(Ein / Eo)
           J = sqrt(Eo / Eo_cm)
+          mu_l = 0.5_8 * (ONE + c * c - Eo_cm / Eo) / c
           if (Eo == Eo_lo) then
-            mu_l = 0.5_8 * (ONE + c * c - Eo_cm / Eo) / c
             mu_c = -ONE
           else if (Eo == Eo_hi) then
-            mu_l = 0.5_8 * (ONE + c * c - Eo_cm / Eo) / c
             mu_c = ONE
           else
-            mu_l = 0.5_8 * (ONE + c * c - Eo_cm / Eo) / c
             mu_c = J * (mu_l - c)
           end if
           ! Now we can find fmu(mu=mu_c), using lin-lin interpolation
@@ -1179,10 +1180,17 @@ module scattdata_class
           fmus(iE) = integ
           Eo = Eo + dEo
         end do
-        do iE = 1, NUM_E - 1
+        do iE = 1, NE_PER_GRP - 1
           distro(:, g) = distro(:, g) + calc_int_pn_tablelin(order, mus(iE), &
             mus(iE + 1), fmus(iE), fmus(iE + 1))
         end do
+        norm_sum = norm_sum + distro(1, g)
+      end do
+
+      ! Now normalize the results so the integral over all groups is 1.
+      !!! Frankly, I'm not sure why this is needed.
+      do g = g_lo, g_hi
+        distro(:, g) = distro(:, g) / norm_sum
       end do
 
     end subroutine law3_scatter_cm_leg
@@ -1214,18 +1222,16 @@ module scattdata_class
       real(8) :: Eo_cm, Eo  ! CM Outgoing Energy, Lab outgoing energy
       real(8) :: dEo        ! change in outgoing energy points
       integer :: iE         ! Outgoing energy counter
-      real(8) :: mu_c ! cm angle
+      real(8) :: mu_c       ! cm angle
       real(8) :: mu_l_min   ! Minimum lab angle
       real(8) :: dmu        ! change in lab angle
       real(8) :: c          ! c from eq 359
-      integer :: NUM_E = 200 ! Number of Eout points per group
       integer :: l          ! Scattering order counter
       real(8) :: proby, f   ! fmu at mu_c, interpolant between fmu points
       real(8) :: integ      ! the integrand
       real(8) :: J          ! the jacobian
       real(8) :: Eo_lo, Eo_hi ! Laboratory Eout bounds
       real(8), allocatable :: fEl(:) ! Integrated (over mu) fEmu
-      real(8), allocatable :: pdf(:) ! Eout probability distrib.
       real(8)              :: pEo    ! probability of this Eo value
       integer              :: iEo    ! Index of Eout array of current Eo
       real(8)              :: fEo    ! interpolant for Eo on Eout grid
@@ -1233,6 +1239,17 @@ module scattdata_class
       real(8), allocatable :: E_bnds(:)
       real(8) :: ap1inv     ! 1/(AWR+1)
       real(8), allocatable :: fmu(:), mu_l(:)
+      real(8), allocatable :: pdf(:) ! Unnormalized PDF
+      real(8) :: norm_sum
+
+      norm_sum = ZERO
+
+      ! First lets normalize the PDF
+      allocate(pdf(size(Eout)))
+      pdf = thispdf
+      do iE = 1, size(Eout) - 1
+        pdf(iE) = thispdf(iE) * (Eout(iE + 1) - Eout(iE))
+      end do
 
       Enorm = ONE
       allocate(fEl(order))
@@ -1240,13 +1257,6 @@ module scattdata_class
       allocate(mu_l(size(mu)))
 
       ap1inv = ONE / (awr + ONE)
-
-      ! First lets normalize the PDF
-      allocate(pdf(size(Eout)))
-      pdf = thispdf
-      do iE = 1, size(Eout) - 1
-        pdf(iE) = pdf(iE) * (Eout(iE + 1) - Eout(iE))
-      end do
 
       ! Set up lower and upper lab energy boundaries
       Eo_lo = Eout(1) + (Ein - TWO * (awr + ONE) * sqrt(Ein * Eout(1))) &
@@ -1263,9 +1273,9 @@ module scattdata_class
 
       do g = g_lo, g_hi
         Eo = E_bnds(g)
-        dEo = (E_bnds(g + 1) - E_bnds(g)) / real(NUM_E - 1, 8)
+        dEo = (E_bnds(g + 1) - E_bnds(g)) / real(NE_PER_GRP - 1, 8)
         Eo = Eo - dEo
-        do iE = 1, NUM_E
+        do iE = 1, NE_PER_GRP
           Eo = Eo + dEo
           fEl = ZERO
           fmu = ZERO
@@ -1275,17 +1285,13 @@ module scattdata_class
             mu_l_min = -ONE
           else if (abs(mu_l_min - ONE) < 1E-10_8) then
             mu_l_min = ONE
-          else if (mu_l_min > ONE) then
-            Eo = Eo + dEo
-            cycle
           end if
           dmu = (ONE - mu_l_min) / real(size(mu) - 1, 8)
           do imu = 1, size(mu)
             mu_l(imu) = mu_l_min + dmu * real(imu - 1, 8)
             Eo_cm = Eo * (ONE + c * c - TWO * c * mu_l(imu))
-            if (Eo_cm <= ZERO) cycle
-            if (Eo_cm <= Eout(1)) then
-              iEo = 1
+            if (Eo_cm <= ZERO) then
+              cycle
             else if (Eo_cm >= Eout(size(Eout))) then
               iEo = size(Eout) - 1
             else
@@ -1305,7 +1311,6 @@ module scattdata_class
               mu_c = ONE
             else
               mu_c = (mu_l(imu) - c) * J
-              if (abs(mu_c) > ONE) cycle
             end if
             if ((mu_c < -ONE) .or. (mu_c > ONE)) cycle
             imu_c = binary_search(mu, size(mu), mu_c)
@@ -1319,18 +1324,27 @@ module scattdata_class
             integ = proby * J * pEo
             fmu(imu) = integ
           end do
+
           do imu = 1, size(mu) - 1
             fEl = fEl + &
               calc_int_pn_tablelin(order, mu_l(imu), mu_l(imu + 1), &
               fmu(imu), fmu(imu + 1))
           end do
-          if ((iE /= 1) .and. (iE /= NUM_E)) then
+
+          if ((iE /= 1) .and. (iE /= NE_PER_GRP)) then
             distro(:, g) = distro(:, g) + TWO * fEl(:)
           else
             distro(:, g) = distro(:, g) + fEl(:)
           end if
         end do
         distro(:, g) = distro(:, g) * dEo * 0.5_8
+        norm_sum = norm_sum + distro(1, g)
+      end do
+
+      ! Now normalize the results so the integral over all groups is 1.
+      !!! Frankly, I'm not sure why this is needed.
+      do g = g_lo, g_hi
+        distro(:, g) = distro(:, g) / norm_sum
       end do
 
     end subroutine integrate_file6_cm_leg
@@ -1494,6 +1508,7 @@ module scattdata_class
 
       ! First lets normalize the PDF
       allocate(pdf(NEout))
+      pdf = thispdf
       do iE = 1, NEout - 1
         pdf(iE) = thispdf(iE) * (Eout(iE + 1) - Eout(iE))
       end do

@@ -136,6 +136,9 @@ module constants
   ! Number of Eout points per bin for thermal scatter collisions
   integer, parameter :: SAB_EPTS_PER_BIN = 1  ! 0 Implies no expansion
 
+  ! Number of Eout points per group for CM to lab conversion of inelastic collisions
+  integer, parameter :: NE_PER_GRP = 10
+
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
 

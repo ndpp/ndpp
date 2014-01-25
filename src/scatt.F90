@@ -256,8 +256,8 @@ module scatt_class
           end do
 
           ! Normalize for later multiplication in the MC code
-          !if (norm_tot == ZERO) norm_tot = ONE
-          !scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
+          if (norm_tot == ZERO) norm_tot = ONE
+          scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
         else
           ! This step is taken so that interpolation works OK if the MC code
           ! has a particle with an energy == the top energy group value.
