@@ -45,6 +45,9 @@ module ndpp_class
     integer              :: scatt_type    = SCATT_TYPE_LEGENDRE
     ! Scattering data output size (Number of Legendre Orders or Number of Bins)
     integer              :: scatt_order   = SCATT_ORDER_DEFAULT
+    ! Whether or not to include neutron multiplication in the distributions
+    ! (i.e., whether or not nu-scatter or simply scatter is desired)
+    logical              :: nuscatter     = .false.
     ! Number of angular bins to use during f_{n,MT} conversion
     integer              :: mu_bins = MU_BINS_DEFAULT
     ! Flag to integrate chi or not
@@ -280,6 +283,21 @@ module ndpp_class
         call fatal_error()
       end if
 
+      ! Get nuScatter information
+      call lower_case(nuscatter_)
+      if (nuscatter_ == '') then
+        self % nuscatter = NUSCATTER_DEFAULT
+      elseif (nuscatter_ == 'false') then
+        self % nuscatter = .false.
+      elseif (nuscatter_ == 'true') then
+        self % nuscatter = .true.
+      else
+        message = "Value for <nuscatter> provided, but does not match " // &
+                  "TRUE or FALSE. Using default of FALSE."
+        call warning()
+      end if
+
+
       ! Get mu_bins information
       if (mu_bins_ > 1) then
         self % mu_bins = mu_bins_
@@ -477,7 +495,7 @@ module ndpp_class
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
             self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol, &
-            self % Ein)
+            self % Ein, self % nuscatter)
 
           ! Print the results to file
           call timer_start(self % time_print)

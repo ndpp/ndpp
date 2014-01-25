@@ -97,7 +97,8 @@ module constants
 
   logical, parameter :: &
        INTEGRATE_CHI_DEFAULT = .false., & ! Integrate Chi?
-       USE_FREEGAS_DEFAULT   = .true.     ! Use free-gas treatment?
+       USE_FREEGAS_DEFAULT   = .true., &  ! Use free-gas treatment?
+       NUSCATTER_DEFAULT     = .false.    ! Include neutron multiplication
 
 
   ! ============================================================================

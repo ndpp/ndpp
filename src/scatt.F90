@@ -26,7 +26,7 @@ module scatt_class
 !===============================================================================
 
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, &
-                          scatt_mat, mu_bins, thin_tol, E_grid)
+                          scatt_mat, mu_bins, thin_tol, E_grid, nuscatter)
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
@@ -36,6 +36,7 @@ module scatt_class
                                                             ! to use during f_{n,MT} conversion
       real(8), intent(in)                 :: thin_tol       ! Thinning tolerance
       real(8), allocatable, intent(in)    :: E_grid(:)      ! Incoming Energy Grid
+      logical, intent(in)                 :: nuscatter      ! Include neutron multiplication
 
       type(DistEnergy), pointer :: edist
       type(Reaction),   pointer :: rxn
@@ -55,7 +56,6 @@ module scatt_class
 
       ! First we have to find the total number of reactions, including the
       ! nested edists, so we can allocate rxn_data correctly.
-
       num_tot_rxn = 0
       do i_rxn = 1, nuc % n_reaction
         rxn => nuc % reactions(i_rxn)
@@ -82,14 +82,14 @@ module scatt_class
         mySD => rxn_data(i_nested_rxn)
         edist => rxn % edist
         call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, &
-          mu_bins)
+          mu_bins, nuscatter)
         if (associated(rxn % edist)) then
           do while (associated(edist % next))
             edist => edist % next
             i_nested_rxn = i_nested_rxn + 1
             mySD => rxn_data(i_nested_rxn)
             call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, &
-              mu_bins)
+              mu_bins, nuscatter)
           end do
         end if
         if (mySD % is_init) inittedSD => rxn_data(i_nested_rxn)
