@@ -175,6 +175,8 @@ module ndpp_class
       end if
 #endif
 
+      nuscatter_ = ''
+
       ! Read cross_sections.xml
       call read_cross_sections_xml(self)
 
