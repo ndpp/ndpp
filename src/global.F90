@@ -50,9 +50,6 @@ module global
   ! Unreoslved resonance probablity tables
   logical :: urr_ptables_on = .true.
 
-  ! Default xs identifier (e.g. 70c)
-  character(3):: default_xs
-
   ! ============================================================================
   ! PARALLEL PROCESSING VARIABLES
 
@@ -77,9 +74,6 @@ module global
   ! ============================================================================
   ! MISCELLANEOUS VARIABLES
 
-  ! Mode to run in (fixed source, eigenvalue, plotting, etc)
-  integer :: run_mode = NONE
-
   character(MAX_FILE_LEN) :: path_input          ! Path to input file
 
   ! Message used in message/warning/fatal_error
@@ -88,9 +82,6 @@ module global
   ! The verbosity controls how much information will be printed to the
   ! screen and in logs
   integer :: verbosity = 7
-
-  ! Various output options
-  logical :: output_summary = .false.
 
 #ifdef OPENMP
   ! Number of OpenMP threads to USE

@@ -11,7 +11,7 @@ module constants
 
   ! Revision numbers for binary files
   !!! Will need something like this for my output files.
-!   integer, parameter :: REVISION_SOURCE     = 0
+!   integer, parameter :: REVISION_LIB     = 1
 
   ! ============================================================================
   ! ADJUSTABLE PARAMETERS
@@ -22,16 +22,8 @@ module constants
   ! Monoatomic ideal-gas scattering treatment threshold
   real(8), parameter :: FREEGAS_THRESHOLD_DEFAULT = 400.0
 
-  ! Significance level for confidence intervals
-  real(8), parameter :: CONFIDENCE_LEVEL = 0.95_8
-
-  ! Used for surface current tallies
-  real(8), parameter :: TINY_BIT = 1e-8_8
-
-  ! User for precision in geometry
+  ! User for precision in calculated mu points
   real(8), parameter :: FP_PRECISION = 1e-14_8
-  real(8), parameter :: FP_REL_PRECISION = 1e-5_8
-  real(8), parameter :: FP_COINCIDENT = 1e-12_8
 
   ! Maximum number of words in a single line, length of line, and length of
   ! single word
@@ -45,12 +37,6 @@ module constants
 
   real(8), parameter ::            &
        PI             = 3.1415926535898_8, & ! pi
-       MASS_NEUTRON   = 1.0086649156,      & ! mass of a neutron
-       MASS_PROTON    = 1.00727646677,     & ! mass of a proton
-       AMU            = 1.66053873e-27,    & ! 1 amu in kg
-       JOULES_PER_MEV = 1.60217657E-13_8,  & ! Joules from MeV
-       N_AVOGADRO     = 0.602214179,       & ! Avogadro's number in 10^24/mol
-       K_BOLTZMANN    = 8.617342e-11,      & ! Boltzmann constant in MeV/K
        INFINITY       = huge(0.0_8),       & ! positive infinity
        ZERO           = 0.0_8,             &
        ONE            = 1.0_8,             &
