@@ -1147,12 +1147,28 @@ module scattdata_class
         Enorm = 0.5_8 * Enorm ! Divide by total span of mu_l (1-(-1))
       end if
 
-      g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
-      g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
-      allocate(E_bnds(g_lo : g_hi + 1))
-      E_bnds(g_lo) = Eo_lo
-      E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
-      E_bnds(g_hi + 1) = Eo_hi
+      if (Eo_lo <= E_bins(1)) then
+        g_lo = 1
+      else if (Eo_lo >= E_bins(size(E_bins))) then
+        return
+      else
+        g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
+      end if
+      if (Eo_hi <= E_bins(1)) then
+        return
+      else if (Eo_hi >= E_bins(size(E_bins))) then
+        g_hi = size(E_bins) - 1
+        allocate(E_bnds(g_lo : g_hi + 1))
+        E_bnds(g_lo) = Eo_lo
+        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
+        E_bnds(g_hi + 1) = E_bins(g_hi)
+      else
+        g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
+        allocate(E_bnds(g_lo : g_hi + 1))
+        E_bnds(g_lo) = Eo_lo
+        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
+        E_bnds(g_hi + 1) = Eo_hi
+      end if
 
       do g = g_lo, g_hi
         fmus = ZERO
@@ -1273,12 +1289,28 @@ module scattdata_class
       Eo_hi = Eout(size(Eout)) + (Ein + TWO * (awr + ONE) * &
         sqrt(Ein * Eout(size(Eout)))) * ap1inv * ap1inv
 
-      g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
-      g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
-      allocate(E_bnds(g_lo : g_hi + 1))
-      E_bnds(g_lo) = Eo_lo
-      E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
-      E_bnds(g_hi + 1) = Eo_hi
+      if (Eo_lo <= E_bins(1)) then
+        g_lo = 1
+      else if (Eo_lo >= E_bins(size(E_bins))) then
+        return
+      else
+        g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
+      end if
+      if (Eo_hi <= E_bins(1)) then
+        return
+      else if (Eo_hi >= E_bins(size(E_bins))) then
+        g_hi = size(E_bins) - 1
+        allocate(E_bnds(g_lo : g_hi + 1))
+        E_bnds(g_lo) = Eo_lo
+        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
+        E_bnds(g_hi + 1) = E_bins(g_hi)
+      else
+        g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
+        allocate(E_bnds(g_lo : g_hi + 1))
+        E_bnds(g_lo) = Eo_lo
+        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
+        E_bnds(g_hi + 1) = Eo_hi
+      end if
 
       do g = g_lo, g_hi
         Eo = E_bnds(g)
@@ -1294,6 +1326,8 @@ module scattdata_class
             mu_l_min = -ONE
           else if (abs(mu_l_min - ONE) < 1E-10_8) then
             mu_l_min = ONE
+          else if (mu_l_min > ONE) then
+            cycle
           end if
           dmu = (ONE - mu_l_min) / real(size(mu) - 1, 8)
           do imu = 1, size(mu)
@@ -1301,6 +1335,8 @@ module scattdata_class
             Eo_cm = Eo * (ONE + c * c - TWO * c * mu_l(imu))
             if (Eo_cm <= ZERO) then
               cycle
+            else if (Eo_cm <= Eout(1)) then
+              iEo = 1
             else if (Eo_cm >= Eout(size(Eout))) then
               iEo = size(Eout) - 1
             else
@@ -1320,8 +1356,8 @@ module scattdata_class
               mu_c = ONE
             else
               mu_c = (mu_l(imu) - c) * J
+              if (abs(mu_c) > ONE) cycle
             end if
-            if ((mu_c < -ONE) .or. (mu_c > ONE)) cycle
             imu_c = binary_search(mu, size(mu), mu_c)
             f = (mu_c - mu(imu_c)) / (mu(imu_c + 1) - mu(imu_c))
             ! Do lower Eout point
@@ -1628,6 +1664,7 @@ module scattdata_class
     else
       scatter_event = .false.
     end if
+
   end function is_valid_scatter
 
 end module scattdata_class
