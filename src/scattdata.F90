@@ -485,7 +485,6 @@ module scattdata_class
           distro = distro + integrate_distro(this, Ein, iE + 1, f, distro_int, &
             Enorm)
         end if
-
       end if
 
       ! Get the probability value
@@ -1346,8 +1345,16 @@ module scattdata_class
               fEo = ZERO
               pEo = pdf(iEo)
             else
-              fEo = (Eo_cm - Eout(iEo)) / (Eout(iEo + 1) - Eout(iEo))
-              pEo = (ONE - fEo) * pdf(iEo) + fEo * pdf(iEo + 1)
+              if (Eout(iEo + 1) == Eout(iEo)) then
+                ! Take care of Zr-90 (and others?) where Law 61 has two
+                ! Eout datapoints which are equal; since these seem to always
+                ! be at the end, we can just say that fEo = 0, pE0 = 0
+                fEo = ZERO
+                pEo = pdf(iEo)
+              else
+                fEo = (Eo_cm - Eout(iEo)) / (Eout(iEo + 1) - Eout(iEo))
+                pEo = (ONE - fEo) * pdf(iEo) + fEo * pdf(iEo + 1)
+              end if
             end if
             J = sqrt(Eo / Eo_cm)
             if (mu_l(imu) == -ONE) then
