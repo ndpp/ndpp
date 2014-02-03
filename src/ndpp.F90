@@ -138,6 +138,7 @@ module ndpp_class
       output_format_  = ''
       scatt_type_     = 'legendre'
       scatt_order_    = SCATT_ORDER_DEFAULT
+      nuscatter_ = ''
       thinning_tol_   = THIN_TOL_DEFAULT
       mu_bins_        = MU_BINS_DEFAULT
       freegas_cutoff_ = FREEGAS_THRESHOLD_DEFAULT
@@ -174,8 +175,6 @@ module ndpp_class
         omp_threads = threads_
       end if
 #endif
-
-      nuscatter_ = ''
 
       ! Read cross_sections.xml
       call read_cross_sections_xml(self)
@@ -285,7 +284,7 @@ module ndpp_class
         call fatal_error()
       end if
 
-      ! Get nuScatter information
+      ! Get nuscatter information
       call lower_case(nuscatter_)
       if (nuscatter_ == '') then
         self % nuscatter = NUSCATTER_DEFAULT
@@ -298,7 +297,6 @@ module ndpp_class
                   "TRUE or FALSE. Using default of FALSE."
         call warning()
       end if
-
 
       ! Get mu_bins information
       if (mu_bins_ > 1) then
@@ -400,8 +398,10 @@ module ndpp_class
       integer                   :: i_listing     ! index of xs_listing
       character(MAX_FILE_LEN)   :: nuc_lib_name  ! nuclidic library's filename
       ! Scattering specific data
-      real(8), allocatable :: scatt_mat(:,:,:) !scattering matrix moments,
-                                                             ! order x g_out x E_in
+      real(8), allocatable :: scatt_mat(:,:,:)   ! scattering matrix moments,
+                                                 ! order x g_out x E_in
+      real(8), allocatable :: nuscatt_mat(:,:,:) ! nu-scattering matrix moments,
+                                                 ! order x g_out x E_in
       ! Chi specific data
       real(8), allocatable   :: chi_t(:,:)  ! grp x E_in chi tot values on a union grid
       real(8), allocatable   :: e_t_grid(:) ! List of energy points for chi tot
@@ -433,7 +433,8 @@ module ndpp_class
       if (self % lib_format == H5) then
         call hdf5_file_create(self % lib_name, hdf5_output_file)
         hdf5_fh = hdf5_output_file
-!!! Do I also want to have header information just like in ndpp_lib.xml in here?
+        !!! Do we want header information just like in ndpp_lib.xml in here?
+        !!! Doing so would make each lib a stand-alone dataset
       end if
 #endif
       call timer_stop(self % time_print)
@@ -501,18 +502,30 @@ module ndpp_class
 
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
-          call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-            self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol, &
-            self % Ein, self % nuscatter)
-
-          ! Print the results to file
-          call timer_start(self % time_print)
-          call print_scatt(nuc % name, self % lib_format, scatt_mat, self % Ein, &
-            self % print_tol)
+          if (self % nuscatter) then
+            call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
+              self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
+              scatt_mat, nuscatt_mat)
+            ! Print the results to file
+            call timer_start(self % time_print)
+            call print_scatt(nuc % name, self % lib_format, self % Ein, &
+              self % print_tol, scatt_mat, nuscatt_mat)
+          else
+            call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
+              self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
+              scatt_mat)
+            ! Print the results to file
+            call timer_start(self % time_print)
+            call print_scatt(nuc % name, self % lib_format, self % Ein, &
+              self % print_tol, scatt_mat)
+          end if
           call timer_stop(self % time_print)
 
           if (allocated(scatt_mat)) then
             deallocate(scatt_mat)
+          end if
+          if (allocated(nuscatt_mat)) then
+            deallocate(nuscatt_mat)
           end if
           call timer_stop(self % time_scatt_preproc)
 
@@ -586,8 +599,8 @@ module ndpp_class
 
           ! Print the results to file
           call timer_start(self % time_print)
-          call print_scatt(sab % name, self % lib_format, scatt_mat, self % Ein, &
-            self % print_tol)
+          call print_scatt(sab % name, self % lib_format, self % Ein, &
+            self % print_tol, scatt_mat)
           call timer_stop(self % time_print)
 
           if (allocated(scatt_mat)) then
@@ -714,9 +727,9 @@ module ndpp_class
         '  </entries>'
       !!! Skipping over record length for now, not sure I need it.
       if (nuscatter) then
-        write(UNIT_NDPP, '(A)') indent // '<nu_scatter> true </nu_scatter>'
+        write(UNIT_NDPP, '(A)') indent // '<nuscatter> true </nuscatter>'
       else
-        write(UNIT_NDPP, '(A)') indent // '<nu_scatter> false </nu_scatter>'
+        write(UNIT_NDPP, '(A)') indent // '<nuscatter> false </nuscatter>'
       end if
       if (integrate_chi) then
         write(UNIT_NDPP, '(A)') indent // '<chi_present> true </chi_present>'

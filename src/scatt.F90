@@ -25,18 +25,18 @@ module scatt_class
 ! moments for the current nuclide
 !===============================================================================
 
-    subroutine calc_scatt(nuc, energy_bins, scatt_type, order, &
-                          scatt_mat, mu_bins, thin_tol, E_grid, nuscatter)
+    subroutine calc_scatt(nuc, energy_bins, scatt_type, order, mu_bins, &
+                          thin_tol, E_grid, scatt_mat, nuscatt_mat)
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
       integer, intent(inout)              :: order          ! Scattering data order
-      real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
       integer, intent(in)                 :: mu_bins        ! Number of angular points
                                                             ! to use during f_{n,MT} conversion
       real(8), intent(in)                 :: thin_tol       ! Thinning tolerance
       real(8), allocatable, intent(in)    :: E_grid(:)      ! Incoming Energy Grid
-      logical, intent(in)                 :: nuscatter      ! Include neutron multiplication
+      real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
+      real(8), allocatable, optional, intent(inout) :: nuscatt_mat(:,:,:) ! Unionized Nu-Scattering Matrices
 
       type(DistEnergy), pointer :: edist
       type(Reaction),   pointer :: rxn
@@ -81,15 +81,14 @@ module scatt_class
         rxn => nuc % reactions(i_rxn)
         mySD => rxn_data(i_nested_rxn)
         edist => rxn % edist
-        call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, &
-          mu_bins, nuscatter)
+        call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, mu_bins)
         if (associated(rxn % edist)) then
           do while (associated(edist % next))
             edist => edist % next
             i_nested_rxn = i_nested_rxn + 1
             mySD => rxn_data(i_nested_rxn)
             call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, &
-              mu_bins, nuscatter)
+              mu_bins)
           end do
         end if
         if (mySD % is_init) inittedSD => rxn_data(i_nested_rxn)
@@ -112,8 +111,13 @@ module scatt_class
       end if
 
       ! Now combine the results on to E_grid
-      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
-                           energy_bins, scatt_mat)
+      if (present(nuscatt_mat)) then
+        call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
+                             energy_bins, scatt_mat, nuscatt_mat)
+      else
+        call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
+                             energy_bins, scatt_mat)
+      end if
 
       ! Now clear rxn_datas members
       do i_rxn = 1, num_tot_rxn
@@ -191,7 +195,8 @@ module scatt_class
 ! energy grid.
 !===============================================================================
 
-    subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, order, E_bins, scatt_mat)
+    subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, order, E_bins, &
+                               scatt_mat, nuscatt_mat)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
       type(ScattData), intent(inout), target :: rxn_data(:) ! The converted distros
@@ -199,6 +204,7 @@ module scatt_class
       integer, intent(in)                  :: order     ! Angular order
       real(8), intent(in)                  :: E_bins(:) ! Energy groups
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
+      real(8), allocatable, optional, intent(out) :: nuscatt_mat(:,:,:) ! Output nu-scattering matrix
 
       integer :: iE, NE              ! Ein counter, # Ein
       integer :: irxn, Nrxn          ! reaction counter, # Reactions
@@ -207,6 +213,7 @@ module scatt_class
       real(8) :: norm_tot            ! Sum of all normalization consts
       integer :: iE_print            ! iE range to print status of
       integer :: iE_pct, last_iE_pct ! Current and previous pct complete
+      real(8), allocatable :: temp_scatt(:,:) ! calculated scattering matrix
 
 
       groups = size(E_bins) - 1
@@ -217,6 +224,13 @@ module scatt_class
 
       ! Allocate the scatt_mat according to the groups, order and number of E pts
       allocate(scatt_mat(order, groups, NE))
+      if (present(nuscatt_mat)) then
+        allocate(nuscatt_mat(order, groups, NE))
+        nuscatt_mat = ZERO
+      end if
+
+      allocate(temp_scatt(order, groups))
+
 
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
       !$omp parallel do schedule(dynamic,50) num_threads(omp_threads) default(shared),private(iE,mySD,norm_tot,irxn)
@@ -251,19 +265,29 @@ module scatt_class
               end if
             end if
             ! Add the scattering distribution to the union scattering grid
-            scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + &
-              mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
+            temp_scatt = mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
+            scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + temp_scatt
+            if (present(nuscatt_mat)) then
+              nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) + &
+                real(mySD % rxn % multiplicity,8) * temp_scatt
+            end if
           end do
 
           ! Normalize for later multiplication in the MC code
           if (norm_tot == ZERO) norm_tot = ONE
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
+          if (present(nuscatt_mat)) then
+            nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) / norm_tot
+          end if
         else
           ! This step is taken so that interpolation works OK if the MC code
           ! has a particle with an energy == the top energy group value.
           ! With this step, it has something to interpolate to, and that
           ! value is the same as the Ein value, which will be more accurate.
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE - 1)
+          if (present(nuscatt_mat)) then
+            nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE - 1)
+          end if
         end if
       end do
       !$omp end parallel do
@@ -275,23 +299,37 @@ module scatt_class
 ! in the specified format.
 !===============================================================================
 
-  subroutine print_scatt(name, lib_format, data, E_grid, tol)
+  subroutine print_scatt(name, lib_format, E_grid, tol, data, nudata)
     character(len=*),     intent(in) :: name        ! (hdf5 specific) name of group
     integer,              intent(in) :: lib_format  ! Library output type
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8),              intent(in) :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
+                                                    ! (order x g x Ein)
+    real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
+                                                    !            (order x g x Ein)
 
-    if (lib_format == ASCII) then
-      call print_scatt_ascii(data, E_grid, tol)
-    else if (lib_format == BINARY) then
-      call print_scatt_bin(data, E_grid, tol)
-    else if (lib_format == HUMAN) then
-      call print_scatt_human(data, E_grid, tol)
-    else if (lib_format == H5) then
-      call print_scatt_hdf5(name, data, E_grid, tol)
+    if (present(nudata)) then
+      if (lib_format == ASCII) then
+        call print_scatt_ascii(E_grid, tol, data, nudata)
+      else if (lib_format == BINARY) then
+        call print_scatt_bin(E_grid, tol, data, nudata)
+      else if (lib_format == HUMAN) then
+        call print_scatt_human(E_grid, tol, data, nudata)
+      else if (lib_format == H5) then
+        call print_scatt_hdf5(E_grid, tol, data, nudata)
+      end if
+    else
+      if (lib_format == ASCII) then
+        call print_scatt_ascii(E_grid, tol, data)
+      else if (lib_format == BINARY) then
+        call print_scatt_bin(E_grid, tol, data)
+      else if (lib_format == HUMAN) then
+        call print_scatt_human(E_grid, tol, data)
+      else if (lib_format == H5) then
+        call print_scatt_hdf5(E_grid, tol, data)
+      end if
     end if
 
   end subroutine print_scatt
@@ -301,12 +339,15 @@ module scatt_class
 ! in an ASCII format.
 !===============================================================================
 
-  subroutine print_scatt_ascii(data, E_grid, tol)
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
+  subroutine print_scatt_ascii(E_grid, tol, data, nudata)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
+                                                    ! (order x g x Ein)
+    real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
+                                                                ! (order x g x Ein)
+
     integer :: gmin, gmax, iE
 
     ! Assumes that the file and header information is already printed
@@ -345,6 +386,28 @@ module scatt_class
       end if
     end do
 
+    if (present(nudata)) then
+      ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
+      ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+      do iE = 1, size(E_grid)
+        ! find gmin by checking the P0 moment
+        do gmin = 1, size(nudata, dim = 2)
+          if (nudata(1, gmin, iE) > tol) exit
+        end do
+        ! find gmax by checking the P0 moment
+        do gmax = size(nudata, dim = 2), 1, -1
+          if (nudata(1, gmax, iE) > tol) exit
+        end do
+        if (gmin > gmax) then ! we have effectively all zeros
+          write(UNIT_NUC, '(I20,I20)') 0,0
+        else
+          write(UNIT_NUC, '(I20,I20)') gmin,gmax
+          call print_ascii_array(reshape(nudata(:, gmin : gmax, iE), (/ &
+            size(nudata, dim=1) * (gmax - gmin + 1)/)), UNIT_NUC)
+        end if
+      end do
+    end if
+
   end subroutine print_scatt_ascii
 
 !===============================================================================
@@ -352,12 +415,15 @@ module scatt_class
 ! in an ASCII format.
 !===============================================================================
 
-  subroutine print_scatt_human(data, E_grid, tol)
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
+  subroutine print_scatt_human(E_grid, tol, data, nudata)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
+                                                    ! (order x g x Ein)
+    real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
+                                                                ! (order x g x Ein)
+
     integer :: g, gmin, gmax, iE
 
     ! Assumes that the file and header information is already printed
@@ -400,6 +466,32 @@ module scatt_class
       end if
     end do
 
+    if (present(nudata)) then
+      ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
+      ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+      do iE = 1, size(E_grid)
+        ! find gmin by checking the P0 moment
+        do gmin = 1, size(nudata, dim = 2)
+          if (nudata(1, gmin, iE) > tol) exit
+        end do
+        ! find gmax by checking the P0 moment
+        do gmax = size(nudata, dim = 2), 1, -1
+          if (nudata(1, gmax, iE) > tol) exit
+        end do
+        if (gmin > gmax) then ! we have effectively all zeros
+          write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',E_grid(iE), &
+            '   gmin = ', 0, '   gmax = ', 0
+        else
+          write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',E_grid(iE), &
+            '   gmin = ', gmin, '   gmax = ', gmax
+          do g = gmin, gmax
+            write(UNIT_NUC,'(A,I5)') 'outgoing group = ', g
+            call print_ascii_array(nudata(:, g, iE), UNIT_NUC)
+          end do
+        end if
+      end do
+    end if
+
   end subroutine print_scatt_human
 
 !===============================================================================
@@ -407,12 +499,15 @@ module scatt_class
 ! in a native Fortran stream format.
 !===============================================================================
 
-  subroutine print_scatt_bin(data, E_grid, tol)
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
+  subroutine print_scatt_bin(E_grid, tol, data, nudata)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
+                                                    ! (order x g x Ein)
+    real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
+                                                                ! (order x g x Ein)
+
     integer :: g, gmin, gmax, iE
 
     ! Assumes that the file and header information is already printed
@@ -450,8 +545,30 @@ module scatt_class
           write(UNIT_NUC) data(:, g, iE)
         end do
       end if
-
     end do
+
+    if (present(nudata)) then
+      ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
+      ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+      do iE = 1, size(E_grid)
+        ! find gmin by checking the P0 moment
+        do gmin = 1, size(nudata, dim = 2)
+          if (nudata(1, gmin, iE) > tol) exit
+        end do
+        ! find gmax by checking the P0 moment
+        do gmax = size(nudata, dim = 2), 1, -1
+          if (nudata(1, gmax, iE) > tol) exit
+        end do
+        if (gmin > gmax) then ! we have effectively all zeros
+          write(UNIT_NUC) 0, 0
+        else
+          write(UNIT_NUC) gmin, gmax
+          do g = gmin, gmax
+            write(UNIT_NUC) nudata(:, g, iE)
+          end do
+        end if
+      end do
+    end if
 
   end subroutine print_scatt_bin
 
@@ -460,13 +577,15 @@ module scatt_class
 ! with the HDF5 library.
 !===============================================================================
 
-  subroutine print_scatt_hdf5(name, data, E_grid, tol)
-    character(len=*),     intent(in) :: name        ! name of nuclide for group
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
+  subroutine print_scatt_hdf5(E_grid, tol, data, nudata)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
+                                                    ! (order x g x Ein)
+    real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
+                                                                ! (order x g x Ein)
+
     integer :: g, gmin, gmax, iE
 
 #ifdef HDF5
@@ -532,6 +651,40 @@ module scatt_class
       call hdf5_close_group()
       temp_group = scatt_group
     end do
+
+    if (present(nudata)) then
+      ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
+      ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+      do iE = 1, size(E_grid)
+        iE_name = trim(adjustl(group_name)) // "/iE" // trim(adjustl(to_str(iE)))
+        call hdf5_open_group(iE_name)
+        ! find gmin by checking the P0 moment
+        do gmin = 1, size(nudata, dim = 2)
+          if (nudata(1, gmin, iE) > tol) then
+            call hdf5_close_group()
+            temp_group = scatt_group
+            exit
+          end if
+        end do
+        ! find gmax by checking the P0 moment
+        do gmax = size(nudata, dim = 2), 1, -1
+          if (nudata(1, gmax, iE) > tol) exit
+        end do
+        if (gmin > gmax) then ! we have effectively all zeros
+          call hdf5_write_integer(temp_group, 'gmin', 0)
+          call hdf5_write_integer(temp_group, 'gmax', 0)
+        else
+          call hdf5_write_integer(temp_group, 'gmin', gmin)
+          call hdf5_write_integer(temp_group, 'gmax', gmax)
+          call hdf5_write_double_2Darray(temp_group, 'nudata', nudata(:, gmin : gmax, iE), &
+            (/size(nudata(:, gmin : gmax, iE), dim = 1), &
+            size(nudata(:, gmin : gmax, iE), dim = 2)/))
+        end if
+        call hdf5_close_group()
+        temp_group = scatt_group
+      end do
+    end if
+
     call hdf5_close_group()
     temp_group = orig_group
 #endif
