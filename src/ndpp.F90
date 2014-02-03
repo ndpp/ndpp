@@ -930,7 +930,7 @@ module ndpp_class
 
       character(MAX_LINE_LEN) :: line
       character(MAX_FILE_LEN) :: h_filename
-      integer                 :: chi_present_int, period_loc
+      integer                 :: chi_present_int, period_loc, nuscatter_int
       logical                 :: fissionable
       integer                 :: i
 
@@ -939,6 +939,20 @@ module ndpp_class
         fissionable = .false.
       else
         fissionable = fiss
+      end if
+
+      ! First convert the logical value of nuscatter & Chi Present to an integer.
+      ! It seemas as if a type-cast is not in the standard, so the next
+      ! if-then  block will explicitly do the cast.
+      if (this_ndpp % nuscatter) then
+        nuscatter_int = 1
+      else
+        nuscatter_int = 0
+      end if
+      if(this_ndpp % integrate_chi .AND. fissionable) then
+        chi_present_int = 1
+      else
+        chi_present_int = 0
       end if
 
       if ((this_ndpp % lib_format == ASCII) .or. &
@@ -954,22 +968,15 @@ module ndpp_class
         write(UNIT_NUC,'(A)') trim(line)
         ! Energy Bin Structure
         call print_ascii_array(this_ndpp % energy_bins, UNIT_NUC)
-        ! Scattering Type (Legendre/Hist), Order of this Type, Chi Present, Thinning Tolerance
-        ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
-        ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. fissionable) then
-          chi_present_int = 1
-        else
-          chi_present_int = 0
-        end if
-        ! Now print the results
+        ! Scattering Type (Legendre/Hist), Order of this Type, Nu-Scatter,
+        ! Chi Present
         line= ''
-        write(line,'(I20,I20,I20,1PE20.12)') this_ndpp % scatt_type, &
-          this_ndpp % scatt_order, chi_present_int, this_ndpp % thin_tol
+        write(line,'(I20,I20,I20,I20)') this_ndpp % scatt_type, &
+          this_ndpp % scatt_order, nuscatter_int, chi_present_int
         write(UNIT_NUC,'(A)') trim(line)
-        ! Do the same, and on a new line, for this_ndpp % mu_bins
+        ! Do the same, and on a new line, for this_ndpp % mu_bins & thin_tol
         line= ''
-        write(line,'(I20)') this_ndpp % mu_bins
+        write(line,'(I20,1PE20.12)') this_ndpp % mu_bins, this_ndpp % thin_tol
         write(UNIT_NUC,'(A)') trim(line)
 
       else if (this_ndpp % lib_format == BINARY) then
@@ -987,64 +994,51 @@ module ndpp_class
         ! Energy Bin Structure
         write(UNIT_NUC) this_ndpp % energy_bins
 
-        ! Scattering Type (Legendre/Hist), Order of this Type, Chi Present,
-        ! Thinning Tolerance
-        ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
-        ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. fissionable) then
-          chi_present_int = 1
-        else
-          chi_present_int = 0
-        end if
-        ! Now print the results
+        ! Scattering Type (Legendre/Hist), Order of this Type, Nu-Scatter,
+        ! Chi Present
         write(UNIT_NUC) this_ndpp % scatt_type
         write(UNIT_NUC) this_ndpp % scatt_order
+        write(UNIT_NUC) nuscatter_int
         write(UNIT_NUC) chi_present_int
-        write(UNIT_NUC) this_ndpp % thin_tol
 
-        ! Write mu_bins
+        ! Write mu_bins, thin_tol
         write(UNIT_NUC) this_ndpp % mu_bins
+        write(UNIT_NUC) this_ndpp % thin_tol
 #ifdef HDF5
       else if (this_ndpp % lib_format == H5) then
         h_filename = trim(adjustl(name))
         period_loc = scan(h_filename, '.')
         h_filename(period_loc : period_loc) = '_'
         h_filename = "/" // trim(adjustl(h_filename))
-write(*,*) temp_group
         call hdf5_open_group(h_filename)
-write(*,*) temp_group
+
         ! Write name, kt, energy_groups, energy_bins,
-        ! scatt_type, scatt_order, integrate_chi, thin_tol, mu_bins
-        ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
-        ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. fissionable) then
-          chi_present_int = 1
-        else
-          chi_present_int = 0
-        end if
+        ! scatt_type, scatt_order, nuscatter, integrate_chi, thin_tol, mu_bins
         ! Now we can print (these should be attributes, but for we need
         ! to first incorporate more routines for this in hdf5_interface)
         call hdf5_write_string(temp_group, 'name', trim(adjustl(name)), &
           len(trim(adjustl(nuc % name))))
         call hdf5_write_double(temp_group, 'kT', kT)
         call hdf5_write_integer(temp_group, 'energy_groups', &
-          this_ndpp % energy_groups)
+                                this_ndpp % energy_groups)
         call hdf5_write_double_1Darray(temp_group, 'energy_bins', &
           this_ndpp % energy_bins, this_ndpp % energy_groups + 1)
         call hdf5_write_integer(temp_group, 'scatt_type', &
-          this_ndpp % scatt_type)
+                                this_ndpp % scatt_type)
         call hdf5_write_integer(temp_group, 'scatt_order', &
-          this_ndpp % scatt_order)
-        call hdf5_write_integer(temp_group, 'integrate_chi', &
-          chi_present_int)
-        call hdf5_write_double(temp_group, 'thin_tol', &
-          this_ndpp % thin_tol)
+                                this_ndpp % scatt_order)
+        call hdf5_write_integer(temp_group, 'nuscatter', nuscatter_int)
+        call hdf5_write_integer(temp_group, 'integrate_chi', chi_present_int)
+        call hdf5_write_double(temp_group, 'thin_tol', this_ndpp % thin_tol)
+        call hdf5_write_integer(temp_group, 'mu_bins', this_ndpp % mu_bins)
 #endif
       end if
 
     end subroutine init_library
 
-! Close the file or HDF5 group
+!===============================================================================
+! FINALIZE_LIBRARY closes the opened library accordingly.
+!===============================================================================
     subroutine finalize_library(lib_format)
       integer, intent(in) :: lib_format
 
