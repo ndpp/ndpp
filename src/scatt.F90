@@ -671,12 +671,12 @@ module scatt_class
           if (nudata(1, gmax, iE) > tol) exit
         end do
         if (gmin > gmax) then ! we have effectively all zeros
-          call hdf5_write_integer(temp_group, 'gmin', 0)
-          call hdf5_write_integer(temp_group, 'gmax', 0)
+          call hdf5_write_integer(temp_group, 'nu_gmin', 0)
+          call hdf5_write_integer(temp_group, 'nu_gmax', 0)
         else
-          call hdf5_write_integer(temp_group, 'gmin', gmin)
-          call hdf5_write_integer(temp_group, 'gmax', gmax)
-          call hdf5_write_double_2Darray(temp_group, 'nudata', nudata(:, gmin : gmax, iE), &
+          call hdf5_write_integer(temp_group, 'nu_gmin', gmin)
+          call hdf5_write_integer(temp_group, 'nu_gmax', gmax)
+          call hdf5_write_double_2Darray(temp_group, 'nu_data', nudata(:, gmin : gmax, iE), &
             (/size(nudata(:, gmin : gmax, iE), dim = 1), &
             size(nudata(:, gmin : gmax, iE), dim = 2)/))
         end if

@@ -1,5 +1,5 @@
 module chi_class
-  
+
   use ace_header
   use constants
   use dict_header
@@ -10,15 +10,15 @@ module chi_class
   use output,           only: write_message, header, print_ascii_array
   use search,           only: binary_search
   use string,           only: to_str
-  
+
 #ifdef HDF5
   use hdf5_interface
 #endif
 
   implicit none
-  
+
 contains
- 
+
 !===============================================================================
 ! CALC_CHIS Calculates the group-wise chi values for a given nuclide.
 !===============================================================================
@@ -34,7 +34,7 @@ contains
     real(8), allocatable,intent(inout) :: E_p_union(:)     ! Unionized Prompt Energy Values
     real(8), allocatable,intent(inout) :: E_d_union(:)     ! Unionized Delayed Energy Values
     real(8), intent(in)                :: thin_tol         ! Thinning tolerance
-    
+
     real(8) :: beta
     real(8) :: yield
     real(8) :: probability
@@ -45,7 +45,7 @@ contains
     integer, allocatable :: INT_grid(:,:)   ! The interpolation type grid for each fission rxn
     real(8), allocatable :: betas(:,:)        ! Delayed-n Beta at each E_in
     real(8), allocatable :: probs(:,:)      ! Probabilities of each fission reaction for each E_in
-    
+
     type(DistEnergy),  pointer :: edist
     type(Reaction), pointer    :: rxn
     integer :: NE, NR, NE_yield, NR_yield
@@ -57,11 +57,11 @@ contains
     integer :: i, j
     real(8) :: max_err
     integer :: num_fission_tot
-    
-    
+
+
     ! This routine will calculate chi on each energy grid for all the reactions
     ! and then combine them on to a union grid at the end.
-    
+
     ! First we have to find the maximum number of dimensions and allocate the grids
     ! To do this, loop through the n_fission reactions, and count the number of nested
     ! energy distributions for each. This is an issue for at least Pu-240 in ENDF-7.
@@ -83,7 +83,7 @@ contains
     ! Now add in the standard fission channels and delayed channels
     num_rxn = num_rxn + nuc % n_precursor
     allocate(NE_grid(num_rxn))
-    
+
     NE_max = 0
     i_rxn = 0
     ! Check prompt
@@ -116,7 +116,7 @@ contains
       if (NE > NE_max) NE_max = NE
       NE_grid(i_rxn) = NE
     end do
-    
+
     allocate(E_grid(NE_max,num_rxn))
     allocate(INT_grid(NE_max,num_rxn))
     allocate(chi_grid(energy_groups, NE_max, num_rxn))
@@ -124,7 +124,7 @@ contains
     allocate(betas(NE_max, num_rxn))
     allocate(probs(NE_max, num_rxn))
     allocate(chi_temp(energy_groups))
-    
+
     ! Calculate Chi for the prompt reaction
     ! Chi_prompt = integral[Eg-1,Eg](Chi_prompt(E)*(1-beta)*prob_of_rxn)dE
     i = 0
@@ -138,12 +138,12 @@ contains
 !       if (NR /= 0) write(*,*) 'NR /= 0!', i, NR, edist%law
       lc = 2 + 2*NR
       E_grid(1:NE_grid(i),i) = edist % data(lc + 1 : lc + NE_grid(i))
-      
+
       ! Loop over energy grid and calculate
       do j = 1, NE_grid(i)
         ! Calculate beta
         beta = nu_delayed(nuc, E_grid(j, i)) / nu_total(nuc, E_grid(j, i))
-        
+
         ! calculate probabilty of this rxn over all fission rxns of this nuclide
         if (rxn % MT == N_FISSION) then
           probability = ONE
@@ -165,7 +165,7 @@ contains
             probability = probability * interpolate_tab1(edist % p_valid, E_grid(j, i))
           end if
         end if
-        
+
         ! Now perform the integration
         call integrate_chi(edist, E_grid(j, i), INT_grid(j, i), energy_groups, &
           energy_bins, chi_temp)
@@ -175,7 +175,7 @@ contains
         betas(j, i) = (ONE - beta)
         probs(j, i) = probability
       end do
-      
+
       ! Repeat for the nested loops
       do
         if (associated(edist % next)) then
@@ -187,12 +187,12 @@ contains
           if (NR /= 0) write(*,*) 'NR /= 0!', i, NR, edist%law, 'nested'
           lc = 2 + 2*NR
           E_grid(1:NE_grid(i),i) = edist % data(lc + 1 : lc + NE_grid(i))
-          
+
           ! Loop over energy grid and calculate
           do j = 1, NE_grid(i)
             ! Calculate beta
             beta = nu_delayed(nuc, E_grid(j, i)) / nu_total(nuc, E_grid(j, i))
-            
+
             ! calculate probabilty of this nested distribution over the others
             if (E_grid(j, i) < nuc % energy(1)) then
               i_E = 1
@@ -210,7 +210,7 @@ contains
             if (associated(edist % next) .and. edist % p_valid % n_regions > 0) then
               probability = probability * interpolate_tab1(edist % p_valid, E_grid(j, i))
             end if
-            
+
             ! Now perform the integration
             call integrate_chi(edist, E_grid(j, i), INT_grid(j, i), energy_groups, &
               energy_bins, chi_temp)
@@ -225,7 +225,7 @@ contains
         end if
       end do
     end do
-    
+
     ! Calculate Chi for the delayed neutrons
     ! Chi_delay= integral[Eg-1,Eg](Chi_delay(E)*(beta)*prob_of_rxn)dE
     i = num_fission_tot
@@ -243,7 +243,7 @@ contains
       do j = 1, NE_grid(i)
         ! Calculate beta
         beta = nu_delayed(nuc, E_grid(j, i)) / nu_total(nuc, E_grid(j, i))
-        
+
         ! Get the yield data
         ! determine number of interpolation regions and energies
         NR_yield = int(nuc % nu_d_precursor_data(lc + 1))
@@ -253,12 +253,12 @@ contains
               lc_yield + 1 :lc_yield + 2 + 2 * NR_yield + 2 * NE_yield), &
               E_grid(j, i))
         probability = yield
-        
+
         ! Now perform the integration
         call integrate_chi(edist, E_grid(j, i), INT_grid(j, i), energy_groups, &
           energy_bins, chi_temp)
         chi_grid(:, j, i) = chi_grid(:, j, i) + chi_temp(:)
-          
+
         ! Store beta and probs
         betas(j, i) = beta
         probs(j, i) = probability
@@ -266,9 +266,9 @@ contains
       ! Advance lc pointer
       lc_yield = lc_yield + 2 + 2*NR_yield + 2*NE_yield + 1
     end do
-    
+
     deallocate(chi_temp)
-    
+
     ! Combine the total chi values to a  to a union grid
     call unionize_chi(chi_t_union, E_t_union, E_grid, chi_grid, NE_grid, &
       INT_grid, betas, probs, 1, size(NE_grid))
@@ -288,11 +288,11 @@ contains
       E_d_union(1) = energy_bins(1)
       E_d_union(2) = energy_bins(energy_groups + 1)
     end if
-    
+
 !     call thin_union_chi(chi_t_union, E_t_union, thin_tol, max_err)
 !     call thin_union_chi(chi_p_union, E_p_union, thin_tol, max_err_p)
 !     call thin_union_chi(chi_d_union, E_d_union, thin_tol, max_err_d)
-    
+
     ! Free memory
     deallocate(E_grid)
     deallocate(chi_grid)
@@ -300,20 +300,20 @@ contains
     deallocate(INT_grid)
     deallocate(betas)
     deallocate(probs)
-    
+
   end subroutine calc_chis
-  
+
   function get_e_grid_count(edist) result(NE)
     type(DistEnergy), pointer, intent(in) :: edist
     integer                               :: NE
     integer                               :: NR
-    
+
     ! read number of interpolation regions and incoming energies
     NR = int(edist % data(1))
     NE = int(edist % data(2 + 2*NR))
-    
+
   end function get_e_grid_count
-  
+
   subroutine integrate_chi(edist, E_in, INTT_in, energy_groups, energy_bins, chi)
     type(DistEnergy), pointer, intent(in) :: edist
     real(8), intent(in)                   :: E_in
@@ -321,7 +321,7 @@ contains
     integer, intent(in)                   :: energy_groups
     real(8), intent(in)                   :: energy_bins(:)
     real(8), intent(inout)                :: chi(:)
-    
+
     integer :: NR, NE, NP, i_E, INTTp, INTT, ND
     integer :: lEout_min
     real(8) :: T              ! Fission Spectra Theta Value
@@ -334,9 +334,9 @@ contains
     real(8) :: Eg             ! lower bound of integral
     real(8) :: Watt_a, Watt_b ! Watt spectrum values
     real(8) :: interp         ! interpolation value of the energy point
-    
+
     chi = ZERO
-    
+
     ! Determine which secondary energy distribution law to use
     select case (edist % law)
     case (1)
@@ -353,13 +353,13 @@ contains
       call warning()
     case (4, 61)
       ! =======================================================================
-      ! CONTINUOUS TABULAR DISTRIBUTION AND 
+      ! CONTINUOUS TABULAR DISTRIBUTION AND
       ! CORRELATED ENERGY AND ANGLE DISTRIBUTION
-      
+
       ! read number of interpolation regions and incoming energies
       NR  = int(edist % data(1))
       NE  = int(edist % data(2 + 2*NR))
-      
+
       ! find energy bin and calculate interpolation factor -- if the energy is
       ! outside the range of the tabulated energies, choose the first or last
       ! bins
@@ -371,7 +371,7 @@ contains
       else
         i_E = binary_search(edist % data(lc+1:lc+NE), NE, E_in)
       end if
-      
+
       ! Get interpolation type
       if (NR == 0) then
         INTT_in = LINEAR_LINEAR
@@ -380,7 +380,7 @@ contains
         !!! If not in ENDF-7, then I should be okay.
         write(*,*) 'LAW 4 Error, INTT /= LINEAR_LINEAR', edist % law
       end if
-      
+
       ! determine location of outgoing energies, pdf, cdf for E(l)
       lc = int(edist % data(2 + 2*NR + NE + i_E))
 
@@ -400,7 +400,7 @@ contains
              &yet supported"
         call fatal_error()
       end if
-      
+
       ! Loop through energy groups
       lc = lc + 3
       lEout_min = lc
@@ -430,7 +430,7 @@ contains
         end do
         lEout_min = i_E
       end do
-      
+
     case (5)
       ! =======================================================================
       ! GENERAL EVAPORATION SPECTRUM
@@ -439,13 +439,13 @@ contains
     case (7)
       ! =======================================================================
       ! MAXWELL FISSION SPECTRUM
-      ! read number of interpolation regions and incoming energies 
+      ! read number of interpolation regions and incoming energies
       NR  = int(edist % data(1))
       NE  = int(edist % data(2 + 2*NR))
-      
+
       ! determine nuclear temperature from tabulated function
       T = interpolate_tab1(edist % data, E_in)
-      
+
       ! Get interpolation scheme
       lc = 2 + 2*NR
       if (E_in < edist % data(lc+1)) then
@@ -467,7 +467,7 @@ contains
           end if
         end do
       end if
-      
+
       ! determine restriction energy
       lc = 2 + 2*NR + 2*NE
       U = edist % data(lc + 1)
@@ -487,17 +487,17 @@ contains
           T * sqrt(Eg) * exp(-Eg / T))
         chi(g) = chi(g) / I
       end do
-      
+
     case (9)
       ! =======================================================================
       ! EVAPORATION SPECTRUM
-      ! read number of interpolation regions and incoming energies 
+      ! read number of interpolation regions and incoming energies
       NR  = int(edist % data(1))
       NE  = int(edist % data(2 + 2*NR))
-      
+
       ! determine nuclear temperature from tabulated function
       T = interpolate_tab1(edist % data, E_in)
-      
+
       ! Get interpolation scheme
       lc = 2 + 2*NR
       if (E_in < edist % data(lc+1)) then
@@ -519,7 +519,7 @@ contains
           end if
         end do
       end if
-      
+
       ! determine restriction energy
       ! These were derived using a sage worksheet; note that in the equation for I,
       ! the MCNP5 manual has exp(x) instead of exp(-x) which is found on the T2
@@ -542,17 +542,17 @@ contains
     case (11)
       ! =======================================================================
       ! ENERGY-DEPENDENT WATT SPECTRUM
-      ! read number of interpolation regions and incoming energies 
+      ! read number of interpolation regions and incoming energies
       NR  = int(edist % data(1))
       NE  = int(edist % data(2 + 2*NR))
-      
+
       ! Get interpolation type
       if (NR == 0) then
         INTT_in = LINEAR_LINEAR
       else
         write(*,*) 'Error, INTT /= LINEAR_LINEAR', edist % law
       end if
-      
+
       ! determine Watt parameter 'a' from tabulated function
       Watt_a = interpolate_tab1(edist % data, E_in)
       ! determine Watt parameter 'b' from tabulated function
@@ -616,7 +616,7 @@ contains
       message = "Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported."
       call warning()
     end select
-    
+
     ! Normalize chi(g) in case the interpolation rule causes it to be > 1.0
     I = ZERO
     do g = 1, energy_groups
@@ -627,10 +627,10 @@ contains
       do g = 1, energy_groups
         chi(g) = chi(g) * I
       end do
-    end if     
-    
+    end if
+
   end subroutine integrate_chi
-  
+
   subroutine unionize_chi(chi_union, E_union, E_grid, chi_grid, NE_grid, &
     INT_grid, betas, probs, rxn_low, rxn_high)
     real(8), allocatable, intent(inout) :: chi_union(:,:)  ! Unioninzed Chi grid
@@ -643,7 +643,7 @@ contains
     real(8), intent(in)    :: probs(:,:)      ! Probabilities of each fission reaction for each E_in
     integer, intent(in)    :: rxn_low         ! Low bound of reaction index
     integer, intent(in)    :: rxn_high        ! High bound of reaction index
-    
+
     real(8), allocatable :: chi_temp(:,:) ! Temporary array for the unionized chi
     real(8), allocatable :: E_temp(:)     ! Temporary array for the unionized E_grid
     integer, allocatable :: chi_loc(:)      ! Location of last-used energy
@@ -651,7 +651,7 @@ contains
     logical, allocatable :: chi_hits(:)     ! Flag for when a chi value is the lowest
     real(8)              :: r               ! Interpolation Factor
     integer              :: i_energy, i_rxn ! Loop indices
-    
+
     ! Chi_temp is sized to allow for all of this nuclide's reactions
     ! to not have the same energy points. One of the last steps here
     ! will be to allocate chi_union and copy in only the needed values
@@ -665,7 +665,7 @@ contains
     chi_done = .false.
     allocate(chi_hits(rxn_low : rxn_high))
     chi_hits = .false.
-    
+
     do i_energy = 1, size(E_temp)
       ! Find the reactions which have the smallest values, stored in chi_hits
       call min_value_locs(chi_hits, chi_loc, chi_done, E_grid, rxn_low, rxn_high)
@@ -687,7 +687,7 @@ contains
       do i_rxn = rxn_low, rxn_high
         if (.not. chi_done(i_rxn)) then
           if (.not. chi_hits(i_rxn)) then
-            ! If the i_energy point is outside the range of this reaction, then 
+            ! If the i_energy point is outside the range of this reaction, then
             ! do not score it.
             if (E_temp(i_energy) < E_grid(1, i_rxn)) cycle
             if (INT_grid(chi_loc(i_rxn), i_rxn) == HISTOGRAM) then
@@ -737,19 +737,19 @@ contains
       if (r > 0.0) then
         chi_temp(:, i_energy) = chi_temp(:, i_energy) / r
       end if
-      
+
       ! Check to see if all chi values have reached their last data point
       ! If so, then we can complete the unionizing
       if (all(chi_done)) exit
     end do
-    
+
     ! Allocate the final union grid spaces
     allocate(chi_union(size(chi_temp, dim = 1), i_energy))
     allocate(E_union(i_energy))
-    
+
     chi_union(:, :) = chi_temp(:, 1 : i_energy)
     E_union(:) = E_temp(1 : i_energy)
-    
+
     ! Free memory
     deallocate(chi_temp)
     deallocate(E_temp)
@@ -757,13 +757,13 @@ contains
     deallocate(chi_done)
     deallocate(chi_hits)
   end subroutine unionize_chi
-  
+
   subroutine thin_union_chi(chi, E, tol, max_err)
     real(8), allocatable, intent(inout) :: chi(:,:)  ! Unioninzed Chi grid
     real(8), allocatable, intent(inout) :: E(:)      ! Unioninzed Energy grid
     real(8), intent(in)    :: tol       ! The fractional thinning tolerance
     real(8), intent(out)   :: max_err   ! The maximum error of thinning
-    
+
     real(8) :: err
     integer :: i_low, i_high ! low and high bounds of the grid
     integer :: i_test        ! value to test
@@ -774,7 +774,7 @@ contains
     real(8) :: interp
     real(8) :: test_val(size(chi,dim = 1))
     real(8), allocatable :: thin(:), E_thin(:)
-    
+
     to_strip = 0
     num_strip = 0
     cont_loop = .true.
@@ -812,9 +812,9 @@ contains
     allocate(E_thin(num_strip))
     i_low = 0
     i_high = 0
-    
+
   end subroutine thin_union_chi
-  
+
   subroutine min_value_locs(hits, chi_loc, chi_done, E_grid, low, high)
     integer, intent(in)    :: low         ! Low index of chi to check
     integer, intent(in)    :: high        ! High index of chi to check
@@ -822,13 +822,13 @@ contains
     integer, intent(in)    :: chi_loc(low:high)  ! Location of last-used energy
     logical, intent(in)    :: chi_done(low:high) ! Flag to state whether a rxn's grid is complete
     real(8), intent(in)    :: E_grid(:,:) ! The energy grid for each fission rxn
-    
+
     integer :: i
     real(8) :: min_val
-    
+
     hits = .false.
     min_val = INFINITY
-    
+
     ! Find the next smallest energy value
     do i = low, high
       if (.not. chi_done(i)) then
@@ -836,7 +836,7 @@ contains
           min_val = E_grid(chi_loc(i), i)
       end if
     end do
-    
+
     ! Find all locs  that are within a certain tolerance of the min value
     do i = low, high
       if (.not. chi_done(i)) then
@@ -845,14 +845,14 @@ contains
         end if
       end if
     end do
-  
+
   end subroutine min_value_locs
-  
+
 !===============================================================================
 ! PRINT_CHI prints the chi data to the specified output file
 ! in the specified format.
-!===============================================================================  
-  
+!===============================================================================
+
   subroutine print_chi(name, lib_format, chi_t, chi_p, chi_d, E_t, E_p, E_d)
     character(len=*),     intent(in) :: name       ! (hdf5 specific) name of group
     integer,              intent(in) :: lib_format ! Library output type
@@ -862,7 +862,7 @@ contains
     real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
     real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
     real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
-    
+
     if (lib_format == ASCII) then
       call print_chi_ascii(chi_t, chi_p, chi_d, E_t, E_p, E_d)
     else if (lib_format == BINARY) then
@@ -872,14 +872,14 @@ contains
     else if (lib_format == H5) then
       call print_chi_hdf5(name, chi_t, chi_p, chi_d, E_t, E_p, E_d)
     end if
-    
+
   end subroutine print_chi
 
 !===============================================================================
 ! PRINT_CHI_ASCII prints the chi data to the specified output file
 ! in an ASCII format.
 !===============================================================================
-  
+
   subroutine print_chi_ascii(chi_t, chi_p, chi_d, E_t, E_p, E_d)
     real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
     real(8), allocatable, intent(in) :: chi_p(:,:) ! Unionized Prompt Chi
@@ -887,12 +887,12 @@ contains
     real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
     real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
     real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
-    
+
     character(MAX_LINE_LEN) :: line
-  
-    ! Assumes that the file and header information is already printed 
+
+    ! Assumes that the file and header information is already printed
     ! (including # of groups and bins, and thinning tolerance)
-    ! Will follow this format with at max 4 entries per line: 
+    ! Will follow this format with at max 4 entries per line:
     ! <n_E_t>
     ! <1:n_E_t energies>
     ! <1:n_E_t chi_t(g,E)
@@ -902,49 +902,49 @@ contains
     ! <n_E_d>
     ! <1:n_E_d energies>
     ! <1:n_E_d chi_d(g,E)
-    
+
     ! Begin writing:
-    
+
     ! <n_E_t>
     line = ''
     write(line,'(I20)') size(E_t)
     write(UNIT_NUC,'(A)') trim(line)
-    
+
     ! <1:n_E_t energies>
     call print_ascii_array(E_t, UNIT_NUC)
-    
+
     ! <1:n_E_t chi_t>
     call print_ascii_array(pack(chi_t, .true.), UNIT_NUC)
-    
+
     ! <n_E_p>
     line = ''
     write(line,'(I20)') size(E_p)
     write(UNIT_NUC,'(A)') trim(line)
-    
+
     ! <1:n_E_p energies>
     call print_ascii_array(E_p, UNIT_NUC)
-    
+
     ! <1:n_E_p chi_p>
     call print_ascii_array(pack(chi_p, .true.), UNIT_NUC)
-    
+
     ! <n_E_d>
     line = ''
     write(line,'(I20)') size(E_d)
     write(UNIT_NUC,'(A)') trim(line)
-    
+
     ! <1:n_E_d energies>
     call print_ascii_array(E_d, UNIT_NUC)
-    
+
       ! <1:n_E_d chi_d>
     call print_ascii_array(pack(chi_d, .true.), UNIT_NUC)
-    
+
   end subroutine print_chi_ascii
-  
+
 !===============================================================================
 ! PRINT_CHI_HUMAN prints the chi data to the specified output file
 ! in a human-readable ASCII format.
 !===============================================================================
-  
+
   subroutine print_chi_human(chi_t, chi_p, chi_d, E_t, E_p, E_d)
     real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
     real(8), allocatable, intent(in) :: chi_p(:,:) ! Unionized Prompt Chi
@@ -952,14 +952,14 @@ contains
     real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
     real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
     real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
-    
+
     integer :: iE
-    
+
     character(MAX_LINE_LEN) :: line
-  
-    ! Assumes that the file and header information is already printed 
+
+    ! Assumes that the file and header information is already printed
     ! (including # of groups and bins, and thinning tolerance)
-    ! Will follow this format with at max 4 entries per line: 
+    ! Will follow this format with at max 4 entries per line:
     ! <n_E_t>
     ! <1:n_E_t energies>
     ! <1:n_E_t E_t, chi_t(g,E)
@@ -969,61 +969,63 @@ contains
     ! <n_E_d>
     ! <1:n_E_d energies>
     ! <1:n_E_d E_d, chi_d(g,E)
-    
+
     ! Begin writing:
-    
+    write(UNIT_NUC,*) 'Chi Total'
     ! <n_E_t>
     line = ''
     write(line,'(I20)') size(E_t)
     write(UNIT_NUC,'(A)') trim(line)
-    
+
     ! <1:n_E_t energies>
     call print_ascii_array(E_t, UNIT_NUC)
-    
+
     ! <1:n_E_t E_t, chi_t>
     do iE = 1, size(E_t)
-      write(line, '(1PE20.12)') E_t(iE)
+      write(line, '(A,1PE20.12)') 'Ein=',E_t(iE)
       write(UNIT_NUC, '(A)') trim(line)
       call print_ascii_array(chi_t(:, iE), UNIT_NUC)
     end do
-    
+
     ! <n_E_p>
+    write(UNIT_NUC,*) 'Chi Prompt'
     line = ''
     write(line,'(I20)') size(E_p)
     write(UNIT_NUC,'(A)') trim(line)
-    
+
     ! <1:n_E_p energies>
     call print_ascii_array(E_p, UNIT_NUC)
-    
+
     ! <1:n_E_p E_p, chi_p>
     do iE = 1, size(E_p)
-      write(line, '(1PE20.12)') E_p(iE)
+      write(line, '(A,1PE20.12)') 'Ein=',E_p(iE)
       write(UNIT_NUC, '(A)') trim(line)
       call print_ascii_array(chi_p(:, iE), UNIT_NUC)
     end do
-    
+
     ! <n_E_d>
+    write(UNIT_NUC,*) 'Chi Delayed'
     line = ''
     write(line,'(I20)') size(E_d)
     write(UNIT_NUC,'(A)') trim(line)
-    
+
     ! <1:n_E_d energies>
     call print_ascii_array(E_d, UNIT_NUC)
-    
-    ! <1:n_E_d E_d, chi_p>
+
+    ! <1:n_E_d E_d, chi_d>
     do iE = 1, size(E_d)
-      write(line, '(1PE20.12)') E_d(iE)
+      write(line, '(A,1PE20.12)') 'Ein=',E_d(iE)
       write(UNIT_NUC, '(A)') trim(line)
       call print_ascii_array(chi_d(:, iE), UNIT_NUC)
     end do
-    
+
   end subroutine print_chi_human
 
 !===============================================================================
 ! PRINT_CHI_BIN prints the chi data to the specified output file
 ! in Fortran binary (stream) format.
 !===============================================================================
-  
+
   subroutine print_chi_bin(chi_t, chi_p, chi_d, E_t, E_p, E_d)
     real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
     real(8), allocatable, intent(in) :: chi_p(:,:) ! Unionized Prompt Chi
@@ -1031,8 +1033,8 @@ contains
     real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
     real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
     real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
-  
-    ! Assumes that the file and header information is already printed 
+
+    ! Assumes that the file and header information is already printed
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format:
     ! <n_E_t>
@@ -1044,43 +1046,34 @@ contains
     ! <n_E_d>
     ! <1:n_E_d energies>
     ! <1:n_E_d chi_d(g,E)
-    
+
     ! Begin writing:
-    
     ! <n_E_t>
     write(UNIT_NUC) size(E_t)
-    
     ! <1:n_E_t energies>
     write(UNIT_NUC) E_t
-    
     ! <1:n_E_t chi_t>
     write(UNIT_NUC) chi_t
-    
     ! <n_E_p>
     write(UNIT_NUC) size(E_p)
-    
     ! <1:n_E_p energies>
     write(UNIT_NUC) E_p
-    
     ! <1:n_E_p chi_p>
     write(UNIT_NUC) chi_p
-    
     ! <n_E_d>
     write(UNIT_NUC) size(E_d)
-    
     ! <1:n_E_d energies>
     write(UNIT_NUC) E_d
-    
     ! <1:n_E_d chi_d>
     write(UNIT_NUC) chi_d
-    
+
   end subroutine print_chi_bin
-  
+
 !===============================================================================
 ! PRINT_CHI_BIN prints the chi data to the specified output file
 ! in Fortran binary (stream) format.
 !===============================================================================
-  
+
   subroutine print_chi_hdf5(name, chi_t, chi_p, chi_d, E_t, E_p, E_d)
     character(len=*),     intent(in) :: name       ! name of group
     real(8), allocatable, intent(in) :: chi_t(:,:) ! Unionized Total Chi
@@ -1089,12 +1082,12 @@ contains
     real(8), allocatable, intent(in) :: E_t(:)     ! Unionized Total Energy
     real(8), allocatable, intent(in) :: E_p(:)     ! Unionized Prompt Energy
     real(8), allocatable, intent(in) :: E_d(:)     ! Unionized Delayed Energy
-    
+
 #ifdef HDF5
     integer(HID_T) :: orig_group, chi_group
     character(MAX_FILE_LEN) :: group_name, chi_name, nuc_name
     integer :: period_loc
-    
+
     ! Create a new hdf5 group for the chi information
     nuc_name = trim(adjustl(name))
     period_loc = scan(nuc_name, '.')
@@ -1103,8 +1096,8 @@ contains
     orig_group = temp_group
     call hdf5_open_group(group_name)
     chi_group = temp_group
-    
-    ! Assumes that the file and header information is already printed 
+
+    ! Assumes that the file and header information is already printed
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format:
     ! <n_E_t>
@@ -1116,9 +1109,9 @@ contains
     ! <n_E_d>
     ! <1:n_E_d energies>
     ! <1:n_E_d chi_d(g,E)
-    
+
     ! Begin writing:
-    
+
     ! Start with Total chi, create a group for this
     chi_name = trim(adjustl(group_name)) // "/chi_t"
     call hdf5_open_group(chi_name)
@@ -1132,7 +1125,7 @@ contains
       (/size(chi_t, dim = 1), size(chi_t, dim = 2)/))
     call hdf5_close_group()
     temp_group = chi_group
-    
+
     ! Move to prompt chi, create a group for this.
     chi_name = trim(adjustl(group_name)) // "/chi_p"
     call hdf5_open_group(chi_name)
@@ -1146,7 +1139,7 @@ contains
       (/size(chi_p, dim = 1), size(chi_p, dim = 2)/))
     call hdf5_close_group()
     temp_group = chi_group
-    
+
     ! Move to delayed chi, create a group for this.
     chi_name = trim(adjustl(group_name)) // "/chi_d"
     call hdf5_open_group(chi_name)
@@ -1160,10 +1153,10 @@ contains
       (/size(chi_d, dim = 1), size(chi_d, dim = 2)/))
     call hdf5_close_group()
     temp_group = chi_group
-    
+
     call hdf5_close_group()
     temp_group = orig_group
 #endif
   end subroutine print_chi_hdf5
-  
+
 end module chi_class

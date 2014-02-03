@@ -107,6 +107,7 @@ class NDPP_lib(object):
         self.kT = 0.0
         self.NG = 0
         self.E_bins = []
+        self.nuscatter_present = False
         self.chi_present = False
         self.thin_tol = 0.0
         self.print_tol = 0.0
@@ -119,6 +120,7 @@ class NDPP_lib(object):
         self.gmin = []
         self.gmax = []
         self.scatter = []
+        self.nuscatter = []
         self.NE_chi = 0
         self.Ein_chi = []
         self.chi = []
@@ -158,6 +160,9 @@ class NDPP_lib(object):
         if self.scatt_type == SCATT_TYPE_LEGENDRE:
             self.scatt_order += 1
 
+        # Get flag for if nuscatter is present
+        self.nuscatter_present = bool(self._get_int(path='nuscatter')[0])
+
         # Get flag for if chi is present
         self.chi_present = bool(self._get_int(path='chi_present')[0])
 
@@ -186,6 +191,20 @@ class NDPP_lib(object):
             self.scatter.append(scatt_data(gmin, gmax, self.scatt_order))
             if (gmin > 0):
                 for g in xrange(gmax - gmin + 1):
+                    # this base name needs some fixing for Hdf5
+                    iE_g_base = iE_base + str(g + gmin + 1)
+                    self.scatter[iE].outgoing[g][:] = np.asarray( \
+                        self._get_double(n=self.scatt_order, path=iE_g_base))
+
+        if self.nuscatter_present:
+            for iE in xrange(self.NE_scatt):
+            iE_base = base + str(iE)+ '/'
+            gmin = self._get_int(path=iE_base+'nu_gmin')[0]
+            gmax = self._get_int(path=iE_base+'nu_gmax')[0]
+            self.scatter.append(scatt_data(gmin, gmax, self.scatt_order))
+            if (gmin > 0):
+                for g in xrange(gmax - gmin + 1):
+                    # this base name needs some fixing for Hdf5
                     iE_g_base = iE_base + str(g + gmin + 1)
                     self.scatter[iE].outgoing[g][:] = np.asarray( \
                         self._get_double(n=self.scatt_order, path=iE_g_base))
@@ -194,22 +213,30 @@ class NDPP_lib(object):
         # NOT YET IMPLEMENTED!!
         pass
 
-    def condense_outgoing_scatt(self, groups=None):
+    def condense_outgoing_scatt(self, nu=False, groups=None):
         if groups is None:
             groups = range(self.NG)
         condensed = np.zeros((self.NE_scatt, self.scatt_order))
 
+        if nu:
+            if self.nuscatter_present:
+                scatter = self.nuscatter[iE]
+            else:
+                raise ValueError("Error: Nu-Scatter data requested, but none present!")
+        else:
+            scatter = self.scatter[iE]
+
         for iE in xrange(self.NE_scatt):
-            gmin = self.scatter[iE].gmin
-            gmax = self.scatter[iE].gmax
+            gmin = scatter[iE].gmin
+            gmax = scatter[iE].gmax
 
             if gmin == gmax:
                 if gmin in groups:
-                    condensed[iE][:] += self.scatter[iE].outgoing[gmin- gmin][:]
+                    condensed[iE][:] += scatter[iE].outgoing[gmin- gmin][:]
             else:
                 for g in xrange(gmin, gmax + 1):
                     if g in groups:
-                        condensed[iE][:] += self.scatter[iE].outgoing[g-gmin][:]
+                        condensed[iE][:] += scatter[iE].outgoing[g-gmin][:]
         return condensed
 
     def expand_scatt(self, outgoing, num_mu_pts = 201, order = None):
@@ -241,10 +268,18 @@ class NDPP_lib(object):
             pass
         return (expanded, mu)
 
-    def test_scatt_positivity(self, num_mu_pts = 201, order = None):
+    def test_scatt_positivity(self, nu=False, num_mu_pts = 201, order = None):
         # This function will pass through each Ein and outgoing group and
         # will return a flag if the data set is negative and will also return
         # a list of negative iE and groups
+
+        if nu:
+            if self.nuscatter_present:
+                scatter = self.nuscatter[iE]
+            else:
+                raise ValueError("Error: Nu-Scatter data requested, but none present!")
+        else:
+            scatter = self.scatter[iE]
 
         # Initialize the return values
         positivity = True
@@ -262,15 +297,15 @@ class NDPP_lib(object):
 
         if self.scatt_type == SCATT_TYPE_LEGENDRE:
           for iE in xrange(self.NE_scatt):
-              gmin = self.scatter[iE].gmin
-              gmax = self.scatter[iE].gmax
+              gmin = scatter[iE].gmin
+              gmax = scatter[iE].gmax
 
               for g in xrange(gmin, gmax + 1):
                   expanded = np.zeros(num_mu_pts)
                   for l in xrange(maxL):
                     expanded[:] = expanded[:] + \
                         (float(l) + 0.5) * ss.eval_legendre(l, mu[:]) * \
-                        self.scatter[iE].outgoing[g - gmin][l]
+                        scatter[iE].outgoing[g - gmin][l]
 
                   minval = min(expanded)
                   if minval < min_value:
