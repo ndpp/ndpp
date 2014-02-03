@@ -98,8 +98,8 @@ module constants
 
   ! Flag to interpolate on angular distributions with nearest neighbor or
   ! linear interpolation
-  ! logical, parameter :: INTERP_NEAREST = .false.
-  logical, parameter :: INTERP_NEAREST = .true.
+  logical, parameter :: INTERP_NEAREST = .false.
+  ! logical, parameter :: INTERP_NEAREST = .true.
 
   ! Fraction of maximum s(a,b) value to use as cutoff for determining
   ! the range of integration

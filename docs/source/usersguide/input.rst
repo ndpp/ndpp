@@ -62,6 +62,19 @@ depending on the value of ``<scatt_type>``.
 
   *Default*: ``5``
 
+``<nuscatter>`` Element
+------------------------
+
+The ``<nuscatter>`` element has no attributes and has an accepted value of
+"true" or "false". If set to "true", then the library produced by NDPP will
+contain a dataset representing the total production of neutrons due to scatter
+(that is, :math:`\frac{\nu\sigma_{s,l,E'\rightarrow g}\left(E'\right)}{\sigma_s\left(E'\right)}`).
+This data will be included in addition to the standard scattering data
+(:math:`\frac{\sigma_{s,l,E'\rightarrow g}\left(E'\right)}{\sigma_s\left(E'\right)}`).
+If "false", then the scattering production of neutrons will not be included.
+
+  *Default*: ``True``
+
 ``<mu_bins>`` Element
 ---------------------
 

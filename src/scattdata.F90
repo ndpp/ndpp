@@ -58,7 +58,6 @@ module scattdata_class
     real(8)              :: freegas_cutoff = ZERO ! Free gas cutoff energy
     real(8)              :: kT         = ZERO ! kT of library
     integer              :: law               ! Scattering law
-    logical              :: nuscatter         ! Whether or not to include multiplication
 
     ! Type-Bound procedures
     contains
@@ -77,7 +76,7 @@ module scattdata_class
 !===============================================================================
 
     subroutine scatt_init(this, nuc, rxn, edist, E_bins, scatt_type, order, &
-      mu_bins, nuscatter)
+      mu_bins)
 
       class(ScattData), intent(inout)       :: this  ! The object to initialize
       type(Nuclide), intent(in)             :: nuc   ! Nuclide we are working on
@@ -89,7 +88,6 @@ module scattdata_class
       integer, intent(in) :: scatt_type ! Type of format to store the data
       integer, intent(in) :: order      ! Order of the data storage format
       integer, intent(in) :: mu_bins    ! Number of angular pts in tabular rep.
-      logical, intent(in) :: nuscatter      ! Include neutron multiplication
 
       integer :: i          ! loop counter
       real(8) :: dmu        ! mu spacing
@@ -131,8 +129,6 @@ module scattdata_class
         ! Store the freegas cutoff energy (MeV)
         this % freegas_cutoff = nuc % freegas_cutoff
       end if
-
-      this % nuscatter = nuscatter
 
       ! Set distributions
       if (rxn % has_angle_dist) then
@@ -359,9 +355,7 @@ module scattdata_class
 ! data directly from the given index (iE)
 !===============================================================================
 
-    function scatt_interp_distro(this, mu_out, nuc, Ein, norm_tot) &
-      result(distro)
-
+    function scatt_interp_distro(this, mu_out, nuc, Ein, norm_tot) result(distro)
       class(ScattData), target, intent(in) :: this ! Working ScattData object
       real(8), intent(in)                  :: mu_out(:) ! The tabular output mu grid
       type(Nuclide), intent(in), pointer   :: nuc  ! Working nuclide
@@ -498,23 +492,11 @@ module scattdata_class
         p_valid = ONE
       end if
 
-      ! Combine the terms in to one before multiplying
-      sigS = sigS * p_valid
-      if (this % nuscatter) then
-        sigS = sigS * real(rxn % multiplicity, 8)
-      end if
+      ! Scale the results
+      distro = distro * sigS * p_valid
 
-      do g = 1, this % groups
-        distro(:, g) = distro(:, g) * sigS
-      end do
       ! Add this contribution to the normalization constant
-      ! divide by multiplicity since we dont want to take that in to account
-      ! when normalizing
-      if (this % nuscatter) then
-        norm_tot = norm_tot + sigS / real(rxn % multiplicity, 8)
-      else
-        norm_tot = norm_tot + sigS
-      end if
+      norm_tot = norm_tot + sigS * p_valid
 
     end function scatt_interp_distro
 

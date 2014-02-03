@@ -138,6 +138,7 @@ module ndpp_class
       output_format_  = ''
       scatt_type_     = 'legendre'
       scatt_order_    = SCATT_ORDER_DEFAULT
+      nuscatter_ = ''
       thinning_tol_   = THIN_TOL_DEFAULT
       mu_bins_        = MU_BINS_DEFAULT
       freegas_cutoff_ = FREEGAS_THRESHOLD_DEFAULT
@@ -174,8 +175,6 @@ module ndpp_class
         omp_threads = threads_
       end if
 #endif
-
-      nuscatter_ = ''
 
       ! Read cross_sections.xml
       call read_cross_sections_xml(self)
@@ -285,7 +284,7 @@ module ndpp_class
         call fatal_error()
       end if
 
-      ! Get nuScatter information
+      ! Get nuscatter information
       call lower_case(nuscatter_)
       if (nuscatter_ == '') then
         self % nuscatter = NUSCATTER_DEFAULT
@@ -298,7 +297,6 @@ module ndpp_class
                   "TRUE or FALSE. Using default of FALSE."
         call warning()
       end if
-
 
       ! Get mu_bins information
       if (mu_bins_ > 1) then
@@ -400,8 +398,10 @@ module ndpp_class
       integer                   :: i_listing     ! index of xs_listing
       character(MAX_FILE_LEN)   :: nuc_lib_name  ! nuclidic library's filename
       ! Scattering specific data
-      real(8), allocatable :: scatt_mat(:,:,:) !scattering matrix moments,
-                                                             ! order x g_out x E_in
+      real(8), allocatable :: scatt_mat(:,:,:)   ! scattering matrix moments,
+                                                 ! order x g_out x E_in
+      real(8), allocatable :: nuscatt_mat(:,:,:) ! nu-scattering matrix moments,
+                                                 ! order x g_out x E_in
       ! Chi specific data
       real(8), allocatable   :: chi_t(:,:)  ! grp x E_in chi tot values on a union grid
       real(8), allocatable   :: e_t_grid(:) ! List of energy points for chi tot
@@ -427,12 +427,14 @@ module ndpp_class
       call timer_start(self % time_print)
       call print_ndpp_lib_xml_header(self % n_listings, self % energy_bins, &
         self % lib_format, self % scatt_type, self % scatt_order, &
-        self % mu_bins, self % integrate_chi, self % print_tol, self % thin_tol)
+        self % mu_bins, self % nuscatter, self % integrate_chi, &
+        self % print_tol, self % thin_tol)
 #ifdef HDF5
       if (self % lib_format == H5) then
         call hdf5_file_create(self % lib_name, hdf5_output_file)
         hdf5_fh = hdf5_output_file
-!!! Do I also want to have header information just like in ndpp_lib.xml in here?
+        !!! Do we want header information just like in ndpp_lib.xml in here?
+        !!! Doing so would make each lib a stand-alone dataset
       end if
 #endif
       call timer_stop(self % time_print)
@@ -500,18 +502,30 @@ module ndpp_class
 
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
-          call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-            self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol, &
-            self % Ein, self % nuscatter)
-
-          ! Print the results to file
-          call timer_start(self % time_print)
-          call print_scatt(nuc % name, self % lib_format, scatt_mat, self % Ein, &
-            self % print_tol)
+          if (self % nuscatter) then
+            call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
+              self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
+              scatt_mat, nuscatt_mat)
+            ! Print the results to file
+            call timer_start(self % time_print)
+            call print_scatt(nuc % name, self % lib_format, self % Ein, &
+              self % print_tol, scatt_mat, nuscatt_mat)
+          else
+            call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
+              self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
+              scatt_mat)
+            ! Print the results to file
+            call timer_start(self % time_print)
+            call print_scatt(nuc % name, self % lib_format, self % Ein, &
+              self % print_tol, scatt_mat)
+          end if
           call timer_stop(self % time_print)
 
           if (allocated(scatt_mat)) then
             deallocate(scatt_mat)
+          end if
+          if (allocated(nuscatt_mat)) then
+            deallocate(nuscatt_mat)
           end if
           call timer_stop(self % time_scatt_preproc)
 
@@ -585,8 +599,8 @@ module ndpp_class
 
           ! Print the results to file
           call timer_start(self % time_print)
-          call print_scatt(sab % name, self % lib_format, scatt_mat, self % Ein, &
-            self % print_tol)
+          call print_scatt(sab % name, self % lib_format, self % Ein, &
+            self % print_tol, scatt_mat)
           call timer_stop(self % time_print)
 
           if (allocated(scatt_mat)) then
@@ -671,7 +685,8 @@ module ndpp_class
 !===============================================================================
 
     subroutine print_ndpp_lib_xml_header(n_listings, energy_bins, lib_format, &
-      scatt_type, scatt_order, mu_bins, integrate_chi, print_tol, thin_tol)
+      scatt_type, scatt_order, mu_bins, nuscatter, integrate_chi, print_tol, &
+      thin_tol)
 
       integer, intent(in)              :: n_listings     ! Number of entries
       real(8), allocatable, intent(in) :: energy_bins(:) ! Energy group structure
@@ -679,6 +694,7 @@ module ndpp_class
       integer, intent(in)              :: scatt_type     ! Representation of scattering data
       integer, intent(in)              :: scatt_order    ! Order of scattering data
       integer, intent(in)              :: mu_bins        ! Number of angular bins to use
+      logical, intent(in)              :: nuscatter      ! Flag on if nuscatter data is included
       logical, intent(in)              :: integrate_chi  ! Flag on if chi data is included
       real(8), intent(in)              :: print_tol      ! Minimum g'->g transfer to bother printing
       real(8), intent(in)              :: thin_tol       ! Tolerance on the union energy grid thinning
@@ -710,6 +726,11 @@ module ndpp_class
       write(UNIT_NDPP, '(A)') indent // '<entries> ' // trim(to_str(n_listings))// &
         '  </entries>'
       !!! Skipping over record length for now, not sure I need it.
+      if (nuscatter) then
+        write(UNIT_NDPP, '(A)') indent // '<nuscatter> true </nuscatter>'
+      else
+        write(UNIT_NDPP, '(A)') indent // '<nuscatter> false </nuscatter>'
+      end if
       if (integrate_chi) then
         write(UNIT_NDPP, '(A)') indent // '<chi_present> true </chi_present>'
       else
@@ -930,7 +951,7 @@ module ndpp_class
 
       character(MAX_LINE_LEN) :: line
       character(MAX_FILE_LEN) :: h_filename
-      integer                 :: chi_present_int, period_loc
+      integer                 :: chi_present_int, period_loc, nuscatter_int
       logical                 :: fissionable
       integer                 :: i
 
@@ -939,6 +960,20 @@ module ndpp_class
         fissionable = .false.
       else
         fissionable = fiss
+      end if
+
+      ! First convert the logical value of nuscatter & Chi Present to an integer.
+      ! It seemas as if a type-cast is not in the standard, so the next
+      ! if-then  block will explicitly do the cast.
+      if (this_ndpp % nuscatter) then
+        nuscatter_int = 1
+      else
+        nuscatter_int = 0
+      end if
+      if(this_ndpp % integrate_chi .AND. fissionable) then
+        chi_present_int = 1
+      else
+        chi_present_int = 0
       end if
 
       if ((this_ndpp % lib_format == ASCII) .or. &
@@ -954,22 +989,15 @@ module ndpp_class
         write(UNIT_NUC,'(A)') trim(line)
         ! Energy Bin Structure
         call print_ascii_array(this_ndpp % energy_bins, UNIT_NUC)
-        ! Scattering Type (Legendre/Hist), Order of this Type, Chi Present, Thinning Tolerance
-        ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
-        ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. fissionable) then
-          chi_present_int = 1
-        else
-          chi_present_int = 0
-        end if
-        ! Now print the results
+        ! Scattering Type (Legendre/Hist), Order of this Type, Nu-Scatter,
+        ! Chi Present
         line= ''
-        write(line,'(I20,I20,I20,1PE20.12)') this_ndpp % scatt_type, &
-          this_ndpp % scatt_order, chi_present_int, this_ndpp % thin_tol
+        write(line,'(I20,I20,I20,I20)') this_ndpp % scatt_type, &
+          this_ndpp % scatt_order, nuscatter_int, chi_present_int
         write(UNIT_NUC,'(A)') trim(line)
-        ! Do the same, and on a new line, for this_ndpp % mu_bins
+        ! Do the same, and on a new line, for this_ndpp % mu_bins & thin_tol
         line= ''
-        write(line,'(I20)') this_ndpp % mu_bins
+        write(line,'(I20,1PE20.12)') this_ndpp % mu_bins, this_ndpp % thin_tol
         write(UNIT_NUC,'(A)') trim(line)
 
       else if (this_ndpp % lib_format == BINARY) then
@@ -987,64 +1015,51 @@ module ndpp_class
         ! Energy Bin Structure
         write(UNIT_NUC) this_ndpp % energy_bins
 
-        ! Scattering Type (Legendre/Hist), Order of this Type, Chi Present,
-        ! Thinning Tolerance
-        ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
-        ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. fissionable) then
-          chi_present_int = 1
-        else
-          chi_present_int = 0
-        end if
-        ! Now print the results
+        ! Scattering Type (Legendre/Hist), Order of this Type, Nu-Scatter,
+        ! Chi Present
         write(UNIT_NUC) this_ndpp % scatt_type
         write(UNIT_NUC) this_ndpp % scatt_order
+        write(UNIT_NUC) nuscatter_int
         write(UNIT_NUC) chi_present_int
-        write(UNIT_NUC) this_ndpp % thin_tol
 
-        ! Write mu_bins
+        ! Write mu_bins, thin_tol
         write(UNIT_NUC) this_ndpp % mu_bins
+        write(UNIT_NUC) this_ndpp % thin_tol
 #ifdef HDF5
       else if (this_ndpp % lib_format == H5) then
         h_filename = trim(adjustl(name))
         period_loc = scan(h_filename, '.')
         h_filename(period_loc : period_loc) = '_'
         h_filename = "/" // trim(adjustl(h_filename))
-write(*,*) temp_group
         call hdf5_open_group(h_filename)
-write(*,*) temp_group
+
         ! Write name, kt, energy_groups, energy_bins,
-        ! scatt_type, scatt_order, integrate_chi, thin_tol, mu_bins
-        ! First convert the logical value of Chi Present to an integer. It seemas as if a type-cast
-        ! is not in the standard, so the next if-then  block will explicitly do the cast.
-        if(this_ndpp % integrate_chi .AND. fissionable) then
-          chi_present_int = 1
-        else
-          chi_present_int = 0
-        end if
+        ! scatt_type, scatt_order, nuscatter, integrate_chi, thin_tol, mu_bins
         ! Now we can print (these should be attributes, but for we need
         ! to first incorporate more routines for this in hdf5_interface)
         call hdf5_write_string(temp_group, 'name', trim(adjustl(name)), &
           len(trim(adjustl(nuc % name))))
         call hdf5_write_double(temp_group, 'kT', kT)
         call hdf5_write_integer(temp_group, 'energy_groups', &
-          this_ndpp % energy_groups)
+                                this_ndpp % energy_groups)
         call hdf5_write_double_1Darray(temp_group, 'energy_bins', &
           this_ndpp % energy_bins, this_ndpp % energy_groups + 1)
         call hdf5_write_integer(temp_group, 'scatt_type', &
-          this_ndpp % scatt_type)
+                                this_ndpp % scatt_type)
         call hdf5_write_integer(temp_group, 'scatt_order', &
-          this_ndpp % scatt_order)
-        call hdf5_write_integer(temp_group, 'integrate_chi', &
-          chi_present_int)
-        call hdf5_write_double(temp_group, 'thin_tol', &
-          this_ndpp % thin_tol)
+                                this_ndpp % scatt_order)
+        call hdf5_write_integer(temp_group, 'nuscatter', nuscatter_int)
+        call hdf5_write_integer(temp_group, 'integrate_chi', chi_present_int)
+        call hdf5_write_double(temp_group, 'thin_tol', this_ndpp % thin_tol)
+        call hdf5_write_integer(temp_group, 'mu_bins', this_ndpp % mu_bins)
 #endif
       end if
 
     end subroutine init_library
 
-! Close the file or HDF5 group
+!===============================================================================
+! FINALIZE_LIBRARY closes the opened library accordingly.
+!===============================================================================
     subroutine finalize_library(lib_format)
       integer, intent(in) :: lib_format
 
