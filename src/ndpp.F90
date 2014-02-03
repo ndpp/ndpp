@@ -427,7 +427,8 @@ module ndpp_class
       call timer_start(self % time_print)
       call print_ndpp_lib_xml_header(self % n_listings, self % energy_bins, &
         self % lib_format, self % scatt_type, self % scatt_order, &
-        self % mu_bins, self % integrate_chi, self % print_tol, self % thin_tol)
+        self % mu_bins, self % nuscatter, self % integrate_chi, &
+        self % print_tol, self % thin_tol)
 #ifdef HDF5
       if (self % lib_format == H5) then
         call hdf5_file_create(self % lib_name, hdf5_output_file)
@@ -671,7 +672,8 @@ module ndpp_class
 !===============================================================================
 
     subroutine print_ndpp_lib_xml_header(n_listings, energy_bins, lib_format, &
-      scatt_type, scatt_order, mu_bins, integrate_chi, print_tol, thin_tol)
+      scatt_type, scatt_order, mu_bins, nuscatter, integrate_chi, print_tol, &
+      thin_tol)
 
       integer, intent(in)              :: n_listings     ! Number of entries
       real(8), allocatable, intent(in) :: energy_bins(:) ! Energy group structure
@@ -679,6 +681,7 @@ module ndpp_class
       integer, intent(in)              :: scatt_type     ! Representation of scattering data
       integer, intent(in)              :: scatt_order    ! Order of scattering data
       integer, intent(in)              :: mu_bins        ! Number of angular bins to use
+      logical, intent(in)              :: nuscatter      ! Flag on if nuscatter data is included
       logical, intent(in)              :: integrate_chi  ! Flag on if chi data is included
       real(8), intent(in)              :: print_tol      ! Minimum g'->g transfer to bother printing
       real(8), intent(in)              :: thin_tol       ! Tolerance on the union energy grid thinning
@@ -710,6 +713,11 @@ module ndpp_class
       write(UNIT_NDPP, '(A)') indent // '<entries> ' // trim(to_str(n_listings))// &
         '  </entries>'
       !!! Skipping over record length for now, not sure I need it.
+      if (nuscatter) then
+        write(UNIT_NDPP, '(A)') indent // '<nu_scatter> true </nu_scatter>'
+      else
+        write(UNIT_NDPP, '(A)') indent // '<nu_scatter> false </nu_scatter>'
+      end if
       if (integrate_chi) then
         write(UNIT_NDPP, '(A)') indent // '<chi_present> true </chi_present>'
       else
