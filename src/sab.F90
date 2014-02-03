@@ -40,6 +40,7 @@ module sab
       sab_int = ZERO
       groups = size(e_bins) - 1
       allocate(sig(size(ein_grid)))
+      sig = ZERO
 
       ! We have to exit if there are no elastic reactions
       if (sab % threshold_elastic == ZERO) then
@@ -137,7 +138,6 @@ module sab
           call integrate_sab_inel_cont(sab, ein_grid, e_bins, scatt_type, &
                                        order, sab_int, sig)
       end if
-
     end subroutine integrate_sab_inel
 
 !===============================================================================
@@ -287,7 +287,9 @@ module sab
       sab_int = ZERO
       groups = size(e_bins) - 1
       allocate(sig(size(ein_grid)))
+      sig = ZERO
       allocate(distro(order + 1, groups, sab % n_inelastic_e_in))
+      distro = ZERO
 
       ! Before we do the integration at the ein_grid points, we will
       ! calculate the energy-angle double integral over the S(a,b) data at
@@ -379,7 +381,7 @@ module sab
             end do
           end do
 
-          ! Divide by two from the trapezoidal integration
+          ! Finish the division from trapezoidal integration
           distro(:, g, iEin) = distro(:, g, iEin)  / real(sab % n_inelastic_mu, 8)
         end do
         deallocate(pdf)
@@ -391,26 +393,28 @@ module sab
       do iEin = 1, size(ein_grid)
         Ein = ein_grid(iEin)
         ! Find the index and interpolation factor
-        if (Ein < sab % inelastic_e_in(1)) then
+        if (Ein <= sab % inelastic_e_in(1)) then
           isab = 1
           f = ZERO
+          ! Get x/s for normalizing
+          sig(iEin) = sab % inelastic_sigma(isab)
+          ! Find the sab integral
+          sab_int(:,:,iEin) = distro(:,:,isab) * sig(iEin)
         else if (Ein >= sab % threshold_inelastic) then
           sig(iEin) = ZERO
+          sab_int(:,:,iEin) = ZERO
           cycle
         else
           isab = binary_search(sab % inelastic_e_in, sab % n_inelastic_e_in, Ein)
           f = (Ein - sab % inelastic_e_in(isab)) / &
             (sab % inelastic_e_in(isab + 1) - sab % inelastic_e_in(isab))
+          ! Get x/s for normalizing
+          sig(iEin) = (ONE - f) * sab % inelastic_sigma(isab) + &
+            f * sab % inelastic_sigma(isab + 1)
+          ! Find the sab integral
+          sab_int(:,:,iEin) = ((ONE - f) * distro(:,:,isab) + &
+            f * distro(:,:,isab + 1)) * sig(iEin)
         end if
-
-        ! Get x/s for normalizing
-        sig(iEin) = (ONE - f) * sab % inelastic_sigma(isab) + &
-          f * sab % inelastic_sigma(isab + 1)
-
-        sab_int(:,:,iEin) = (ONE - f) * distro(:,:,isab) + &
-          f * distro(:,:,isab + 1)
-        ! And finally multiply by sig for normalization later on
-        sab_int(:,:,iEin) = sig(iEin) * sab_int(:,:,iEin)
       end do
     end subroutine integrate_sab_inel_cont
 
@@ -453,6 +457,7 @@ module sab
     ! not physical), we will set the threshold scatt_mat equal to the scatt_mat
     ! for the iE just before this
     scatt_mat(:, :, size(sig_el)) = scatt_mat(:, :, size(sig_el) - 1)
+
   end subroutine combine_sab_grid
 
 

@@ -45,6 +45,9 @@ module ndpp_class
     integer              :: scatt_type    = SCATT_TYPE_LEGENDRE
     ! Scattering data output size (Number of Legendre Orders or Number of Bins)
     integer              :: scatt_order   = SCATT_ORDER_DEFAULT
+    ! Whether or not to include neutron multiplication in the distributions
+    ! (i.e., whether or not nu-scatter or simply scatter is desired)
+    logical              :: nuscatter     = NUSCATTER_DEFAULT
     ! Number of angular bins to use during f_{n,MT} conversion
     integer              :: mu_bins = MU_BINS_DEFAULT
     ! Flag to integrate chi or not
@@ -172,6 +175,8 @@ module ndpp_class
       end if
 #endif
 
+      nuscatter_ = ''
+
       ! Read cross_sections.xml
       call read_cross_sections_xml(self)
 
@@ -280,6 +285,21 @@ module ndpp_class
         call fatal_error()
       end if
 
+      ! Get nuScatter information
+      call lower_case(nuscatter_)
+      if (nuscatter_ == '') then
+        self % nuscatter = NUSCATTER_DEFAULT
+      elseif (nuscatter_ == 'false') then
+        self % nuscatter = .false.
+      elseif (nuscatter_ == 'true') then
+        self % nuscatter = .true.
+      else
+        message = "Value for <nuscatter> provided, but does not match " // &
+                  "TRUE or FALSE. Using default of FALSE."
+        call warning()
+      end if
+
+
       ! Get mu_bins information
       if (mu_bins_ > 1) then
         self % mu_bins = mu_bins_
@@ -338,16 +358,21 @@ module ndpp_class
 
       ! Revert to the default/uninitialized values
       self % path_cross_sections = ""
-      self % n_listings    = 0
+      self % n_listings     = 0
       if (allocated(self % Ein)) deallocate(self % Ein)
       if (allocated(self % energy_bins)) deallocate(self % energy_bins)
-      self % energy_groups = 0
-      self % lib_name      = ''
-      self % lib_format    = ASCII
-      self % scatt_type    = SCATT_TYPE_LEGENDRE
-      self % scatt_order   = SCATT_ORDER_DEFAULT
-      self % integrate_chi = INTEGRATE_CHI_DEFAULT
-      self % mu_bins       = MU_BINS_DEFAULT
+      self % energy_groups  = 0
+      self % lib_name       = ''
+      self % lib_format     = ASCII
+      self % scatt_type     = SCATT_TYPE_LEGENDRE
+      self % scatt_order    = SCATT_ORDER_DEFAULT
+      self % nuscatter      = NUSCATTER_DEFAULT
+      self % mu_bins        = MU_BINS_DEFAULT
+      self % integrate_chi  = INTEGRATE_CHI_DEFAULT
+      self % use_freegas    = USE_FREEGAS_DEFAULT
+      self % freegas_cutoff = FREEGAS_THRESHOLD_DEFAULT
+      self % print_tol      = PRINT_TOL_DEFAULT
+      self % thin_tol       = ZERO
 
       ! Reset the timers
       call timer_reset(self % time_total)
@@ -477,7 +502,7 @@ module ndpp_class
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
             self % scatt_order, scatt_mat, self % mu_bins, self % thin_tol, &
-            self % Ein)
+            self % Ein, self % nuscatter)
 
           ! Print the results to file
           call timer_start(self % time_print)
@@ -513,6 +538,11 @@ module ndpp_class
           end if
 
           call timer_stop(self % time_chi_preproc)
+
+          nullify(nuc)
+          call nuclides(1) % clear()
+          deallocate(nuclides)
+
         else if (xs_listings(i_listing) % type == ACE_THERMAL) then
           ! ===================================================================
           ! PERFORM THERMAL SCATTERING LIBRARY CALCULATIONS
@@ -563,6 +593,9 @@ module ndpp_class
             deallocate(scatt_mat)
           end if
           call timer_stop(self % time_scatt_preproc)
+
+          nullify(sab)
+          deallocate(sab_tables)
         else
           message = "Invalid Entry in cross_sections listings.  " // &
             "NDPP does not support dosimetry Tables! Entry will be ignored."
@@ -575,22 +608,11 @@ module ndpp_class
           self % lib_format, self % lib_name, xs_listings(i_listing))
         call timer_stop(self % time_print)
 
-        ! Deallocate the nuclide/sab data and its member data.
-        if (allocated(nuclides)) then
-          nullify(nuc)
-          call nuclides(1) % clear()
-          deallocate(nuclides)
-        end if
-        if (allocated(sab_tables)) then
-          nullify(sab)
-          deallocate(sab_tables)
-        end if
-
         ! Close the file or HDF5 group
         call finalize_library(self % lib_format)
 
+        deallocate(self % Ein)
       end do
-
       call timer_stop(self % time_preproc)
 
       ! Close the ndpp_lib.xml file

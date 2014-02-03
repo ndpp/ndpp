@@ -2,9 +2,10 @@
 <template>
 
   <options rootname="ndpp"/>
-  
+
   <variable name="scatt_type_" tag="scatt_type" type="word" length="20" />
   <variable name="scatt_order_" tag="scatt_order" type="integer" default="5" />
+  <variable name="nuscatter_" tag="nuscatter" type="word" length="5" />
   <variable name="mu_bins_" tag="mu_bins" type="integer" default="2001" />
   <variable name="cross_sections_" tag="cross_sections" type="word" length="255" />
   <variable name="integrate_chi_" tag="integrate_chi" type="word" length="5" />

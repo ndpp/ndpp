@@ -26,16 +26,17 @@ module scatt_class
 !===============================================================================
 
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, &
-                          scatt_mat, mu_bins, thin_tol, E_grid)
+                          scatt_mat, mu_bins, thin_tol, E_grid, nuscatter)
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
-      integer, intent(in)                 :: order          ! Scattering data order
+      integer, intent(inout)              :: order          ! Scattering data order
       real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
       integer, intent(in)                 :: mu_bins        ! Number of angular points
                                                             ! to use during f_{n,MT} conversion
       real(8), intent(in)                 :: thin_tol       ! Thinning tolerance
       real(8), allocatable, intent(in)    :: E_grid(:)      ! Incoming Energy Grid
+      logical, intent(in)                 :: nuscatter      ! Include neutron multiplication
 
       type(DistEnergy), pointer :: edist
       type(Reaction),   pointer :: rxn
@@ -45,6 +46,7 @@ module scatt_class
       type(ScattData), allocatable, target  :: rxn_data(:)
       type(ScattData), pointer :: mySD
       real(8), allocatable     :: mu_out(:) ! The tabular output mu grid
+      type(ScattData), pointer :: inittedSD => null()
 
       ! This routine will parse through each nuc % reaction entry.
       ! For each, it will determine if the rxn is a scattering reaction, and if
@@ -54,7 +56,6 @@ module scatt_class
 
       ! First we have to find the total number of reactions, including the
       ! nested edists, so we can allocate rxn_data correctly.
-
       num_tot_rxn = 0
       do i_rxn = 1, nuc % n_reaction
         rxn => nuc % reactions(i_rxn)
@@ -81,16 +82,17 @@ module scatt_class
         mySD => rxn_data(i_nested_rxn)
         edist => rxn % edist
         call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, &
-          mu_bins)
+          mu_bins, nuscatter)
         if (associated(rxn % edist)) then
           do while (associated(edist % next))
             edist => edist % next
             i_nested_rxn = i_nested_rxn + 1
             mySD => rxn_data(i_nested_rxn)
             call mySD % init(nuc, rxn, edist, energy_bins, scatt_type, order, &
-              mu_bins)
+              mu_bins, nuscatter)
           end do
         end if
+        if (mySD % is_init) inittedSD => rxn_data(i_nested_rxn)
       end do
 
       do i_rxn = 1, num_tot_rxn
@@ -110,7 +112,8 @@ module scatt_class
       end if
 
       ! Now combine the results on to E_grid
-      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
+      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
+                           energy_bins, scatt_mat)
 
       ! Now clear rxn_datas members
       do i_rxn = 1, num_tot_rxn
@@ -174,7 +177,6 @@ module scatt_class
         ! call integrate_sab_inel_tab(sab, energy_bins, scatt_type, order, sab_int(2))
       end if
 
-
       ! Now combine the results on to E_grid
       call combine_sab_grid(sab_int_el, sab_int_inel, sig_el, sig_inel, &
                             scatt_mat)
@@ -189,24 +191,25 @@ module scatt_class
 ! energy grid.
 !===============================================================================
 
-    subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, scatt_mat)
+    subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, order, E_bins, scatt_mat)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
       type(ScattData), intent(inout), target :: rxn_data(:) ! The converted distros
       real(8), allocatable, intent(in)     :: E_grid(:) ! Ein grid
+      integer, intent(in)                  :: order     ! Angular order
+      real(8), intent(in)                  :: E_bins(:) ! Energy groups
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
 
-      integer :: iE, NE                          ! Ein counter, # Ein
-      integer :: irxn, Nrxn                      ! reaction counter, # Reactions
-      integer :: groups, order                   ! # Groups, # Orders
+      integer :: iE, NE              ! Ein counter, # Ein
+      integer :: irxn, Nrxn          ! reaction counter, # Reactions
+      integer :: groups              ! # Groups
       type(ScattData), pointer, SAVE :: mySD => NULL() ! Current working ScattData object
-      real(8) :: norm_tot                        ! Sum of all normalization consts
-      integer :: iE_print                 ! iE range to print status of
-      integer :: iE_pct, last_iE_pct      ! Current and previous pct complete
+      real(8) :: norm_tot            ! Sum of all normalization consts
+      integer :: iE_print            ! iE range to print status of
+      integer :: iE_pct, last_iE_pct ! Current and previous pct complete
 
 
-      groups = rxn_data(1) % groups
-      order = rxn_data(1) % order
+      groups = size(E_bins) - 1
       NE = size(E_grid)
       Nrxn = size(rxn_data)
       iE_print = NE / 20
@@ -231,13 +234,22 @@ module scatt_class
           end if
         end if
 #endif
-        if (E_grid(iE) <= rxn_data(1) % E_bins(size(rxn_data(1) % E_bins))) then
+        if (E_grid(iE) <= E_bins(size(E_bins))) then
           scatt_mat(:, :, iE) = ZERO
           norm_tot = ZERO
           do irxn = 1, Nrxn
             mySD => rxn_data(irxn)
             ! If we do not have a scatter reaction, don't score it.
             if (.not. mySD % is_init) cycle
+
+            ! Some reactions, ENDF-VII.0's Ca-40 e.g., have two angdist Ein
+            ! points in a row being the same value. Check for this and just skip
+            ! the first point
+            if (iE < mySD % NE) then
+              if (mySD % E_grid(iE) >= mySD % E_grid(iE + 1)) then
+                cycle
+              end if
+            end if
             ! Add the scattering distribution to the union scattering grid
             scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + &
               mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
