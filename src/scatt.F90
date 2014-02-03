@@ -269,7 +269,7 @@ module scatt_class
             scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + temp_scatt
             if (present(nuscatt_mat)) then
               nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) + &
-                real(mySD % rxn % multiplicity,8) * temp_scatt
+                real(mySD % rxn % multiplicity, 8) * temp_scatt
             end if
           end do
 
