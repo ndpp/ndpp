@@ -371,10 +371,9 @@ module scattdata_class
       integer :: iE                        ! incoming energy index (searched)
                                            ! (lower bound if Ein is provided)
       integer :: nuc_iE                    ! Energy index on the nuclide's x/s
-      real(8), pointer :: sigS_array(:) => null() ! sigS pointer
-      real(8) :: Enorm                    ! Range of Energy space represented by
-                                          ! this reaction
-      integer :: g                        ! Group index
+      real(8), pointer :: sigS_array(:)    ! sigS pointer
+      integer :: g                         ! Group index
+      real(8) :: Enorm ! Range of Energy space represented by this reaction
 
       ! Set up the results memory
       allocate(distro(this % order, this % groups))

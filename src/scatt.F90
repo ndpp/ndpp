@@ -113,10 +113,10 @@ module scatt_class
       ! Now combine the results on to E_grid
       if (present(nuscatt_mat)) then
         call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
-                             energy_bins, scatt_mat, nuscatt_mat)
+                             energy_bins, scatt_mat, nuscatt_mat, .true.)
       else
         call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
-                             energy_bins, scatt_mat)
+                             energy_bins, scatt_mat, nuscatt_mat, .false.)
       end if
 
       ! Now clear rxn_datas members
@@ -196,7 +196,7 @@ module scatt_class
 !===============================================================================
 
     subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, order, E_bins, &
-                               scatt_mat, nuscatt_mat)
+                               scatt_mat, nuscatt_mat, nuscatt)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
       type(ScattData), intent(inout), target :: rxn_data(:) ! The converted distros
@@ -204,7 +204,8 @@ module scatt_class
       integer, intent(in)                  :: order     ! Angular order
       real(8), intent(in)                  :: E_bins(:) ! Energy groups
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
-      real(8), allocatable, optional, intent(out) :: nuscatt_mat(:,:,:) ! Output nu-scattering matrix
+      real(8), allocatable, intent(out) :: nuscatt_mat(:,:,:) ! Output nu-scattering matrix
+      logical, intent(in)               :: nuscatt
 
       integer :: iE, NE              ! Ein counter, # Ein
       integer :: irxn, Nrxn          ! reaction counter, # Reactions
@@ -224,16 +225,18 @@ module scatt_class
 
       ! Allocate the scatt_mat according to the groups, order and number of E pts
       allocate(scatt_mat(order, groups, NE))
-      if (present(nuscatt_mat)) then
+
+      !if (present(nuscatt_mat)) then
+      if (nuscatt) then
         allocate(nuscatt_mat(order, groups, NE))
         nuscatt_mat = ZERO
       end if
 
       allocate(temp_scatt(order, groups))
 
-
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
-      !$omp parallel do schedule(dynamic,50) num_threads(omp_threads) default(shared),private(iE,mySD,norm_tot,irxn)
+      !$omp parallel do schedule(dynamic,50) num_threads(omp_threads) &
+      !$omp default(shared), private(iE,mySD,norm_tot,irxn,temp_scatt)
       do iE = 1, NE
 #ifndef OPENMP
         if (iE_print > 0) then
@@ -267,7 +270,8 @@ module scatt_class
             ! Add the scattering distribution to the union scattering grid
             temp_scatt = mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
             scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + temp_scatt
-            if (present(nuscatt_mat)) then
+            !if (present(nuscatt_mat)) then
+            if (nuscatt) then
               nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) + &
                 real(mySD % rxn % multiplicity, 8) * temp_scatt
             end if
@@ -276,7 +280,9 @@ module scatt_class
           ! Normalize for later multiplication in the MC code
           if (norm_tot == ZERO) norm_tot = ONE
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
-          if (present(nuscatt_mat)) then
+
+          !if (present(nuscatt_mat)) then
+          if (nuscatt) then
             nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) / norm_tot
           end if
         else
@@ -285,7 +291,8 @@ module scatt_class
           ! With this step, it has something to interpolate to, and that
           ! value is the same as the Ein value, which will be more accurate.
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE - 1)
-          if (present(nuscatt_mat)) then
+          !if (present(nuscatt_mat)) then
+          if (nuscatt) then
             nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE - 1)
           end if
         end if
