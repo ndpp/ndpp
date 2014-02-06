@@ -36,6 +36,7 @@ contains
     type(ChiData), allocatable :: delay_data(:)
     real(8)              :: beta, prob, norm
     real(8), allocatable :: temp_E_grid(:), chi_p(:)
+    real(8), pointer :: sigma(:) => null()
 
     groups = size(E_bins) - 1
     allocate(chi_p(groups))
@@ -70,12 +71,17 @@ contains
       i_rxn = i_rxn + 1
       rxn => nuc % reactions(nuc % index_fission(i))
       edist => rxn % edist
-      call prompt_data(i_rxn) % init(nuc, rxn, edist, E_bins, .false.)
+      if (rxn % MT == N_FISSION) then
+        sigma => nuc % fission
+      else
+        sigma => rxn % sigma
+      end if
+      call prompt_data(i_rxn) % init(nuc, rxn, sigma, edist, E_bins, .false.)
       do
         if (associated(edist % next)) then
           i_rxn = i_rxn + 1
           edist => edist % next
-          call prompt_data(i_rxn) % init(nuc, rxn, edist, E_bins, .false.)
+          call prompt_data(i_rxn) % init(nuc, rxn, sigma, edist, E_bins, .false.)
         else
           exit
         end if
@@ -84,9 +90,8 @@ contains
 
     ! Move to delayed
     do i = 1, nuc % n_precursor
-      rxn => NULL()
       edist => nuc % nu_d_edist(i)
-      call delay_data(i) % init(nuc, rxn, edist, E_bins, .true., i)
+      call delay_data(i) % init(nuc, rxn, sigma, edist, E_bins, .true., i)
     end do
 
     ! Build the combined energy grid

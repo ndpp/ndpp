@@ -28,9 +28,10 @@ module chidata_header
     real(8), allocatable :: E_grid(:)         ! Ein values
     real(8), pointer     :: E_bins(:)         ! Energy grp boundaries from input
     integer              :: groups     =  0   ! Number of outgoing energy groups
-    type(Nuclide),    pointer :: nuc   => NULL() ! Working nuclide
-    type(Reaction),   pointer :: rxn   => NULL() ! Working reaction
+    type(Nuclide),  pointer   :: nuc   => NULL() ! Working nuclide
+    type(Reaction), pointer   :: rxn   => NULL() ! Working reaction
     type(DistEnergy), pointer :: edist => NULL() ! Reaction's energy distro
+    real(8), pointer     :: sigma(:) => NULL() ! Reaection cross-section set
     integer              :: law               ! Energy distribution law
     logical              :: is_delayed        ! Prompt or delayed reaction
     integer              :: precursor_grp = 0 ! If delayed, the precursor group #
@@ -51,10 +52,12 @@ contains
 ! grid, allocating accordingly and storing this information.
 !===============================================================================
 
-    subroutine chi_init(self, nuc, rxn, edist, E_bins, is_delayed, precursor_grp)
+    subroutine chi_init(self, nuc, rxn, sigma, edist, E_bins, is_delayed, &
+                        precursor_grp)
       class(ChiData), intent(inout)         :: self  ! Working object
       type(Nuclide), pointer, intent(in)    :: nuc   ! Nuclide we are working on
-      type(Reaction), target, intent(in)    :: rxn   ! The reaction of interest
+      type(Reaction), pointer, intent(in)   :: rxn   ! Reaction of interest
+      real(8), pointer, intent(in)          :: sigma(:) ! X/S of reaction of interest
       type(Distenergy), pointer, intent(in) :: edist ! The energy distribution to use
       real(8), target, intent(in)           :: E_bins(:)  ! Energy group bounds
       logical, intent(in)                   :: is_delayed ! Is prompt (F) or delayed (T)
@@ -68,8 +71,6 @@ contains
 
       ! Store nuclide
       self % nuc => nuc
-      ! Store the reaction type
-      self % rxn => rxn
 
       ! Store if we are delayed or not
       self % is_delayed = is_delayed
@@ -81,8 +82,14 @@ contains
           message = "Precursor Group Must Be Provided For Delayed Chi Data!"
           call fatal_error()
         end if
+        ! Store the reaction type
+        self % sigma => null()
+        self % rxn => null()
       else
         self % precursor_grp = 0
+        ! Store the reaction type
+        self % sigma => sigma
+        self % rxn => rxn
       end if
 
       ! Allocate the group-dependent attributes
@@ -94,10 +101,10 @@ contains
       self % law = edist % law
       self % NR = int(edist % data(1))
       ! Error checking:
-      if (self % NR /= 0) then
-        message = "NR /= 0 for Law " // trim(to_str(self % law))
-        call fatal_error()
-      end if
+      !if (self % NR /= 0) then
+      !  message = "NR /= 0 for Law " // trim(to_str(self % law))
+      !  call fatal_error()
+      !end if
       self % NE = int(edist % data(2 + 2 * self % NR))
       allocate(self % E_grid(self % NE))
       lc = 2 + 2 * self % NR
@@ -122,6 +129,7 @@ contains
       self % groups = 0
       nullify(self % nuc)
       nullify(self % rxn)
+      nullify(self % sigma)
       nullify(self % edist)
       self % law = 0
       self % precursor_grp = 0
@@ -201,8 +209,8 @@ contains
         prob = ZERO
       else
         ! Find the probability using linear interpolation
-        prob = ((ONE - f) * self % rxn % sigma(j - self % rxn % threshold + 1) + &
-                f * self % rxn % sigma(j - self % rxn % threshold + 2)) / &
+        prob = ((ONE - f) * self % sigma(j - self % rxn % threshold + 1) + &
+                f * self % sigma(j - self % rxn % threshold + 2)) / &
                ((ONE - f) * self % nuc % fission(j) + f * self % nuc % fission(j + 1))
       end if
       if (associated(self % edist % next) .and. self % edist % p_valid % n_regions > 0) then
@@ -353,20 +361,21 @@ contains
       ! determine restriction energy
       lc = 2 + 2*NR + 2*NE
       U = edist % data(lc + 1)
+      if (Ein - U <= ZERO) return
       x = (Ein - U) / T
-      I = sqrt(T*T*T) * (sqrt(0.25_8*PI) * erf(x) - sqrt(x) * exp(-x))
-      if (U < ZERO) U = Ein - U
+      I = sqrt(T*T*T) * (sqrt(0.25_8*PI) * erf(x) - x * exp(-x))
       do g = 1, self % groups
         ! The upper energy boundary
         Egp1 = self % E_bins(g+1)
-        if (Egp1 > U) Egp1 = U
-        chis(g) = 0.5_8 * sqrt(PI * T * T * T) * erf( sqrt(Egp1 / T)) - &
-          T * sqrt(Egp1) * exp(-Egp1 / T)
+        if (Egp1 > Ein - U) Egp1 = U
+        chis(g) = 0.5_8 * (sqrt(PI * T) * erf(sqrt(Egp1/T)) * exp(Egp1/T) - &
+          TWO * sqrt(Egp1)) * T * exp(-Egp1/T)
         ! The lower energy boundary
         Eg = self % E_bins(g)
-        if (Eg > U) Eg = U
-        chis(g) = chis(g) - (0.25_8*sqrt(T*T*T*PI) * erf(sqrt(Eg / T)) - &
-          T * sqrt(Eg) * exp(-Eg / T))
+        if (Eg > Ein - U) Eg = U
+        chis(g) = chis(g) - &
+          (0.5_8 * (sqrt(PI * T) * erf(sqrt(Eg/T))*exp(Eg/T) - &
+          TWO * sqrt(Eg)) * T * exp(-Eg/T))
         chis(g) = chis(g) / I
       end do
 
@@ -389,15 +398,15 @@ contains
       U = edist % data(lc + 1)
       x = (Ein - U) / T
       I = T * T * (ONE - exp(-x) * (ONE + x))
-      if (U < ZERO) U = Ein - U
+      if (Ein - U <= ZERO) return
       do g = 1, self % groups
         Egp1 = self % E_bins(g+1)
-        if (Egp1 > U) Egp1 = U
-        chis(g) = T * exp(-Egp1 / T) * (T + Egp1)
         Eg = self % E_bins(g)
-        if (Eg > U) Eg = U
-        chis(g) = chis(g) - (T * exp(-Eg / T) * (T + Eg))
-        chis(g) = - chis(g) / I
+        if (Egp1 > (Ein - U)) Egp1 = Ein - U
+        if (Eg > (Ein - U)) Eg = Ein - U
+        chis(g) = (Egp1*exp(x) + T*exp(x))*exp(-Egp1 / T)
+        chis(g) = chis(g) - (Eg*exp(x) + T*exp(x))*exp(-Eg / T)
+        chis(g) = chis(g) / (T*(x - exp(x) + ONE))
       end do
     case (11)
       ! =======================================================================
@@ -426,6 +435,7 @@ contains
       lc = lc + 2 + 2*(NR + NE)
       U = edist % data(lc + 1)
       x = (Ein - U) / Watt_a
+      if (Ein - U <= ZERO) return
       x0 = Watt_a * Watt_b * 0.25_8
       I = 0.25_8 * sqrt(PI * Watt_a ** 3 * Watt_b) * exp(x0) * &
         (erf(sqrt(x) - sqrt(x0)) + erf(sqrt(x) + sqrt(x0))) - &
@@ -433,7 +443,6 @@ contains
       !Reuse Watt_b, and x
       Watt_b = sqrt(Watt_b)
       x = sqrt(PI * Watt_a) * Watt_b * exp(0.25_8 * Watt_a * Watt_b**2)
-      if (U < ZERO) U = Ein - U
       do g = 1, self % groups
         Egp1 = self % E_bins(g+1)
         if (Egp1 > U) Egp1 = U

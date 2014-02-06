@@ -691,7 +691,7 @@ contains
 
         ! If total fission reaction is present, there's no need to store the
         ! reaction cross-section since it was copied to nuc % fission
-        if (rxn % MT == N_FISSION) deallocate(rxn % sigma)
+        !if (rxn % MT == N_FISSION) deallocate(rxn % sigma)
 
         ! Keep track of this reaction for easy searching later
         i_fission = i_fission + 1
