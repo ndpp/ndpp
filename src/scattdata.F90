@@ -820,6 +820,65 @@ module scattdata_class
                 end if
               end do
             end do
+          else if (interp == LINEAR_LOG) then
+            idata_prev = lc
+            do imu = 1, size(mu)
+              do idata = idata_prev, lc + NPang -1
+                if ((data(idata) - mu(imu)) > FP_PRECISION) then
+                  ! Found a match, interpolate value
+                  r = (log(mu(imu)) - log(data(idata - 1)))/ &
+                      (log(data(idata)) - log(data(idata - 1)))
+                  distro(imu, iEout) = data(idata + NPang - 1) + r * &
+                    (data(idata + NPang) - data(idata - 1 + NPang))
+                  idata_prev = idata
+                  exit
+                else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
+                  ! Found a match, take value at mu(imu)
+                  distro(imu, iEout) = data(idata + NPang)
+                  idata_prev = idata
+                  exit
+                end if
+              end do
+            end do
+          else if (interp == LOG_LINEAR) then
+            idata_prev = lc
+            do imu = 1, size(mu)
+              do idata = idata_prev, lc + NPang -1
+                if ((data(idata) - mu(imu)) > FP_PRECISION) then
+                  ! Found a match, interpolate value
+                  r = (mu(imu) - data(idata -1)) / (data(idata) - data(idata-1))
+                  distro(imu,iEout) = exp((ONE-r) * log(data(idata + NPang)) + &
+                                      r * log(data(idata + NPang - 1)))
+                  idata_prev = idata
+                  exit
+                else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
+                  ! Found a match, take value at mu(imu)
+                  distro(imu, iEout) = data(idata + NPang)
+                  idata_prev = idata
+                  exit
+                end if
+              end do
+            end do
+          else if (interp == LOG_LOG) then
+            idata_prev = lc
+            do imu = 1, size(mu)
+              do idata = idata_prev, lc + NPang -1
+                if ((data(idata) - mu(imu)) > FP_PRECISION) then
+                  ! Found a match, interpolate value
+                  r = (log(mu(imu)) - log(data(idata - 1)))/ &
+                      (log(data(idata)) - log(data(idata - 1)))
+                  distro(imu,iEout) = exp((ONE-r) * log(data(idata + NPang)) + &
+                                      r * log(data(idata + NPang - 1)))
+                  idata_prev = idata
+                  exit
+                else if (abs(data(idata) - mu(imu)) <= FP_PRECISION) then
+                  ! Found a match, take value at mu(imu)
+                  distro(imu, iEout) = data(idata + NPang)
+                  idata_prev = idata
+                  exit
+                end if
+              end do
+            end do
           else
             message = "Unknown interpolation type: " // trim(to_str(interp))
             call fatal_error()
