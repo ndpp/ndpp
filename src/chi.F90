@@ -270,15 +270,15 @@ contains
     deallocate(chi_temp)
 
     ! Combine the total chi values to a  to a union grid
-    call unionize_chi(chi_t_union, E_t_union, E_grid, chi_grid, NE_grid, &
+    call unionize_chi(nuc, chi_t_union, E_t_union, E_grid, chi_grid, NE_grid, &
       INT_grid, betas, probs, 1, size(NE_grid))
     betas = ONE ! betas is not needed any more.
     ! Combine the prompt chi values to a  to a union grid
-    call unionize_chi(chi_p_union, E_p_union, E_grid, chi_grid, NE_grid, &
+    call unionize_chi(nuc, chi_p_union, E_p_union, E_grid, chi_grid, NE_grid, &
       INT_grid, betas, probs, 1, num_fission_tot)
     ! Create the delayed neutron grid, if there is delayed data
     if (num_fission_tot < size(NE_grid)) then
-      call unionize_chi(chi_d_union, E_d_union, E_grid, chi_grid, NE_grid, &
+      call unionize_chi(nuc, chi_d_union, E_d_union, E_grid, chi_grid, NE_grid, &
         INT_grid, betas, probs, num_fission_tot + 1, size(NE_grid))
     else
        ! There were no chi values, just set to 0.0s for chi at the energy group boundaries
@@ -631,10 +631,11 @@ contains
 
   end subroutine integrate_chi
 
-  subroutine unionize_chi(chi_union, E_union, E_grid, chi_grid, NE_grid, &
+  subroutine unionize_chi(nuc, chi_union, E_union, E_grid, chi_grid, NE_grid, &
     INT_grid, betas, probs, rxn_low, rxn_high)
-    real(8), allocatable, intent(inout) :: chi_union(:,:)  ! Unioninzed Chi grid
-    real(8), allocatable, intent(inout) :: E_union(:)      ! Unioninzed Energy grid
+    type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
+    real(8), allocatable, intent(inout) :: chi_union(:,:) ! Unioninzed Chi grid
+    real(8), allocatable, intent(inout) :: E_union(:)     ! Unioninzed Energy grid
     real(8), intent(in)    :: E_grid(:,:)     ! The energy grid for each fission rxn
     real(8), intent(in)    :: chi_grid(:,:,:) ! Chis for the global grid E values
     integer, intent(in)    :: NE_grid(:)      ! NE values for each reaction
@@ -651,6 +652,7 @@ contains
     logical, allocatable :: chi_hits(:)     ! Flag for when a chi value is the lowest
     real(8)              :: r               ! Interpolation Factor
     integer              :: i_energy, i_rxn ! Loop indices
+    real(8)              :: beta
 
     ! Chi_temp is sized to allow for all of this nuclide's reactions
     ! to not have the same energy points. One of the last steps here
@@ -690,24 +692,51 @@ contains
             ! If the i_energy point is outside the range of this reaction, then
             ! do not score it.
             if (E_temp(i_energy) < E_grid(1, i_rxn)) cycle
+            ! Now lets get beta at this energy
+            beta = nu_delayed(nuc, E_temp(i_energy)) / nu_total(nuc, E_temp(i_energy))
             if (INT_grid(chi_loc(i_rxn), i_rxn) == HISTOGRAM) then
               ! If its a histogram, use the low energy value
-              chi_temp(:, i_energy) = chi_temp(:, i_energy) + betas(chi_loc(i_rxn), i_rxn) * &
+              chi_temp(:, i_energy) = chi_temp(:, i_energy) + beta * &
                 probs(chi_loc(i_rxn), i_rxn) * chi_grid(:, chi_loc(i_rxn), i_rxn)
             elseif (INT_grid(chi_loc(i_rxn), i_rxn) == LINEAR_LINEAR) then
               ! For Linear-Linear, I need to find an interpolation factor first
               r = (E_temp(i_energy) - E_grid(chi_loc(i_rxn) - 1, i_rxn)) / &
                 (E_grid(chi_loc(i_rxn), i_rxn) - E_grid(chi_loc(i_rxn) - 1, i_rxn))
               ! Now perform linear interpolation and sum to chi_temp
-              !!! Check to see if this separate betas probs interpolation is worth anything
-              chi_temp(:, i_energy) = chi_temp(:, i_energy) + &
-                (betas(chi_loc(i_rxn) - 1, i_rxn) + r * &
-                (betas(chi_loc(i_rxn), i_rxn) - betas(chi_loc(i_rxn) - 1, i_rxn)))* &
+              chi_temp(:, i_energy) = chi_temp(:, i_energy) + beta * &
                 (probs(chi_loc(i_rxn) - 1, i_rxn) + r * &
                 (probs(chi_loc(i_rxn), i_rxn) - probs(chi_loc(i_rxn) - 1, i_rxn))) * &
                 (chi_grid(:, chi_loc(i_rxn) - 1, i_rxn) + &
                 r * (chi_grid(:, chi_loc(i_rxn), i_rxn) - &
                 chi_grid(:, chi_loc(i_rxn) - 1, i_rxn)))
+            elseif (INT_grid(chi_loc(i_rxn), i_rxn) == LINEAR_LOG) then
+              r = (log(E_temp(i_energy)) - log(E_grid(chi_loc(i_rxn) - 1, i_rxn))) / &
+                (log(E_grid(chi_loc(i_rxn), i_rxn)) - log(E_grid(chi_loc(i_rxn) - 1, i_rxn)))
+              ! Now perform interpolation and sum to chi_temp
+              chi_temp(:, i_energy) = chi_temp(:, i_energy) + beta * &
+                (probs(chi_loc(i_rxn) - 1, i_rxn) + r * &
+                (probs(chi_loc(i_rxn), i_rxn) - probs(chi_loc(i_rxn) - 1, i_rxn))) * &
+                (chi_grid(:, chi_loc(i_rxn) - 1, i_rxn) + &
+                r * (chi_grid(:, chi_loc(i_rxn), i_rxn) - &
+                chi_grid(:, chi_loc(i_rxn) - 1, i_rxn)))
+            elseif (INT_grid(chi_loc(i_rxn), i_rxn) == LOG_LINEAR) then
+              r = (E_temp(i_energy) - E_grid(chi_loc(i_rxn) - 1, i_rxn)) / &
+                (E_grid(chi_loc(i_rxn), i_rxn) - E_grid(chi_loc(i_rxn) - 1, i_rxn))
+              ! Now perform interpolation and sum to chi_temp
+              chi_temp(:, i_energy) = chi_temp(:, i_energy) + beta * &
+                exp((ONE - r) * log(probs(chi_loc(i_rxn) - 1, i_rxn)) + &
+                 r * log(probs(chi_loc(i_rxn), i_rxn))) * &
+                exp((ONE - r) * log(chi_grid(:, chi_loc(i_rxn) - 1, i_rxn)) + &
+                    r * log(chi_grid(:, chi_loc(i_rxn), i_rxn)))
+            elseif (INT_grid(chi_loc(i_rxn), i_rxn) == LOG_LOG) then
+              r = (log(E_temp(i_energy)) - log(E_grid(chi_loc(i_rxn) - 1, i_rxn))) / &
+                (log(E_grid(chi_loc(i_rxn), i_rxn)) - log(E_grid(chi_loc(i_rxn) - 1, i_rxn)))
+              ! Now perform interpolation and sum to chi_temp
+              chi_temp(:, i_energy) = chi_temp(:, i_energy) + beta * &
+                exp((ONE - r) * log(probs(chi_loc(i_rxn) - 1, i_rxn)) + &
+                 r * log(probs(chi_loc(i_rxn), i_rxn))) * &
+                exp((ONE - r) * log(chi_grid(:, chi_loc(i_rxn) - 1, i_rxn)) + &
+                    r * log(chi_grid(:, chi_loc(i_rxn), i_rxn)))
             else
               message = "Invalid Interpolation Grid Type: " // &
                 to_str(INT_GRID(chi_loc(i_rxn), i_rxn))
