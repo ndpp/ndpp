@@ -1,4 +1,4 @@
-module scatt_class
+module scatt
 
   use ace_header
   use constants
@@ -6,9 +6,9 @@ module scatt_class
   use error,            only: fatal_error, warning
   use global
   use interpolation,    only: interpolate_tab1
-  use output,           only: write_message, header, print_ascii_array
+  use output,           only: write_message, print_ascii_array
   use sab
-  use scattdata_class,  only: scattdata
+  use scattdata_header, only: scattdata
   use search,           only: binary_search
   use string,           only: to_str
 
@@ -697,4 +697,4 @@ module scatt_class
 #endif
   end subroutine print_scatt_hdf5
 
-end module scatt_class
+end module scatt

@@ -27,30 +27,26 @@ ace.o: output.o
 ace.o: set_header.o
 ace.o: string.o
 
+chidata_header.o: ace_header.o
+chidata_header.o: constants.o
+chidata_header.o: dict_header.o
+chidata_header.o: error.o
+chidata_header.o: fission.o
+chidata_header.o: global.o
+chidata_header.o: interpolation.o
+chidata_header.o: output.o
+chidata_header.o: search.o
+chidata_header.o: string.o
+
 chi.o: ace_header.o
+chi.o: array_merge.o
+chi.o: chidata_header.o
 chi.o: constants.o
-chi.o: dict_header.o
 chi.o: error.o
-chi.o: fission.o
 chi.o: hdf5_interface.o
 chi.o: global.o
-chi.o: interpolation.o
 chi.o: output.o
-chi.o: search.o
 chi.o: string.o
-
-ndpp.o: ace.o
-ndpp.o: ace_header.o
-ndpp.o: constants.o
-ndpp.o: chi.o
-ndpp.o: dict_header.o
-ndpp.o: hdf5_interface.o
-ndpp.o: error.o
-ndpp.o: global.o
-ndpp.o: output.o
-ndpp.o: scatt.o
-ndpp.o: string.o
-ndpp.o: timer_header.o
 
 error.o: global.o
 
@@ -83,12 +79,26 @@ main.o: ndpp.o
 main.o: initialize.o
 main.o: output.o
 
+ndpp.o: ace.o
+ndpp.o: ace_header.o
+ndpp.o: constants.o
+ndpp.o: chi.o
+ndpp.o: dict_header.o
+ndpp.o: hdf5_interface.o
+ndpp.o: error.o
+ndpp.o: global.o
+ndpp.o: output.o
+ndpp.o: scatt.o
+ndpp.o: string.o
+ndpp.o: timer_header.o
+
 output.o: ace_header.o
 output.o: constants.o
 output.o: global.o
 output.o: string.o
 
 sab.o: ace_header.o
+sab.o: array_merge.o
 sab.o: constants.o
 sab.o: error.o
 sab.o: global.o
@@ -105,21 +115,21 @@ scatt.o: global.o
 scatt.o: interpolation.o
 scatt.o: output.o
 scatt.o: sab.o
-scatt.o: scattdata.o
+scatt.o: scattdata_header.o
 scatt.o: search.o
 scatt.o: string.o
 
-scattdata.o: ace_header.o
-scattdata.o: constants.o
-scattdata.o: dict_header.o
-scattdata.o: error.o
-scattdata.o: freegas.o
-scattdata.o: global.o
-scattdata.o: interpolation.o
-scattdata.o: legendre.o
-scattdata.o: output.o
-scattdata.o: search.o
-scattdata.o: string.o
+scattdata_header.o: ace_header.o
+scattdata_header.o: constants.o
+scattdata_header.o: dict_header.o
+scattdata_header.o: error.o
+scattdata_header.o: freegas.o
+scattdata_header.o: global.o
+scattdata_header.o: interpolation.o
+scattdata_header.o: legendre.o
+scattdata_header.o: output.o
+scattdata_header.o: search.o
+scattdata_header.o: string.o
 
 search.o: error.o
 search.o: global.o
