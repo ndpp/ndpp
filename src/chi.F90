@@ -334,7 +334,7 @@ contains
     ! Begin writing:
 
     ! <NE, num_precursors>
-    write(UNIT_NUC) size(E_grid)
+    write(UNIT_NUC) size(E_grid), size(chi_d, DIM=3)
 
     ! <1:NE energies>
     write(UNIT_NUC) E_grid
