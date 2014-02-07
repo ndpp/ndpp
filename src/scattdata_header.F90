@@ -1482,12 +1482,11 @@ module scattdata_header
       U = edist % data(lc + 1)
       x = (Ein - U) / T
       I = T * T * (ONE - exp(-x) * (ONE + x))
-      if (U == Ein) return
-      if (U < ZERO) U = Ein - U
+      if (Ein - U <= ZERO) return
       do g = 1, size(E_bins) - 1
         Egp1 = E_bins(g + 1)
-        if (Egp1 > (Ein - U)) Egp1 = Ein - U
         Eg = E_bins(g)
+        if (Egp1 > (Ein - U)) Egp1 = Ein - U
         if (Eg > (Ein - U)) Eg = Ein - U
         pE_xfer = (T * exp(Egp1 / T) - Egp1 - T) * exp(-Egp1 / T)
         pE_xfer = pE_xfer - (T * exp(Eg / T) - Eg - T) * exp(-Eg / T)
