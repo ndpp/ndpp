@@ -502,20 +502,15 @@ module ndpp_class
 
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
+          call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
+            self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
+            self % nuscatter, scatt_mat, nuscatt_mat)
+          ! Print the results to file
+          call timer_start(self % time_print)
           if (self % nuscatter) then
-            call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-              self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
-              scatt_mat, nuscatt_mat)
-            ! Print the results to file
-            call timer_start(self % time_print)
             call print_scatt(nuc % name, self % lib_format, self % Ein, &
               self % print_tol, scatt_mat, nuscatt_mat)
           else
-            call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-              self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
-              scatt_mat)
-            ! Print the results to file
-            call timer_start(self % time_print)
             call print_scatt(nuc % name, self % lib_format, self % Ein, &
               self % print_tol, scatt_mat)
           end if
