@@ -130,7 +130,7 @@ contains
         chi_p = prompt_data(i) % integrate(Ein)
         prob  = prompt_data(i) % prob(Ein)
         beta  = prompt_data(i) % beta(Ein)
-        chi_total(:,iE) = chi_total(:,iE) + prob * beta * chi_p
+        chi_total(:,iE) = chi_total(:,iE) + prob * (ONE - beta) * chi_p
         chi_prompt(:,iE) = chi_prompt(:,iE) + prob * chi_p
       end do
 

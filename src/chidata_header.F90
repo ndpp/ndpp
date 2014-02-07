@@ -146,9 +146,7 @@ contains
     real(8)                    :: beta  ! beta value to return
 
     beta = nu_delayed(self % nuc, Ein) / nu_total(self % nuc, Ein)
-    if (.not. self % is_delayed) then
-      beta = ONE - beta
-    end if
+
   end function chi_beta
 
 !===============================================================================
@@ -205,7 +203,7 @@ contains
       end if
 
       ! Get the probability of law validity. If block needed because of Pu-240 issue.
-      if (j < self % rxn % threshold + 1) then
+      if (j < self % rxn % threshold) then
         prob = ZERO
       else
         ! Find the probability using linear interpolation
@@ -287,10 +285,17 @@ contains
       lc = 2 + 2*NR
       if (Ein < edist % data(lc+1)) then
         iE = 1
+        x = ZERO
       elseif (Ein >= edist % data(lc+NE)) then
-        iE = NE
+        iE = NE-1
+        x = ONE
       else
         iE = binary_search(edist % data(lc+1:lc+NE), NE, Ein)
+        x = (Ein - edist%data(lc+iE)) / (edist%data(lc+iE+1) - edist%data(lc+iE))
+      end if
+
+      if (x > 0.5_8) then
+        iE = iE + 1
       end if
 
       ! determine location of outgoing energies, pdf, cdf for E(l)
@@ -327,10 +332,10 @@ contains
         ! Since we have the CDF, the integral of chis(g) is simply:
         ! cdf_chis(E_high) - cdf_chis(E_low)
         ! Calculate cdf_chis(E_high),set equal to chis(g)
-        if (INTT_in == LINEAR_LINEAR) then
+        if (INTT == LINEAR_LINEAR) then
           interp = (self % E_bins(g + 1) - edist % data(iE)) / &
             (edist % data(iE + 1) - edist % data(iE))
-        elseif (INTT_in == HISTOGRAM) then
+        elseif (INTT == HISTOGRAM) then
           interp = ZERO
         end if
         chis(g) = (edist % data(iE + 2 * NP) + interp * &
