@@ -402,7 +402,6 @@ contains
       lc = 2 + 2*NR + 2*NE
       U = edist % data(lc + 1)
       x = (Ein - U) / T
-      I = T * T * (ONE - exp(-x) * (ONE + x))
       if (Ein - U <= ZERO) return
       do g = 1, self % groups
         Egp1 = self % E_bins(g+1)
