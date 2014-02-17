@@ -47,7 +47,7 @@ module global
   type(DictCharInt) :: sab_dict
   type(DictCharInt) :: xs_listing_dict
 
-  ! Unreoslved resonance probablity tables
+  ! Unresolved resonance probablity tables
   logical :: urr_ptables_on = .true.
 
   ! ============================================================================

@@ -1,8 +1,10 @@
 objects = \
 ace_header.o \
+array_merge.o \
 global.o \
 main.o \
 ace.o \
+chidata_header.o \
 chi.o \
 ndpp.o \
 constants.o \
@@ -13,7 +15,7 @@ legendre.o \
 output.o \
 sab.o \
 scatt.o \
-scattdata.o
+scattdata_header.o
 
 omc_objects = \
 dict_header.o \

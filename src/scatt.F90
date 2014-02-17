@@ -1,4 +1,4 @@
-module scatt_class
+module scatt
 
   use ace_header
   use constants
@@ -6,9 +6,9 @@ module scatt_class
   use error,            only: fatal_error, warning
   use global
   use interpolation,    only: interpolate_tab1
-  use output,           only: write_message, header, print_ascii_array
+  use output,           only: write_message, print_ascii_array
   use sab
-  use scattdata_class,  only: scattdata
+  use scattdata_header, only: scattdata
   use search,           only: binary_search
   use string,           only: to_str
 
@@ -26,7 +26,7 @@ module scatt_class
 !===============================================================================
 
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, mu_bins, &
-                          thin_tol, E_grid, scatt_mat, nuscatt_mat)
+                          thin_tol, E_grid, nuscatt, scatt_mat, nuscatt_mat)
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
@@ -35,8 +35,9 @@ module scatt_class
                                                             ! to use during f_{n,MT} conversion
       real(8), intent(in)                 :: thin_tol       ! Thinning tolerance
       real(8), allocatable, intent(in)    :: E_grid(:)      ! Incoming Energy Grid
+      logical, intent(in)                 :: nuscatt        ! Whether or not to include nuscatt
       real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
-      real(8), allocatable, optional, intent(inout) :: nuscatt_mat(:,:,:) ! Unionized Nu-Scattering Matrices
+      real(8), allocatable, intent(inout) :: nuscatt_mat(:,:,:) ! Unionized Nu-Scattering Matrices
 
       type(DistEnergy), pointer :: edist
       type(Reaction),   pointer :: rxn
@@ -111,13 +112,8 @@ module scatt_class
       end if
 
       ! Now combine the results on to E_grid
-      if (present(nuscatt_mat)) then
-        call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
-                             energy_bins, scatt_mat, nuscatt_mat, .true.)
-      else
-        call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
-                             energy_bins, scatt_mat, nuscatt_mat, .false.)
-      end if
+      call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
+        energy_bins, nuscatt, scatt_mat, nuscatt_mat)
 
       ! Now clear rxn_datas members
       do i_rxn = 1, num_tot_rxn
@@ -196,16 +192,16 @@ module scatt_class
 !===============================================================================
 
     subroutine calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, order, E_bins, &
-                               scatt_mat, nuscatt_mat, nuscatt)
+                               nuscatt, scatt_mat, nuscatt_mat)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
       type(ScattData), intent(inout), target :: rxn_data(:) ! The converted distros
       real(8), allocatable, intent(in)     :: E_grid(:) ! Ein grid
       integer, intent(in)                  :: order     ! Angular order
       real(8), intent(in)                  :: E_bins(:) ! Energy groups
+      logical, intent(in)                  :: nuscatt   ! Include nuscatter?
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output scattering matrix
-      real(8), allocatable, intent(out) :: nuscatt_mat(:,:,:) ! Output nu-scattering matrix
-      logical, intent(in)               :: nuscatt
+      real(8), allocatable, intent(out)    :: nuscatt_mat(:,:,:) ! Output nu-scattering matrix
 
       integer :: iE, NE              ! Ein counter, # Ein
       integer :: irxn, Nrxn          ! reaction counter, # Reactions
@@ -226,7 +222,6 @@ module scatt_class
       ! Allocate the scatt_mat according to the groups, order and number of E pts
       allocate(scatt_mat(order, groups, NE))
 
-      !if (present(nuscatt_mat)) then
       if (nuscatt) then
         allocate(nuscatt_mat(order, groups, NE))
         nuscatt_mat = ZERO
@@ -270,7 +265,6 @@ module scatt_class
             ! Add the scattering distribution to the union scattering grid
             temp_scatt = mySD % interp_distro(mu_out, nuc, E_grid(iE), norm_tot)
             scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + temp_scatt
-            !if (present(nuscatt_mat)) then
             if (nuscatt) then
               nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) + &
                 real(mySD % rxn % multiplicity, 8) * temp_scatt
@@ -281,7 +275,6 @@ module scatt_class
           if (norm_tot == ZERO) norm_tot = ONE
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / norm_tot
 
-          !if (present(nuscatt_mat)) then
           if (nuscatt) then
             nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) / norm_tot
           end if
@@ -291,7 +284,6 @@ module scatt_class
           ! With this step, it has something to interpolate to, and that
           ! value is the same as the Ein value, which will be more accurate.
           scatt_mat(:, :, iE) = scatt_mat(:, :, iE - 1)
-          !if (present(nuscatt_mat)) then
           if (nuscatt) then
             nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE - 1)
           end if
@@ -697,4 +689,4 @@ module scatt_class
 #endif
   end subroutine print_scatt_hdf5
 
-end module scatt_class
+end module scatt

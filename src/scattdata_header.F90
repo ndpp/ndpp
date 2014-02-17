@@ -1,4 +1,4 @@
-module scattdata_class
+module scattdata_header
 
   use ace_header
   use constants
@@ -36,7 +36,6 @@ module scattdata_class
     logical              :: is_init = .false. ! Initialization status
     integer              :: NE = 0            ! Number of Ein values
     real(8), allocatable :: E_grid(:)         ! Ein values
-
     type(jagged2d), allocatable :: distro(:)  ! Output distribution
                                               ! # distro pts x # E_out x # E_in
     type(jagged1d), allocatable :: Eouts(:)   ! Output Energy values
@@ -83,7 +82,7 @@ module scattdata_class
       type(Reaction), target, intent(inout) :: rxn   ! The reaction of interest
       type(Distenergy), pointer, intent(in) :: edist ! The energy distribution to use
       ! Edist is intended to specify which of the nested distros we are
-      ! actually using. t can be null.
+      ! actually using. It can be null.
       real(8), target, intent(in)           :: E_bins(:)  ! Energy group bounds
       integer, intent(in) :: scatt_type ! Type of format to store the data
       integer, intent(in) :: order      ! Order of the data storage format
@@ -255,8 +254,7 @@ module scattdata_class
         this % law = 0
       end if
 
-      ! The final initialization. If we made it here then this bad boy was
-      ! successful
+      ! The final initialization
       this % is_init = .true.
     end subroutine scatt_init
 
@@ -1484,12 +1482,11 @@ module scattdata_class
       U = edist % data(lc + 1)
       x = (Ein - U) / T
       I = T * T * (ONE - exp(-x) * (ONE + x))
-      if (U == Ein) return
-      if (U < ZERO) U = Ein - U
+      if (Ein - U <= ZERO) return
       do g = 1, size(E_bins) - 1
         Egp1 = E_bins(g + 1)
-        if (Egp1 > (Ein - U)) Egp1 = Ein - U
         Eg = E_bins(g)
+        if (Egp1 > (Ein - U)) Egp1 = Ein - U
         if (Eg > (Ein - U)) Eg = Ein - U
         pE_xfer = (T * exp(Egp1 / T) - Egp1 - T) * exp(-Egp1 / T)
         pE_xfer = pE_xfer - (T * exp(Eg / T) - Eg - T) * exp(-Eg / T)
@@ -1714,4 +1711,4 @@ module scattdata_class
 
   end function is_valid_scatter
 
-end module scattdata_class
+end module scattdata_header

@@ -1,15 +1,17 @@
 module ndpp_class
 
-  use ace,              only: read_ace_table
+  use ace,         only: read_ace_table
   use ace_header
+  use array_merge, only: merge
+  !use chi_class
+  use chi
   use constants
   use dict_header
-  use error,            only: fatal_error, warning
+  use error,       only: fatal_error, warning
   use global
-  use chi_class
-  use output,           only: write_message, header, time_stamp, print_ascii_array
-  use scatt_class
-  use string,           only: lower_case, starts_with, ends_with, to_str
+  use output,      only: write_message, header, time_stamp, print_ascii_array
+  use scatt
+  use string,      only: lower_case, starts_with, ends_with, to_str
   use timer_header
 
 #ifdef OPENMP
@@ -403,12 +405,10 @@ module ndpp_class
       real(8), allocatable :: nuscatt_mat(:,:,:) ! nu-scattering matrix moments,
                                                  ! order x g_out x E_in
       ! Chi specific data
-      real(8), allocatable   :: chi_t(:,:)  ! grp x E_in chi tot values on a union grid
-      real(8), allocatable   :: e_t_grid(:) ! List of energy points for chi tot
-      real(8), allocatable   :: chi_p(:,:)  ! grp x E_in chi prompt values on a union grid
-      real(8), allocatable   :: e_p_grid(:) ! List of energy points for chi prompt
-      real(8), allocatable   :: chi_d(:,:)  ! grp x E_in chi delayed values on a union grid
-      real(8), allocatable   :: e_d_grid(:) ! List of energy points for chi delayed
+      real(8), allocatable   :: e_grid(:)    ! List of energy points for chi
+      real(8), allocatable   :: chi_t(:,:)   ! grp x E_in chi tot values
+      real(8), allocatable   :: chi_p(:,:)   ! grp x E_in chi prompt values
+      real(8), allocatable   :: chi_d(:,:,:) ! grp x E_inx precursor chi delayed
 
       ! S(a,b) specific data
       integer :: islash  ! location in name of slash
@@ -502,20 +502,15 @@ module ndpp_class
 
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
+          call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
+            self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
+            self % nuscatter, scatt_mat, nuscatt_mat)
+          ! Print the results to file
+          call timer_start(self % time_print)
           if (self % nuscatter) then
-            call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-              self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
-              scatt_mat, nuscatt_mat)
-            ! Print the results to file
-            call timer_start(self % time_print)
             call print_scatt(nuc % name, self % lib_format, self % Ein, &
               self % print_tol, scatt_mat, nuscatt_mat)
           else
-            call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-              self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
-              scatt_mat)
-            ! Print the results to file
-            call timer_start(self % time_print)
             call print_scatt(nuc % name, self % lib_format, self % Ein, &
               self % print_tol, scatt_mat)
           end if
@@ -537,17 +532,16 @@ module ndpp_class
 
             call timer_start(self % time_chi_preproc)
             if (nuc % fissionable) then
-              call calc_chis(nuc, self % energy_bins, self % energy_groups, chi_t, &
-                chi_p, chi_d, e_t_grid, e_p_grid, e_d_grid, self % thin_tol)
+              call calc_chi(nuc, self%energy_bins, e_grid, chi_t, chi_p, chi_d)
 
               ! Print the results to file
               call timer_start(self % time_print)
-              call print_chi(nuc % name, self % lib_format, chi_t, chi_p, &
-                chi_d, e_t_grid, e_p_grid, e_d_grid)
+              call print_chi(nuc % name, self % lib_format, e_grid, chi_t, &
+                chi_p, chi_d)
               call timer_stop(self % time_print)
 
               ! Deallocate data created for chi
-              deallocate(chi_t, e_t_grid, chi_p, e_p_grid, chi_d, e_d_grid)
+              deallocate(e_grid, chi_t, chi_p, chi_d)
             end if
           end if
 
@@ -586,13 +580,13 @@ module ndpp_class
           message = "....Performing Scattering Integration"
           call write_message(6)
 
-          ! Create energy grid to use (inelastic_e_in, elastic_e_in,
-          ! energy_bins)
-          call sab_egrid(sab, self % energy_bins, self % Ein)
-
 
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)
+
+          ! Create energy grid to use (inelastic_e_in, elastic_e_in,
+          ! energy_bins)
+          call sab_egrid(sab, self % energy_bins, self % Ein)
           call calc_scattsab(sab, self % energy_bins, self % scatt_type, &
                              self % scatt_order, scatt_mat, self % mu_bins, &
                              self % thin_tol, self % Ein)
@@ -619,7 +613,7 @@ module ndpp_class
         ! Write this nuclide to the ndpp_lib.xml file
         call timer_start(self % time_print)
         call print_ndpp_lib_xml_nuclide(nuc_lib_name, &
-          self % lib_format, self % lib_name, xs_listings(i_listing))
+          self % lib_format, xs_listings(i_listing))
         call timer_stop(self % time_print)
 
         ! Close the file or HDF5 group
@@ -757,10 +751,9 @@ module ndpp_class
 ! PRINT_NDPP_LIB_XML_NUCLIDE prints the entry for each nuclide
 !===============================================================================
 
-    subroutine print_ndpp_lib_xml_nuclide(filename, lib_format, lib_name, nuc)
+    subroutine print_ndpp_lib_xml_nuclide(filename, lib_format, nuc)
       character(*), intent(in)               :: filename   ! Output filename
       integer, intent(in)                    :: lib_format ! Library type
-      character(MAX_FILE_LEN), intent(inout) :: lib_name   ! library extension
       type(XsListing), intent(inout)         :: nuc        ! The nuclide to print
 
       character(2) :: indent = '  '
@@ -784,7 +777,6 @@ module ndpp_class
           '" zaid="' // trim(to_str(nuc % zaid)) // '" ' // &
           'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '"/>'
       end if
-
 
     end subroutine print_ndpp_lib_xml_nuclide
 
@@ -1071,164 +1063,6 @@ module ndpp_class
 #endif
       end if
     end subroutine finalize_library
-
-!===============================================================================
-! SAB_EGRID Creates the thermal scattering energy grid for NDPP integration
-!===============================================================================
-    subroutine sab_egrid(sab, energy_bins, Ein)
-      type(SAlphaBeta), pointer, intent(in) :: sab            ! SAB Library
-      real(8), intent(in)                   :: energy_bins(:) ! Grp bounds
-      real(8), allocatable, intent(inout)   :: Ein(:)         ! Resultant Egrid
-
-      real(8), allocatable   :: e_grid_tmp(:) ! Temporary array for bldg E-grid
-      integer                :: i_max_ein     ! Index of maximum value we want from Ein
-      real(8)                :: max_ein       ! maximum value we want from Ein
-      integer                :: num_pts       ! Final number of pts for Ein
-      integer                :: i, j, iE      ! Counters for final indexing
-      real(8)                :: dE
-
-      if (allocated(sab % elastic_e_in)) then
-        call merge(sab % inelastic_e_in, sab % elastic_e_in, e_grid_tmp)
-        call merge(e_grid_tmp, energy_bins, Ein)
-        ! Now I want to cap this at the maximum value
-        max_ein = max(sab % inelastic_e_in(sab % n_inelastic_e_in), &
-                      sab % elastic_e_in(sab % n_elastic_e_in))
-      else
-        call merge(sab % inelastic_e_in, energy_bins, Ein)
-        ! Now I want to cap this at the maximum value
-        max_ein = sab % inelastic_e_in(sab % n_inelastic_e_in)
-      end if
-      ! Now find where the threshold energy is for s(a,b)
-      i_max_ein = binary_search(Ein, size(Ein), max_ein)
-
-      if (allocated(e_grid_tmp)) deallocate(e_grid_tmp)
-      allocate(e_grid_tmp(size(Ein)))
-      e_grid_tmp = Ein
-      deallocate(Ein)
-
-      if (SAB_EPTS_PER_BIN == 0) then
-        allocate(Ein(i_max_ein))
-        Ein = e_grid_tmp(1:i_max_ein)
-      else
-        num_pts = (i_max_ein - 1) * (SAB_EPTS_PER_BIN) + i_max_ein
-
-        allocate(Ein(num_pts))
-        j = 0
-        do iE = 1, i_max_ein - 1
-          !!!TD: Logarithmic or linear? Right now its linear (uncomment for ln)
-          dE = (e_grid_tmp(iE + 1) - e_grid_tmp(iE)) / real(SAB_EPTS_PER_BIN + 1, 8)
-          ! dE = (log(e_grid_tmp(iE + 1)) - log(e_grid_tmp(iE))) / real(SAB_EPTS_PER_BIN + 1, 8)
-          j = j + 1
-          Ein(j) = e_grid_tmp(iE)
-          do i = 1, SAB_EPTS_PER_BIN
-            j = j + 1
-            Ein(j) = Ein(j - 1) + dE
-            ! Ein(j) = Ein(j - 1) * exp(dE)
-          end do
-        end do
-        Ein(num_pts) = e_grid_tmp(i_max_ein)
-      end if
-
-    end subroutine sab_egrid
-
-!===============================================================================
-! MERGE combines two arrays in to one longer array, maintaining the sorted order
-!===============================================================================
-    subroutine merge(a, b, result)
-      real(8), target, intent(in)    :: a(:)
-      real(8), target, intent(in)    :: b(:)
-      real(8), allocatable, intent(inout) :: result(:)
-
-      real(8), allocatable :: merged(:)
-      integer :: ndata1, ndata2, nab
-      integer :: idata1, idata2, ires
-      logical :: no_exit = .true.
-      real(8), pointer :: data1(:), data2(:)
-
-      if (a(size(a)) > b(size(b))) then
-        data1 => b
-        data2 => a
-      else
-        data1 => a
-        data2 => b
-      end if
-
-      ndata1 = size(data1)
-      ndata2 = size(data2)
-      nab = ndata1 + ndata2
-      allocate(merged(nab))
-
-      idata1 = 1
-      idata2 = 1
-      do ires = 1, nab
-        if (idata1 <= ndata1 .and. idata2 <= ndata2) then
-          if (data1(idata1) < data2(idata2)) then
-            ! take data2 info, unless it is zero
-            ! a zero Ein results in zero scattering, which is not a useful
-            ! point to interpolate to.  MC codes will extrapolate in this case
-            ! from the bottom-two points. This is more desirable than interpolating
-            ! between 0 and the next highest Ein.
-            ! Even more desirable, perhaps, would be interpolating between
-            ! a suitably low, but non-zero Ein, and the next highest Ein
-            if (data1(idata1) == ZERO) then
-              merged(ires) = data2(idata2) * 1.0E-3_8
-            else
-              merged(ires) = data1(idata1)
-            end if
-            idata1 = idata1 + 1
-          else if (data1(idata1) == data2(idata2)) then
-            ! take data1 info, but increment both
-            merged(ires) = data1(idata1)
-            idata1 = idata1 + 1
-            idata2 = idata2 + 1
-          else
-            ! take data2 info, unless it is zero
-            ! a zero Ein results in zero scattering, which is not a useful
-            ! point to interpolate to.  MC codes will extrapolate in this case
-            ! from the bottom-two points. This is more desirable than interpolating
-            ! between 0 and the next highest Ein.
-            ! Even more desirable, perhaps, would be interpolating between
-            ! a suitably low, but non-zero Ein, and the next highest Ein
-            if (data2(idata2) == ZERO) then
-              merged(ires) = data1(idata1) * 1.0E-3_8
-            else
-              merged(ires) = data2(idata2)
-            end if
-            idata2 = idata2 + 1
-          end if
-        else if (idata1 <= ndata1) then
-          ! There are more data1 data than data2s
-          ! Take an data1 and then stop building array
-          merged(ires) = data1(idata1)
-          idata1 = idata1 + 1
-          no_exit = .false.
-          exit
-        else if (idata2 <= ndata2) then
-          ! There are more data2s than data1 data
-          merged(ires) = data2(idata2)
-          idata2 = idata2 + 1
-        else
-          no_exit = .false.
-          exit
-        end if
-      end do
-
-      ! Clear result if it has values (as it will when it gets here)
-      if (allocated(result)) then
-        deallocate(result)
-      end if
-
-      ! Adjust ires
-      if ((.not. no_exit) .or. (ires > nab)) then
-        ires = ires - 1
-      end if
-
-      ! Store our results
-      allocate(result(ires))
-      result = merged(1: ires)
-      ! Clean up
-      deallocate(merged)
-    end subroutine merge
 
   end module ndpp_class
 
