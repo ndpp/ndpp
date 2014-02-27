@@ -882,9 +882,6 @@ module scattdata_header
             call fatal_error()
           end if
 
-          ! Multiply by the PDF from ENDF
-          distro(:, iEout) = distro(:, iEout)
-
         end do
       end if
 
@@ -1302,16 +1299,14 @@ module scattdata_header
       real(8) :: ap1inv     ! 1/(AWR+1)
       real(8), allocatable :: fmu(:), mu_l(:)
       real(8), allocatable :: pdf(:) ! Unnormalized PDF
-      real(8) :: norm_sum
-
-      norm_sum = ZERO
 
       ! First lets normalize the PDF
       allocate(pdf(size(Eout)))
       pdf = thispdf
-      do iE = 1, size(Eout) - 1
-        pdf(iE) = thispdf(iE) * (Eout(iE + 1) - Eout(iE))
-      end do
+      if (Eout(size(Eout)) == Eout(size(Eout) - 1)) then
+      ! Deal with Zr-90 (others?) who have the same Eout points at end
+        pdf(size(Eout) - 1) = ZERO
+      end if
 
       Enorm = ONE
       allocate(fEl(order))
@@ -1428,13 +1423,6 @@ module scattdata_header
           end if
         end do
         distro(:, g) = distro(:, g) * dEo * 0.5_8
-        norm_sum = norm_sum + distro(1, g)
-      end do
-
-      ! Now normalize the results so the integral over all groups is 1.
-      !!! Frankly, I'm not sure why this is needed.
-      do g = g_lo, g_hi
-        distro(:, g) = distro(:, g) / norm_sum
       end do
 
     end subroutine integrate_file6_cm_leg
@@ -1596,11 +1584,12 @@ module scattdata_header
       Enorm = ONE
 
       ! First lets normalize the PDF
-      allocate(pdf(NEout))
+      allocate(pdf(size(Eout)))
       pdf = thispdf
-      do iE = 1, NEout - 1
-        pdf(iE) = thispdf(iE) * (Eout(iE + 1) - Eout(iE))
-      end do
+      if (Eout(size(Eout)) == Eout(size(Eout) - 1)) then
+      ! Deal with Zr-90 (others?) who have the same Eout points at end
+        pdf(size(Eout) - 1) = ZERO
+      end if
 
       if (NEout > 1) then
         ! This branch will perform integration of the outgoing energy of fEmu
