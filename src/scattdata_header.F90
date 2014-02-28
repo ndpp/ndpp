@@ -1584,8 +1584,11 @@ module scattdata_header
       Enorm = ONE
 
       ! First lets normalize the PDF
-      allocate(pdf(size(Eout)))
+      allocate(pdf(NEout))
       pdf = thispdf
+      do iE = 1, NEout - 1
+        pdf(iE) = thispdf(iE) * (Eout(iE + 1) - Eout(iE))
+      end do
       if (Eout(size(Eout)) == Eout(size(Eout) - 1)) then
       ! Deal with Zr-90 (others?) who have the same Eout points at end
         pdf(size(Eout) - 1) = ZERO
