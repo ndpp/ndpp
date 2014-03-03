@@ -455,13 +455,6 @@ module scattdata_header
 
           distro = integrate_distro(this, Ein, iE, ONE, distro_int, Enorm)
 
-        else if (this % law == 3) then
-          allocate(distro_int(size(this % distro(iE) % data, dim=1), &
-            size(this % distro(iE) % data, dim=2)))
-          distro_int = this % distro(iE) % data
-
-          distro = integrate_distro(this, Ein, iE, ONE, distro_int, Enorm)
-
         else ! Linear interpolation it is
           ! Do the lower distribution
           allocate(distro_int(size(this % distro(iE) % data, dim=1), &
@@ -543,6 +536,9 @@ module scattdata_header
               result_distro)
             temp_Enorm = ONE
           else
+            !call file4_cm_leg(distro_lab(:, 1), Ein, &
+            !      this % awr, this % E_bins, this % mu, this % order, &
+            !      result_distro, temp_Enorm)
             if (this % rxn % scatter_in_cm) then
               call cm2lab(Ein, this % rxn % Q_value, this % awr, this % mu, &
                 distro_int, distro_lab)
@@ -979,7 +975,7 @@ module scattdata_header
           if (imu < mu_bins) then
             interp = (wi - mu(iwi)) / (mu(iwi + 1) - mu(iwi))
             ! Now we can get fwi easily, lets do Eout loop now to not have
-            ! to recalculate all the above paramters at every imu
+            ! to recalculate all the above parameters at every imu
             do iEout = 1, size(data, dim = 2)
               fwi = (ONE - interp) * data(iwi, iEout) + &
                     interp * data(iwi + 1, iEout)
@@ -1134,52 +1130,26 @@ module scattdata_header
                                           ! the energy group structure of the
                                           ! problem
 
-      integer :: g, imu_c   ! Group index variable, mu point index
-      real(8) :: Eo_cm, Eo  ! CM Outgoing Energy, Lab outgoing energy
-      real(8) :: dEo        ! change in outgoing energy points
-      integer :: iE         ! Outgoing energy counter
-      real(8) :: mu_l, mu_c ! lab angle, cm angle
-      real(8) :: c          ! c from eq 359
-      integer :: l          ! Scattering order counter
-      real(8) :: proby, f   ! fmu at mu_c, interpolant between fmu points
-      real(8) :: integ      ! the integrand
-      real(8) :: J          ! the jacobian
+      integer :: g          ! Group index variable, mu point index
+      real(8) :: Eo_cm      ! CM Outgoing Energ
       real(8) :: Eo_lo, Eo_hi ! Laboratory Eout bounds
       integer :: g_lo, g_hi ! Lower and upper groups
-      real(8), allocatable :: E_bnds(:)
+      real(8), allocatable :: E_bnds(:) ! Bounds of integration (energy)
       real(8) :: ap1inv     ! 1/(AWR+1)
-      real(8), allocatable :: fmus(:), mus(:) ! Arrays to store all results so we
-      ! can use the linear-interpolation based legendre integration routines
-      real(8) :: norm_sum
+      integer :: l, iwlo, iwhi, iw
+      real(8) :: wlo, whi, ulo, uhi, Plo, Phi, f, integlo, integhi
+      real(8) :: ulo1, uhi1
+      real(8) :: dmu, E, sEiEocm
 
-      norm_sum = ZERO
-
-      allocate(fmus(NE_PER_GRP))
-      allocate(mus(NE_PER_GRP))
 
       ap1inv = ONE / (awr + ONE)
 
       Eo_cm = edist % data(2) * (Ein - edist % data(1))
-      Eo_lo = Ein * (sqrt(Eo_cm / Ein) - ap1inv)**2
-      Eo_hi = Ein * (sqrt(Eo_cm / Ein) + ap1inv)**2
+      sEiEocm = sqrt(Ein * Eo_cm)
+      Eo_lo = Eo_cm + (Ein - TWO * sEiEocm / ap1inv) * ap1inv * ap1inv
+      Eo_hi = Eo_cm + (Ein + TWO * sEiEocm / ap1inv) * ap1inv * ap1inv
 
-      ! To find Enorm (the total prob'y encapsulated by lower and upper group bnds)
-      ! we will solve for mu_l at E_bins(1) and E_bins(size(E_bins)),
-      ! and find the fraction of mu_l=[-1,1] that is spanned by this domain.
-      ! If this is larger than one, then the energy groups more than cover it.
-      c = ap1inv * sqrt(Ein / E_bins(size(E_bins)))
-      Enorm = 0.5_8 * (ONE + c * c - Eo_cm / E_bins(size(E_bins))) / c
-      if (E_bins(1) == ZERO) then
-        Enorm = Enorm + ONE
-      else
-        c = ap1inv * sqrt(Ein / E_bins(1))
-        Enorm = Enorm - 0.5_8 * (ONE + c * c - Eo_cm / E_bins(1)) / c
-      end if
-      if (abs(Enorm) > TWO) then
-        Enorm = ONE
-      else
-        Enorm = 0.5_8 * Enorm ! Divide by total span of mu_l (1-(-1))
-      end if
+      Enorm = ONE
 
       if (Eo_lo <= E_bins(1)) then
         g_lo = 1
@@ -1195,7 +1165,7 @@ module scattdata_header
         allocate(E_bnds(g_lo : g_hi + 1))
         E_bnds(g_lo) = Eo_lo
         E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
-        E_bnds(g_hi + 1) = E_bins(g_hi)
+        E_bnds(g_hi + 1) = E_bins(g_hi + 1)
       else
         g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
         allocate(E_bnds(g_lo : g_hi + 1))
@@ -1205,54 +1175,210 @@ module scattdata_header
       end if
 
       do g = g_lo, g_hi
-        fmus = ZERO
-        mus = ZERO
-        Eo = E_bnds(g)
-        dEo = (E_bnds(g + 1) - E_bnds(g)) / real(NE_PER_GRP - 1, 8)
-        do iE = 1, NE_PER_GRP
-          ! Adjust Eo to be the top value so that the if Eo==Eo_hi check
-          ! will work despite FP precision issues
-          if (iE == NE_PER_GRP) Eo = E_bnds(g + 1)
-          ! Now that we have Ein, Eo, and Eo_cm, find c, mu_l, mu_c, J
-          c = ap1inv * sqrt(Ein / Eo)
-          J = sqrt(Eo / Eo_cm)
-          mu_l = 0.5_8 * (ONE + c * c - Eo_cm / Eo) / c
-          if (Eo == Eo_lo) then
-            mu_c = -ONE
-          else if (Eo == Eo_hi) then
-            mu_c = ONE
-          else
-            mu_c = J * (mu_l - c)
-          end if
-          ! Now we can find fmu(mu=mu_c), using lin-lin interpolation
-          if (mu_c == -ONE) then
-            proby = fmu(1)
-          else if (mu_c == ONE) then
-            proby = fmu(size(mu))
-          else
-            imu_c = binary_search(mu, size(mu), mu_c)
-            f = (mu_c - mu(imu_c)) / (mu(imu_c + 1) - mu(imu_c))
-            proby = (ONE - f) * fmu(imu_c) + f * fmu(imu_c + 1)
-          end if
-          integ = proby * J
-          mus(iE) = mu_l
-          fmus(iE) = integ
-          Eo = Eo + dEo
-        end do
-        do iE = 1, NE_PER_GRP - 1
-          distro(:, g) = distro(:, g) + calc_int_pn_tablelin(order, mus(iE), &
-            mus(iE + 1), fmus(iE), fmus(iE + 1))
-        end do
-        norm_sum = norm_sum + distro(1, g)
-      end do
+        ! Step through w between w(E_g) and w(E_g-1), find Pl(u(w)) and
+        ! fmu(w), multiply, and do trapezoidal integration of.
+        ! Start with bottom point
+        ! wlo should be between [-1,1] b/c of calculation of Eo_lo and Eo_hi,
+        ! but floating point error could make it be outside. So just force it.
+        if (E_bnds(g) == Eo_lo) then
+          wlo = -ONE
+          iwlo = 1
+          integlo = fmu(iwlo)
+          ulo = -ONE
+        else if (E_bnds(g) == Eo_hi) then
+          exit
+        else
+          wlo = ((E_bnds(g) - Eo_cm) * ((awr + ONE) * (awr + ONE)) - Ein) / &
+                  (TWO * (awr + ONE) * sqrt(Ein * Eo_cm))
+          iwlo = binary_search(mu, size(mu), wlo)
+          f = (wlo - mu(iwlo)) / (mu(iwlo + 1) - mu(iwlo))
+          integlo = (ONE - f) * fmu(iwlo) + f * fmu(iwlo + 1)
+          ulo = wlo * sqrt(Eo_cm / E_bnds(g)) +  sqrt(Ein / E_bnds(g)) * ap1inv
+        end if
 
-      ! Now normalize the results so the integral over all groups is 1.
-      !!! Frankly, I'm not sure why this is needed.
-      do g = g_lo, g_hi
-        distro(:, g) = distro(:, g) / norm_sum
+        ! Get data for high point of integration
+        if (E_bnds(g + 1) == Eo_hi) then
+          whi = ONE
+          iwhi = size(mu) - 1
+          integhi = fmu(size(mu))
+          uhi = ONE
+        else
+          whi = ((E_bnds(g + 1) - Eo_cm) * ((awr + ONE) * (awr + ONE)) - Ein) / &
+                  (TWO * (awr + ONE) * sqrt(Ein * Eo_cm))
+          iwhi = binary_search(mu, size(mu), whi)
+          f = (whi - mu(iwhi)) / (mu(iwhi + 1) - mu(iwhi))
+          integhi = (ONE - f) * fmu(iwhi) + f * fmu(iwhi + 1)
+          uhi = whi * sqrt(Eo_cm / E_bnds(g + 1)) +  sqrt(Ein / E_bnds(g + 1)) * ap1inv
+        end if
+
+        ! Now we can do trapezoidal integration, beginning with bottom and top pts
+        if (iwlo == iwhi) then
+          do l = 1, order
+            distro(l, g) = 0.5_8 * ((whi - wlo) * &
+                           (integlo * calc_pn(l - 1, ulo) + &
+                            integhi * calc_pn(l - 1, uhi)))
+          end do
+        else
+          do l = 1, order
+            E = Eo_cm + (Ein + TWO * mu(iwlo + 1) * (awr+ONE) * sEiEocm) * ap1inv * ap1inv
+            ulo1 = mu(iwlo + 1) * sqrt(Eo_cm / E) + sqrt(Ein / E) * ap1inv
+            E = Eo_cm + (Ein + TWO * mu(iwhi) * (awr+ONE) * sEiEocm) * ap1inv * ap1inv
+            uhi1 = mu(iwhi) * sqrt(Eo_cm / E) + sqrt(Ein / E) * ap1inv
+            distro(l, g) = 0.5_8 * ((mu(iwlo + 1) - wlo) * &
+                           (integlo * calc_pn(l - 1, ulo) + &
+                            fmu(iwlo + 1) * calc_pn(l - 1, ulo1)) + &
+                           ((whi - mu(iwhi)) * &
+                           (integhi * calc_pn(l - 1, uhi) + &
+                            fmu(iwhi) * calc_pn(l - 1, uhi1))))
+          end do
+        end if
+
+        ! And the points inbetween
+        dmu = mu(2) - mu(1)
+        do iw = iwlo + 1, iwhi-1
+          E = Eo_cm + (Ein + TWO * mu(iw) * (awr+ONE) * sEiEocm) * ap1inv * ap1inv
+          ulo1 = mu(iw) * sqrt(Eo_cm / E) + sqrt(Ein / E) * ap1inv
+          E = Eo_cm + (Ein + TWO * mu(iw + 1) * (awr+ONE) * sEiEocm) * ap1inv * ap1inv
+          uhi1 = mu(iw + 1) * sqrt(Eo_cm / E) + sqrt(Ein / E) * ap1inv
+          do l = 1, order
+            distro(l, g) = distro(l, g) + 0.5_8 * dmu * &
+                           (fmu(iw) * calc_pn(l - 1, ulo1) + &
+                            fmu(iw + 1) * calc_pn(l - 1, uhi1))
+          end do
+        end do
       end do
 
     end subroutine law3_scatter_cm_leg
+
+
+    subroutine file4_cm_leg(fmu, Ein, awr, E_bins, mu, order, distro, Enorm)
+      real(8), intent(in)  :: fmu(:)      ! Angle distro to act on
+      real(8), intent(in)  :: Ein         ! Incoming energy
+      real(8), intent(in)  :: awr         ! atomic weight ratio
+      real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
+      real(8), intent(in)  :: mu(:)       ! fmu angular grid
+      integer, intent(in)  :: order       ! Number of moments to find
+      real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
+      real(8), intent(out) :: Enorm       ! Fraction of possible energy space
+                                          ! of this Ein reaction represented by
+                                          ! the energy group structure of the
+                                          ! problem
+
+      integer :: g          ! Group index variable, mu point index
+      real(8) :: R          ! Reduced Mass
+      real(8) :: Eo_lo, Eo_hi ! Laboratory Eout bounds
+      integer :: g_lo, g_hi ! Lower and upper groups
+      real(8), allocatable :: E_bnds(:) ! Bounds of integration (energy)
+      real(8) :: ap1inv     ! 1/(AWR+1)
+      integer :: l, iwlo, iwhi, iw
+      real(8) :: wlo, whi, ulo, uhi, Plo, Phi, f, integlo, integhi
+      real(8) :: ulo1, uhi1
+      real(8) :: dmu, E, sEiEocm
+
+
+      ap1inv = ONE / (awr + ONE)
+      R = awr  ! Temporary, for now
+
+      Eo_lo = Ein * (ONE + R * R - TWO * R) * ap1inv * ap1inv
+      Eo_hi = Ein * (ONE + R * R + TWO * R) * ap1inv * ap1inv
+
+      Enorm = ONE
+
+      if (Eo_lo <= E_bins(1)) then
+        g_lo = 1
+      else if (Eo_lo >= E_bins(size(E_bins))) then
+        return
+      else
+        g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
+      end if
+      if (Eo_hi <= E_bins(1)) then
+        return
+      else if (Eo_hi >= E_bins(size(E_bins))) then
+        g_hi = size(E_bins) - 1
+        allocate(E_bnds(g_lo : g_hi + 1))
+        E_bnds(g_lo) = Eo_lo
+        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
+        E_bnds(g_hi + 1) = E_bins(g_hi + 1)
+      else
+        g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
+        allocate(E_bnds(g_lo : g_hi + 1))
+        E_bnds(g_lo) = Eo_lo
+        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
+        E_bnds(g_hi + 1) = Eo_hi
+      end if
+
+      do g = g_lo, g_hi
+        ! Step through w between w(E_g) and w(E_g-1), find Pl(u(w)) and
+        ! fmu(w), multiply, and do trapezoidal integration of.
+        ! Start with bottom point
+        ! wlo should be between [-1,1] b/c of calculation of Eo_lo and Eo_hi,
+        ! but floating point error could make it be outside. So just force it.
+        if (E_bnds(g) == Eo_lo) then
+          wlo = -ONE
+          iwlo = 1
+          integlo = fmu(iwlo)
+          ulo = -ONE
+        else if (E_bnds(g) == Eo_hi) then
+          exit
+        else
+          wlo = (E_bnds(g) * (awr + ONE) * (awr + ONE) - Ein * (ONE + R * R)) / &
+                (TWO * R * Ein)
+          iwlo = binary_search(mu, size(mu), wlo)
+          f = (wlo - mu(iwlo)) / (mu(iwlo + 1) - mu(iwlo))
+          integlo = (ONE - f) * fmu(iwlo) + f * fmu(iwlo + 1)
+          ulo = (ONE + R * wlo) / sqrt(ONE + R * R + TWO * R * wlo)
+        end if
+
+        ! Get data for high point of integration
+        if (E_bnds(g + 1) == Eo_hi) then
+          whi = ONE
+          iwhi = size(mu) - 1
+          integhi = fmu(size(mu))
+          uhi = ONE
+        else
+          whi = (E_bnds(g + 1) * (awr + ONE) * (awr + ONE) - Ein * (ONE + R * R)) / &
+                (TWO * R * Ein)
+          iwhi = binary_search(mu, size(mu), whi)
+          f = (whi - mu(iwhi)) / (mu(iwhi + 1) - mu(iwhi))
+          integhi = (ONE - f) * fmu(iwhi) + f * fmu(iwhi + 1)
+          uhi = (ONE + R * whi) / sqrt(ONE + R * R + TWO * R * whi)
+        end if
+
+        ! Now we can do trapezoidal integration, beginning with bottom and top pts
+        if (iwlo == iwhi) then
+          do l = 1, order
+            distro(l, g) = 0.5_8 * ((whi - wlo) * &
+                           (integlo * calc_pn(l - 1, ulo) + &
+                            integhi * calc_pn(l - 1, uhi)))
+          end do
+        else
+          do l = 1, order
+            ulo1 = (ONE + R * mu(iwlo + 1)) / sqrt(ONE + R * R + TWO * R * mu(iwlo + 1))
+            uhi1 = (ONE + R * mu(iwhi)) / sqrt(ONE + R * R + TWO * R * mu(iwhi))
+            distro(l, g) = 0.5_8 * ((mu(iwlo + 1) - wlo) * &
+                           (integlo * calc_pn(l - 1, ulo) + &
+                            fmu(iwlo + 1) * calc_pn(l - 1, ulo1)) + &
+                           ((whi - mu(iwhi)) * &
+                           (integhi * calc_pn(l - 1, uhi) + &
+                            fmu(iwhi) * calc_pn(l - 1, uhi1))))
+          end do
+        end if
+
+        ! And the points inbetween
+        dmu = mu(2) - mu(1)
+        do iw = iwlo + 1, iwhi-1
+          ulo1 = (ONE + R * mu(iw)) / sqrt(ONE + R * R + TWO * R * mu(iw))
+          uhi1 = (ONE + R * mu(iw+1)) / sqrt(ONE + R * R + TWO * R * mu(iw+1))
+          do l = 1, order
+            distro(l, g) = distro(l, g) + 0.5_8 * dmu * &
+                           (fmu(iw) * calc_pn(l - 1, ulo1) + &
+                            fmu(iw + 1) * calc_pn(l - 1, uhi1))
+          end do
+        end do
+      end do
+
+    end subroutine file4_cm_leg
+
 
 !===============================================================================
 ! INTEGRATE_FILE6_CM_LEG Finds which group contains the inelastic level outgoing energy

@@ -2,7 +2,7 @@ module ndpp_class
 
   use ace,         only: read_ace_table
   use ace_header
-  use array_merge, only: merge
+  use array_merge
   !use chi_class
   use chi
   use constants
@@ -499,6 +499,8 @@ module ndpp_class
           ! Create energy grid to use (nuc % energy, with points
           ! added for each group boundary)
           call merge(nuc % energy, self % energy_bins, self % Ein)
+          ! Create an array with 4x the points
+          call extend_grid(self % Ein)
 
           ! Integrate Scattering Distributions
           call timer_start(self % time_scatt_preproc)

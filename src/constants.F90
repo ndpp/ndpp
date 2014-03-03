@@ -20,7 +20,7 @@ module constants
   ! adjusted. Modifying constants in other sections may cause the code to fail.
 
   ! Monoatomic ideal-gas scattering treatment threshold
-  real(8), parameter :: FREEGAS_THRESHOLD_DEFAULT = 400.0
+   real(8), parameter :: FREEGAS_THRESHOLD_DEFAULT = 400.0
 
   ! User for precision in calculated mu points
   real(8), parameter :: FP_PRECISION = 1e-14_8
@@ -98,8 +98,8 @@ module constants
 
   ! Flag to interpolate on angular distributions with nearest neighbor or
   ! linear interpolation
-  ! logical, parameter :: INTERP_NEAREST = .false.
-  logical, parameter :: INTERP_NEAREST = .true.
+  logical, parameter :: INTERP_NEAREST = .false.
+  ! logical, parameter :: INTERP_NEAREST = .true.
 
   ! Fraction of maximum s(a,b) value to use as cutoff for determining
   ! the range of integration

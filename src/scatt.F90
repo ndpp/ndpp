@@ -253,7 +253,6 @@ module scatt
             mySD => rxn_data(irxn)
             ! If we do not have a scatter reaction, don't score it.
             if (.not. mySD % is_init) cycle
-
             ! Some reactions, ENDF-VII.0's Ca-40 e.g., have two angdist Ein
             ! points in a row being the same value. Check for this and just skip
             ! the first point

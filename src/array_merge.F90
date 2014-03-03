@@ -104,4 +104,27 @@ module array_merge
       deallocate(merged)
     end subroutine merge
 
+    subroutine extend_grid(a)
+      real(8), allocatable, intent(inout) :: a(:)
+      real(8), allocatable :: temp(:)
+      integer :: i, j
+
+      allocate(temp(4*size(a) - 1))
+      j = 1
+      do i = 1, size(a) - 1
+        temp(j) = a(i)
+        temp(j + 1) = 0.25_8 * (a(i + 1) + a(i))
+        temp(j + 2) = 0.5_8 * (a(i + 1) + a(i))
+        temp(j + 3) = 0.75_8 * (a(i + 1) + a(i))
+        j = j + 4
+      end do
+      temp(size(temp)) = a(size(a))
+
+      deallocate(a)
+      allocate(a(size(temp)))
+      a = temp
+      deallocate(temp)
+
+    end subroutine extend_grid
+
 end module array_merge
