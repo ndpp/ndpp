@@ -499,14 +499,15 @@ module ndpp_class
           ! Create energy grid to use (nuc % energy, with points
           ! added for each group boundary)
           call merge(nuc % energy, self % energy_bins, self % Ein)
-          ! Create an array with 4x the points
-          call extend_grid(self % Ein)
 
-          ! Integrate Scattering Distributions
+          ! Integrate Scattering Distributions -
+          ! Calc_scatt will also update self % Ein to include data points necessary
+          ! to improve inelastic level scattering interpolation. Cannot do this
+          ! a priori since calc_scatt reads in the reactions.
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-            self % scatt_order, self % mu_bins, self % thin_tol, self % Ein, &
-            self % nuscatter, scatt_mat, nuscatt_mat)
+            self % scatt_order, self % mu_bins, self % thin_tol, &
+            self % nuscatter, self % Ein, scatt_mat, nuscatt_mat)
           ! Print the results to file
           call timer_start(self % time_print)
           if (self % nuscatter) then

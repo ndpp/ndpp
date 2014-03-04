@@ -26,7 +26,7 @@ module scatt
 !===============================================================================
 
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, mu_bins, &
-                          thin_tol, E_grid, nuscatt, scatt_mat, nuscatt_mat)
+                          thin_tol, nuscatt, E_grid, scatt_mat, nuscatt_mat)
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
@@ -34,8 +34,8 @@ module scatt
       integer, intent(in)                 :: mu_bins        ! Number of angular points
                                                             ! to use during f_{n,MT} conversion
       real(8), intent(in)                 :: thin_tol       ! Thinning tolerance
-      real(8), allocatable, intent(in)    :: E_grid(:)      ! Incoming Energy Grid
       logical, intent(in)                 :: nuscatt        ! Whether or not to include nuscatt
+      real(8), allocatable, intent(inout) :: E_grid(:)      ! Incoming Energy Grid
       real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
       real(8), allocatable, intent(inout) :: nuscatt_mat(:,:,:) ! Unionized Nu-Scattering Matrices
 
@@ -48,6 +48,7 @@ module scatt
       type(ScattData), pointer :: mySD
       real(8), allocatable     :: mu_out(:) ! The tabular output mu grid
       type(ScattData), pointer :: inittedSD => null()
+      real(8) :: nn1_thresh
 
       ! This routine will parse through each nuc % reaction entry.
       ! For each, it will determine if the rxn is a scattering reaction, and if
@@ -76,6 +77,7 @@ module scatt
       ! Allocate all the rxn_data objects with the correct energy distro, if
       ! needed.
       i_nested_rxn = 0
+      nn1_thresh = E_grid(size(E_grid))
       do i_rxn = 1, nuc % n_reaction
         i_nested_rxn = i_nested_rxn + 1
 
@@ -93,6 +95,9 @@ module scatt
           end do
         end if
         if (mySD % is_init) inittedSD => rxn_data(i_nested_rxn)
+        if (rxn % MT == N_N1) then
+          nn1_thresh = edist % data(1)
+        end if
       end do
 
       do i_rxn = 1, num_tot_rxn
@@ -111,6 +116,19 @@ module scatt
         end do
       end if
 
+      ! Expand the Incoming energy grid (E_grid) to include points which will
+      ! significantly improve linear interpolation of inelastic level scatter
+      ! results.  These results are kind of like stair functions but with
+      ! near-linear (depends on f(mu)) ramps inbetween each `step'.  So
+      ! to combat this, we will put an Ein point at the start and end of this
+      ! `ramp'.
+      !call expand_grid(rxn_data, energy_bins, E_grid)
+      ! Create an array with 4x the points
+
+      ! For now do this just by doing 4 pts per current point above the
+      ! threshold for inelastic level scatter to begin
+      call extend_grid(nn1_thresh, E_grid)
+
       ! Now combine the results on to E_grid
       call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
         energy_bins, nuscatt, scatt_mat, nuscatt_mat)
@@ -121,6 +139,116 @@ module scatt
       end do
 
     end subroutine calc_scatt
+
+!===============================================================================
+! EXPAND_GRID Expands the Incoming energy grid to include points which will
+! significantly improve linear interpolation of inelastic level scatter
+! results.  These results are kind of like stair functions but with
+! near-linear (depends on f(mu)) ramps inbetween each `step'.  So
+! to combat this, we will put an Ein point at the start and end of this
+! `ramp'.
+!===============================================================================
+
+    subroutine expand_grid(rxn_data, E_bins, Ein)
+      type(ScattData), target, intent(in) :: rxn_data(:) ! Reaction data
+      real(8), intent(in)                 :: E_bins(:)   ! Energy groups
+      real(8), allocatable, intent(inout) :: Ein(:)      ! Incoming Energy Grid
+
+      real(8), allocatable :: new_grid(:,:)
+      integer :: groups, i_rxn, g, iE, iMT
+      type(DistEnergy), pointer :: edist => null()
+      type(Reaction),   pointer :: rxn   => null()
+      type(ScattData), pointer  :: mySD  => null()
+      real(8) :: Eo, Ei, Ap12, D1, D2, thresh
+
+
+      groups = size(E_bins) - 1
+
+      allocate(new_grid(2 * groups , N_NC - N_N1))
+      ! Set them to this so when we merge them all, dup
+      new_grid = E_bins(1)
+
+      iMT = 0
+      do i_rxn = 1, size(rxn_data)
+        mySD => rxn_data(i_rxn)
+        if (.not. mySD % is_init) then
+          cycle
+        end if
+        rxn => mySD % rxn
+        Ap12 = (mySD % awr + ONE) * (mySD % awr + ONE)
+        ! Lets make sure that we have an inelastic level, and that law 3
+        ! is used to describe it (which it totally better, but why not check)
+        if (((rxn % MT >= N_N1) .and. (rxn % MT < N_NC)) .and. &
+            (mySD % law == 3)) then
+          edist => mySD % edist
+          ! Find which Ein puts the lowest energy point at each group boundary
+          D1 = edist % data(1)
+          D2 = edist % data(2)
+          iMT = iMT + 1
+          iE = 0
+          do g = 1, groups
+            Eo = E_bins(g)
+            ! Eo_low and Eo_high yield two possibilities on the group boundary:
+            !!! INCORRECT
+            Ei = sqrt((Ap12*(-(D1*D2)+Eo)+Ap12*Ap12*D2*(D1*D2+Eo) - &
+                      TWO*sqrt(Ap12*Ap12*D2*Eo*(-D1+Ap12*D1*D2+Ap12*Eo))) / &
+                      ((Ap12 * D2 - ONE) * (Ap12 * D2 - ONE)))
+            ! Lets check for validity (Ei above threshold)
+            if (Ei > D1) then
+              iE = iE + 1
+              new_grid(iE, iMT) = Ei
+            end if
+            !!! INCORRECT
+            Ei = sqrt((Ap12*(-(D1*D2)+Eo)+Ap12*Ap12*D2*(D1*D2+Eo) + &
+                      TWO*sqrt(Ap12*Ap12*D2*Eo*(-D1+Ap12*D1*D2+Ap12*Eo))) / &
+                      ((Ap12 * D2 - ONE) * (Ap12 * D2 - ONE)))
+            ! Lets check for validity (Ei above threshold)
+            if (Ei > D1) then
+              iE = iE + 1
+              new_grid(iE, iMT) = Ei
+            end if
+          end do
+
+        end if
+
+      end do
+
+    end subroutine expand_grid
+
+
+!===============================================================================
+! EXTEND_GRID increases the number of points present above a threshold, min
+!===============================================================================
+
+    subroutine extend_grid(min, a)
+      real(8), intent(in)                 :: min
+      real(8), allocatable, intent(inout) :: a(:)
+      real(8), allocatable :: temp(:)
+      integer :: i, j, k
+      real(8) :: dE
+
+      ! First lets find where min is
+      k = binary_search(a, size(a), min)
+      allocate(temp(k + 4 * (size(a) - k) - 1))
+      temp(1:k-1) = a(1:k-1)
+
+      j = k
+      do i = k, size(a) - 1
+        dE = a(i + 1) - a(i)
+        temp(j) = a(i)
+        temp(j + 1) = 0.25_8 * dE + a(i)
+        temp(j + 2) = 0.5_8 * dE + a(i)
+        temp(j + 3) = 0.75_8 * dE + a(i)
+        j = j + 4
+      end do
+      temp(size(temp)) = a(size(a))
+
+      deallocate(a)
+      allocate(a(size(temp)))
+      a = temp
+      deallocate(temp)
+
+    end subroutine extend_grid
 
 !===============================================================================
 ! CALC_SCATTSAB Calculates the group-to-group transfer matrices and scattering
