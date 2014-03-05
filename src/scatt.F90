@@ -98,6 +98,7 @@ module scatt
         if (rxn % MT == N_N1) then
           nn1_thresh = edist % data(1)
         end if
+if ((mySD % is_init) .and. (associated(edist))) write(*,*) rxn % MT, edist % law, edist % data(1:2), rxn%scatter_in_cm
       end do
 
       do i_rxn = 1, num_tot_rxn
@@ -125,7 +126,7 @@ module scatt
       !call expand_grid(rxn_data, energy_bins, E_grid)
       ! Create an array with 4x the points
 
-      ! For now do this just by doing 4 pts per current point above the
+      ! For now do this just by doing EXTEND_PTS per current point above the
       ! threshold for inelastic level scatter to begin
       call extend_grid(nn1_thresh, E_grid)
 
@@ -217,29 +218,29 @@ module scatt
 
 
 !===============================================================================
-! EXTEND_GRID increases the number of points present above a threshold, min
+! EXTEND_GRID increases the number of points present above a threshold (min)
+! The number of points to increase is EXTEND_PTS for every point on Ein.
 !===============================================================================
 
     subroutine extend_grid(min, a)
       real(8), intent(in)                 :: min
       real(8), allocatable, intent(inout) :: a(:)
       real(8), allocatable :: temp(:)
-      integer :: i, j, k
+      integer :: i, j, k, l
       real(8) :: dE
 
       ! First lets find where min is
       k = binary_search(a, size(a), min)
-      allocate(temp(k + 4 * (size(a) - k) - 1))
+      allocate(temp(k + EXTEND_PTS * (size(a) - k) - 1))
       temp(1:k-1) = a(1:k-1)
 
       j = k
       do i = k, size(a) - 1
-        dE = a(i + 1) - a(i)
-        temp(j) = a(i)
-        temp(j + 1) = 0.25_8 * dE + a(i)
-        temp(j + 2) = 0.5_8 * dE + a(i)
-        temp(j + 3) = 0.75_8 * dE + a(i)
-        j = j + 4
+        dE = (a(i + 1) - a(i)) / real(EXTEND_PTS,8)
+        do l = 0, EXTEND_PTS - 1
+          temp(j + l) = a(i) + real(l,8) * dE
+        end do
+        j = j + EXTEND_PTS
       end do
       temp(size(temp)) = a(size(a))
 

@@ -126,6 +126,11 @@ module constants
   ! Number of Eout points per group for CM to lab conversion of inelastic collisions
   integer, parameter :: NE_PER_GRP = 10
 
+  ! Number of points to extend the incoming energy grid (per ACE Ein) at
+  ! energies above the inelastic level threshold: (This is to improve interpolation)
+  ! for these inelastic level collisions
+  integer, parameter :: EXTEND_PTS = 20
+
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
 
