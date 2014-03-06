@@ -1424,7 +1424,7 @@ module scattdata_header
       real(8), allocatable :: E_bnds(:)
       real(8) :: ap1inv     ! 1/(AWR+1)
       real(8), allocatable :: fmu(:), mu_l(:)
-      real(8), allocatable :: pdf(:) ! Unnormalized PDF
+      real(8), allocatable :: pdf(:) ! Eout PDF
 
       ! First lets normalize the PDF
       allocate(pdf(size(Eout)))

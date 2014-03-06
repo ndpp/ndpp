@@ -48,7 +48,7 @@ module scatt
       type(ScattData), pointer :: mySD
       real(8), allocatable     :: mu_out(:) ! The tabular output mu grid
       type(ScattData), pointer :: inittedSD => null()
-      real(8) :: nn1_thresh
+      real(8) :: inel_thresh
 
       ! This routine will parse through each nuc % reaction entry.
       ! For each, it will determine if the rxn is a scattering reaction, and if
@@ -77,7 +77,7 @@ module scatt
       ! Allocate all the rxn_data objects with the correct energy distro, if
       ! needed.
       i_nested_rxn = 0
-      nn1_thresh = E_grid(size(E_grid))
+      inel_thresh = E_grid(size(E_grid))
       do i_rxn = 1, nuc % n_reaction
         i_nested_rxn = i_nested_rxn + 1
 
@@ -94,17 +94,28 @@ module scatt
               mu_bins)
           end do
         end if
-        if (mySD % is_init) inittedSD => rxn_data(i_nested_rxn)
-        if (rxn % MT == N_N1) then
-          nn1_thresh = edist % data(1)
-        end if
-if ((mySD % is_init) .and. (associated(edist))) write(*,*) rxn % MT, edist % law, edist % data(1:2), rxn%scatter_in_cm
       end do
 
       do i_rxn = 1, num_tot_rxn
         mySD => rxn_data(i_rxn)
         ! Convert the angular distributions from the ACE data to Tabular format
         call mySD % convert_distro()
+        ! Get the threshold for inelastic collision
+        if (mySD % is_init) then
+          inittedSD => rxn_data(i_rxn)
+          rxn => mySD % rxn
+          edist => rxn % edist
+          if ((rxn % MT >= N_N1) .and. (rxn % MT < N_NC)) then
+            if (edist % data(1) < inel_thresh) then
+              inel_thresh = edist % data(1)
+            end if
+          else if ((rxn % MT == N_2N) .or. (rxn % MT == N_3N) .or.&
+                   (rxn % MT == N_4N) .or. (rxn % MT == N_NC)) then
+            if (mySD % E_grid(1) < inel_thresh) then
+              inel_thresh = mySD % E_grid(1)
+            end if
+          end if
+        end if
         nullify(mySD)
       end do
 
@@ -120,15 +131,10 @@ if ((mySD % is_init) .and. (associated(edist))) write(*,*) rxn % MT, edist % law
       ! Expand the Incoming energy grid (E_grid) to include points which will
       ! significantly improve linear interpolation of inelastic level scatter
       ! results.  These results are kind of like stair functions but with
-      ! near-linear (depends on f(mu)) ramps inbetween each `step'.  So
-      ! to combat this, we will put an Ein point at the start and end of this
-      ! `ramp'.
-      !call expand_grid(rxn_data, energy_bins, E_grid)
-      ! Create an array with 4x the points
-
-      ! For now do this just by doing EXTEND_PTS per current point above the
+      ! near-linear (depends on f(mu)) ramps inbetween each `step'.  For now
+      ! we will combat this by putting EXTEND_PTS per current point above the
       ! threshold for inelastic level scatter to begin
-      call extend_grid(nn1_thresh, E_grid)
+      call extend_grid(inel_thresh, E_grid)
 
       ! Now combine the results on to E_grid
       call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
