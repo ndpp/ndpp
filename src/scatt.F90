@@ -118,7 +118,6 @@ module scatt
         end if
         nullify(mySD)
       end do
-      inel_thresh = 0.1_8
 
       ! Calculate our equi-width mu points
       if (scatt_type == SCATT_TYPE_TABULAR) then
@@ -136,6 +135,10 @@ module scatt
       ! we will combat this by putting EXTEND_PTS per current point above the
       ! threshold for inelastic level scatter to begin
       call extend_grid(inel_thresh, E_grid)
+
+      ! Finally, we need to make sure there are at least EXTEND_PTS
+      ! incoming energy points per group.  If not, then add them in.
+      call add_pts_per_group(energy_bins, E_grid)
 
       ! Now combine the results on to E_grid
       call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
@@ -173,7 +176,7 @@ module scatt
       groups = size(E_bins) - 1
 
       allocate(new_grid(2 * groups , N_NC - N_N1))
-      ! Set them to this so when we merge them all, dup
+      ! Set them to this so when we merge them all, duplicates are removed
       new_grid = E_bins(1)
 
       iMT = 0
@@ -222,6 +225,52 @@ module scatt
       end do
 
     end subroutine expand_grid
+
+!===============================================================================
+! ADD_PTS_PER_GROUP Checks to make sure there are EXTEND_PTS per group available.
+! If not, then EXTEND_PTS are added to the group.
+!===============================================================================
+
+    subroutine add_pts_per_group(E_bins, Ein)
+      real(8), intent(in)                 :: E_bins(:)   ! Energy groups
+      real(8), allocatable, intent(inout) :: Ein(:)      ! Incoming Energy Grid
+
+      real(8), allocatable :: new_grid(:)
+      real(8), allocatable :: temp_grid(:)
+      integer :: groups, g, lo, hi, i, j
+      real(8) :: dE
+
+
+      groups = size(E_bins) - 1
+
+      allocate(new_grid(EXTEND_PTS * groups))
+      ! Set them to this so when we merge them all, duplicates are removed
+      new_grid = E_bins(1)
+
+      hi = 1
+      i = 1
+      do g = 1, groups
+        lo = hi
+        hi = binary_search(Ein, size(Ein), E_bins(g + 1))
+        if (hi - lo < EXTEND_PTS) then
+          dE = (Ein(hi) - Ein(lo)) / real(EXTEND_PTS,8)
+          do j = 0, EXTEND_PTS - 1
+            new_grid(i + j) = Ein(lo) + real(j,8) * dE
+          end do
+          i = i + EXTEND_PTS
+        end if
+      end do
+
+      ! Now we can merge in new_grid(:i-1) with Ein to get our new grid
+      call merge(new_grid(:i - 1), Ein, temp_grid)
+      deallocate(Ein)
+      allocate(Ein(size(temp_grid)))
+      Ein = temp_grid
+      deallocate(temp_grid)
+      deallocate(new_grid)
+
+    end subroutine add_pts_per_group
+
 
 
 !===============================================================================
