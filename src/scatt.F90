@@ -118,6 +118,7 @@ module scatt
         end if
         nullify(mySD)
       end do
+      inel_thresh = 0.1_8
 
       ! Calculate our equi-width mu points
       if (scatt_type == SCATT_TYPE_TABULAR) then
