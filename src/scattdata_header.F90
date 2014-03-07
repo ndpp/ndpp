@@ -472,7 +472,7 @@ module scattdata_header
       end if
 
       ! Get the probability value
-      if (associated(this % edist % next)) then
+      if (associated(this % edist)) then
         p_valid = interpolate_tab1(this % edist % p_valid, Ein)
       else
         p_valid = ONE
