@@ -1474,7 +1474,7 @@ module scattdata_header
         ! Otherwise, find the CDF at Eo_lo and Eo_hi and subtract these
         ! CDFs from 1.0 to get Enorm
         !!! TO BE IMPLEMENTED!!!
-
+        Enorm = ONE
       end if
 
       do g = g_lo, g_hi
