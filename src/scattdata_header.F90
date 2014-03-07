@@ -330,7 +330,7 @@ module scattdata_header
       !$omp parallel do schedule(dynamic,50) num_threads(omp_threads) default(shared),private(iE)
       do iE = 1, this % NE
         this % distro(iE) % data = ZERO
-        if ((this % law == 0) .or. (this % law == 3)) then
+        if ((this % law == 0) .or. (this % law == 3) .or. (this % law == 9)) then
           ! angle distribution only. N_Nx will enter through here.
           call convert_file4(iE, this % mu, this % adist, &
             this % Eouts(iE) % data, this % INTT(iE), &
@@ -472,12 +472,8 @@ module scattdata_header
       end if
 
       ! Get the probability value
-      if (associated(this % edist)) then
-        if (this % edist % p_valid % n_regions > 0) then
-          p_valid = interpolate_tab1(this % edist % p_valid, Ein)
-        else
-          p_valid = ONE
-        end if
+      if (associated(this % edist % next)) then
+        p_valid = interpolate_tab1(this % edist % p_valid, Ein)
       else
         p_valid = ONE
       end if
@@ -562,7 +558,8 @@ module scattdata_header
               distro_lab = distro_int
               call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
                 this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
-                this % E_bins, this % order, result_distro, temp_Enorm)
+                this % cdfs(iE) % data, this % E_bins, this % order, &
+                result_distro, temp_Enorm)
               !call integrate_file6_lab_leg(distro_lab, this % mu, &
               !  this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
               !  this % E_bins, this % order, result_distro, temp_Enorm)
@@ -573,7 +570,7 @@ module scattdata_header
               ! Here, we have angular info in adist, but it goes to a single energy
               ! specified in edist. This is for level inelastic scattering and some
               ! (n,xn) reactions.
-              if (this % edist % law == 9) then
+              if (this % law == 9) then
                 ! For these cases, we need to find out which outgoing groups
                 ! get the isotropic angular distribution data, which will be
                 ! the same for each group.
@@ -1386,7 +1383,7 @@ module scattdata_header
 !===============================================================================
 
     subroutine integrate_file6_cm_leg(fEmu, mu, Ein, awr, Eout, INTT, thispdf, &
-                                      E_bins, order, distro, Enorm)
+                                      cdf, E_bins, order, distro, Enorm)
       real(8), intent(in)  :: fEmu(:,:)   ! Energy-angle distro to act on
       real(8), intent(in)  :: mu(:)       ! fEmu angular grid
       real(8), intent(in)  :: Ein         ! Incoming energy
@@ -1394,6 +1391,7 @@ module scattdata_header
       real(8), intent(in)  :: Eout(:)     ! Outgoing energies
       integer, intent(in)  :: INTT        ! Interpolation type (Hist || Lin-Lin)
       real(8), intent(in)  :: thispdf(:)  ! Outgoing E-dist PDF from mySD
+      real(8), intent(in)  :: cdf(:)      ! Outgoing E-dist CDF from mySD
       real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
       integer, intent(in)  :: order       ! Number of moments to find
       real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
@@ -1434,7 +1432,6 @@ module scattdata_header
         pdf(size(Eout) - 1) = ZERO
       end if
 
-      Enorm = ONE
       allocate(fEl(order))
       allocate(fmu(size(mu)))
       allocate(mu_l(size(mu)))
@@ -1468,6 +1465,16 @@ module scattdata_header
         E_bnds(g_lo) = Eo_lo
         E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
         E_bnds(g_hi + 1) = Eo_hi
+      end if
+
+      ! Set Enorm, the desired normalization
+      if ((Eo_lo >= E_bnds(1)) .and. (Eo_hi <= E_bnds(size(E_bnds)))) then
+        Enorm = ONE
+      else
+        ! Otherwise, find the CDF at Eo_lo and Eo_hi and subtract these
+        ! CDFs from 1.0 to get Enorm
+        !!! TO BE IMPLEMENTED!!!
+
       end if
 
       do g = g_lo, g_hi
@@ -1551,6 +1558,16 @@ module scattdata_header
         distro(:, g) = distro(:, g) * dEo * 0.5_8
       end do
 
+      ! Lets do a normalization:
+      ! 40090.7*c is up to 35% from being normalized, oddly
+      fEo = ZERO
+      do g = 1, size(distro, dim=2)
+        fEo = fEo + distro(1, g)
+      end do
+      do g = 1, size(distro, dim=2)
+        distro(:, g) =  distro(:, g) / fEo
+      end do
+
     end subroutine integrate_file6_cm_leg
 
 !===============================================================================
@@ -1602,9 +1619,8 @@ module scattdata_header
         Eg = E_bins(g)
         if (Egp1 > (Ein - U)) Egp1 = Ein - U
         if (Eg > (Ein - U)) Eg = Ein - U
-        pE_xfer = (T * exp(Egp1 / T) - Egp1 - T) * exp(-Egp1 / T)
-        pE_xfer = pE_xfer - (T * exp(Eg / T) - Eg - T) * exp(-Eg / T)
-        pE_xfer = T * pE_xfer / I
+        pE_xfer = (exp(-Egp1 / T) * (T + Egp1)) - (exp(-Eg / T) * (T + Eg))
+        pE_xfer= -T * pE_xfer / I
 
         ! Now set the angular distributions according to pE_xfer
         do imu = 1, size(mu) - 1
