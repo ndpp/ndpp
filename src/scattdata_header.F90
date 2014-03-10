@@ -560,9 +560,6 @@ module scattdata_header
                 this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
                 this % cdfs(iE) % data, this % E_bins, this % order, &
                 result_distro, temp_Enorm)
-              !call integrate_file6_lab_leg(distro_lab, this % mu, &
-              !  this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
-              !  this % E_bins, this % order, result_distro, temp_Enorm)
             end if
           else
             distro_lab = distro_int
@@ -1468,7 +1465,7 @@ module scattdata_header
       end if
 
       ! Set Enorm, the desired normalization
-      if ((Eo_lo >= E_bnds(1)) .and. (Eo_hi <= E_bnds(size(E_bnds)))) then
+      if ((Eo_lo >= E_bins(1)) .and. (Eo_hi <= E_bins(size(E_bins)))) then
         Enorm = ONE
       else
         ! Otherwise, find the CDF at Eo_lo and Eo_hi and subtract these
@@ -1561,11 +1558,12 @@ module scattdata_header
       ! Lets do a normalization:
       ! 40090.7*c is up to 35% from being normalized, oddly
       fEo = ZERO
-      do g = 1, size(distro, dim=2)
+      do g = g_lo, g_hi
         fEo = fEo + distro(1, g)
       end do
-      do g = 1, size(distro, dim=2)
-        distro(:, g) =  distro(:, g) / fEo
+      if (fEo > ZERO) fEo = ONE / fEo
+      do g = g_lo, g_hi
+        distro(:, g) =  distro(:, g) * fEo
       end do
 
     end subroutine integrate_file6_cm_leg
@@ -1835,12 +1833,12 @@ module scattdata_header
     logical, intent(in) :: cm ! Is scatter in CM?
     logical             :: scatter_event
 
-    if ((MT == ELASTIC) .or. &
-        ((MT == N_2N) .or. (MT == N_3N) .or. (MT == N_4N)) .or. &
-        ((MT >= N_N1) .and. (MT <= N_NC))) then
-      scatter_event = .true.
-    else
-      scatter_event = .false.
+    scatter_event = .false.
+    if ((MT == ELASTIC) .or. ((MT >= N_2ND) .and. (MT <= N_NC))) then
+      if (MT /= N_FISSION .and. MT /= N_F .and. MT /= N_NF .and. &
+          MT /= N_2NF .and. MT /= N_3NF) then
+        scatter_event = .true.
+      end if
     end if
 
   end function is_valid_scatter
