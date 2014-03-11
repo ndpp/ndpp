@@ -1274,6 +1274,7 @@ module scattdata_header
       R = awr  ! Temporary, for now
 
       Eo_lo = Ein * (ONE + R * R - TWO * R) * ap1inv * ap1inv
+      Eo_lo = 1E-12_8
       Eo_hi = Ein * (ONE + R * R + TWO * R) * ap1inv * ap1inv
 
       Enorm = ONE
@@ -1438,6 +1439,7 @@ module scattdata_header
       ! Set up lower and upper lab energy boundaries
       Eo_lo = Eout(1) + (Ein - TWO * (awr + ONE) * sqrt(Ein * Eout(1))) &
         * ap1inv * ap1inv
+      Eo_lo = 1E-12_8
       Eo_hi = Eout(size(Eout)) + (Ein + TWO * (awr + ONE) * &
         sqrt(Ein * Eout(size(Eout)))) * ap1inv * ap1inv
 
