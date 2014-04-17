@@ -262,11 +262,14 @@ module scatt
       end do
 
       ! Now we can merge in new_grid(:i-1) with Ein to get our new grid
-      call merge(new_grid(:i - 1), Ein, temp_grid)
-      deallocate(Ein)
-      allocate(Ein(size(temp_grid)))
-      Ein = temp_grid
-      deallocate(temp_grid)
+      if (i > 1) then
+        ! Otherwise, nothing needs to happen, E_grid does not change
+        call merge(new_grid(:i - 1), Ein, temp_grid)
+        deallocate(Ein)
+        allocate(Ein(size(temp_grid)))
+        Ein = temp_grid
+        deallocate(temp_grid)
+      end if
       deallocate(new_grid)
 
     end subroutine add_pts_per_group
