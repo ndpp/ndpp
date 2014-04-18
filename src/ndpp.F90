@@ -3,7 +3,6 @@ module ndpp_class
   use ace,         only: read_ace_table
   use ace_header
   use array_merge
-  !use chi_class
   use chi
   use constants
   use dict_header
