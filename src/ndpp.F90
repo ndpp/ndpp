@@ -51,7 +51,7 @@ module ndpp_class
     ! (i.e., whether or not nu-scatter or simply scatter is desired)
     logical              :: nuscatter     = NUSCATTER_DEFAULT
     ! Number of angular bins to use during f_{n,MT} conversion
-    integer              :: mu_bins = MU_BINS_DEFAULT
+    integer              :: mu_bins       = MU_BINS_DEFAULT
     ! Flag to integrate chi or not
     logical              :: integrate_chi = INTEGRATE_CHI_DEFAULT
     ! Flag to use free-gas treatment or not

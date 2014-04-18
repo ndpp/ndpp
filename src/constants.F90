@@ -129,7 +129,7 @@ module constants
   ! Number of points to extend the incoming energy grid (per ACE Ein) at
   ! energies above the inelastic level threshold: (This is to improve interpolation)
   ! for these inelastic level collisions
-  integer, parameter :: EXTEND_PTS = 20
+  integer, parameter :: EXTEND_PTS = 8
 
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS

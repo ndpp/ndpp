@@ -97,7 +97,7 @@ module scattdata_header
       ! which will be used as a flag when the reactions are combined.
       ! Test reactions to ensure we have a scattering reaction.
       this % is_init = .false.
-      if (.not. is_valid_scatter(rxn % MT, rxn % scatter_in_cm)) return
+      if (.not. is_valid_scatter(rxn % MT)) return
 
       ! Now, check edist, if passed, and ensure it is of the right law type
       ! before proceeding
@@ -1829,10 +1829,9 @@ module scattdata_header
 ! IS_VALID_SCATTER determines if a given MT number is that of a scattering event
 !===============================================================================
 
-  function is_valid_scatter(MT, cm) result(scatter_event)
+  function is_valid_scatter(MT) result(scatter_event)
 
     integer, intent(in) :: MT ! Reaction channel
-    logical, intent(in) :: cm ! Is scatter in CM?
     logical             :: scatter_event
 
     scatter_event = .false.
