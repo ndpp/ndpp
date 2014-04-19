@@ -128,6 +128,13 @@ module scatt
         end do
       end if
 
+      ! Add in incoming energies from all reaction channel distributions to
+      ! the Ein grid
+      call combine_Eins(rxn_data, E_grid)
+
+      ! Add points to aid in interpolation if elastic scattering points
+      call add_elastic_Eins(nuc % awr, energy_bins, E_grid)
+
       ! Expand the Incoming energy grid (E_grid) to include points which will
       ! significantly improve linear interpolation of inelastic level scatter
       ! results.  These results are kind of like stair functions but with
@@ -150,6 +157,85 @@ module scatt
       end do
 
     end subroutine calc_scatt
+
+!===============================================================================
+! COMBINE_EINS ensures that the incoming energies from all of the different
+! reaction channels' incoming energy grids are included in our final grid so
+! as not to miss any highly varying information.
+!===============================================================================
+
+    subroutine combine_Eins(rxn_data, Ein)
+      type(ScattData), target, intent(in) :: rxn_data(:) ! Reaction data
+      real(8), allocatable, intent(inout) :: Ein(:)      ! Incoming Energy Grid
+
+      real(8), allocatable      :: new_grid(:)
+      real(8), allocatable      :: tmp_grid(:)
+      type(ScattData), pointer  :: mySD
+      integer :: i_rxn
+
+      allocate(new_grid(1))
+      new_grid = Ein(1)
+
+      write(*,*) 'Before', size(Ein)
+
+      do i_rxn = 1, size(rxn_data)
+        mySD => rxn_data(i_rxn)
+        if (mySD % is_init) then
+          call merge(mySD % E_grid, new_grid, tmp_grid)
+          deallocate(new_grid)
+          allocate(new_grid(size(tmp_grid)))
+          new_grid = tmp_grid
+        end if
+        nullify(mySD)
+      end do
+
+      deallocate(tmp_grid)
+      allocate(tmp_grid(size(Ein)))
+      tmp_grid = Ein
+      call merge(new_grid, tmp_grid, Ein)
+      deallocate(tmp_grid)
+      deallocate(new_grid)
+
+      write(*,*) 'After', size(Ein)
+
+    end subroutine combine_Eins
+
+    subroutine add_elastic_Eins(awr, E_bins, Ein)
+      real(8), intent(in)                 :: awr       ! Atomic Weight Ratio
+      real(8), intent(in)                 :: E_bins(:) ! Energy groups
+      real(8), allocatable, intent(inout) :: Ein(:)    ! Incoming Energy Grid
+
+      real(8), allocatable  :: new_pts(:)
+      real(8), allocatable  :: old_grid(:)
+      integer               :: g
+      real(8)               :: alpha
+      integer               :: num_pts
+
+      allocate(old_grid(size(Ein)))
+      old_grid = Ein
+
+      alpha = ((awr - ONE) / (awr + ONE))**2
+
+      allocate(new_pts(size(E_bins) - 1))
+
+      num_pts = 0
+      do g = 1, size(E_bins) - 1
+        new_pts(g) = E_bins(g) / alpha
+        ! Now we increment new_pts if the new point is inside our energy range
+        ! of interest, and if not, quit this loop.  That way we dont add points
+        ! which are above the peak energy we need.
+        if (new_pts(g) < E_bins(size(E_bins))) then
+          num_pts = num_pts + 1
+        else
+          exit
+        end if
+      end do
+
+      call merge(new_pts, old_grid, Ein)
+      deallocate(new_pts)
+      deallocate(old_grid)
+    end subroutine add_elastic_Eins
+
 
 !===============================================================================
 ! EXPAND_GRID Expands the Incoming energy grid to include points which will
