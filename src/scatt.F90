@@ -179,15 +179,25 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
       real(8), allocatable      :: new_grid(:)
       real(8), allocatable      :: tmp_grid(:)
       type(ScattData), pointer  :: mySD
-      integer :: i_rxn
+      integer :: i_rxn, iEmax
 
       allocate(new_grid(1))
       new_grid = Ein(1)
-
       do i_rxn = 1, size(rxn_data)
         mySD => rxn_data(i_rxn)
         if (mySD % is_init) then
-          call merge(mySD % E_grid, new_grid, tmp_grid)
+          ! Find maximum point that is within our group boundaries before merging
+          if (mySD % E_grid(1) <= mySD % E_bins(size(mySD % E_bins))) then
+            iEmax = 1
+          else if (mySD % E_grid(size(mySD % E_grid)) >= &
+                   mySD % E_bins(size(mySD % E_bins))) then
+            iEmax = size(mySD % E_grid) - 1
+          else
+            iEmax = binary_search(mySD % E_grid, size(mySD % E_grid), &
+                                  mySD % E_bins(size(mySD % E_bins)))
+          end if
+          ! Now combine with the rest
+          call merge(mySD % E_grid(1: iEmax), new_grid, tmp_grid)
           deallocate(new_grid)
           allocate(new_grid(size(tmp_grid)))
           new_grid = tmp_grid
@@ -233,9 +243,13 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
       alpha = ((awr - ONE) / (awr + ONE))**2
 
       allocate(new_pts(NE_PER_GRP * size(E_bins) - 1))
+      new_pts = ZERO
 
       num_pts = 0
       do g = 1, size(E_bins) - 1
+        if (E_bins(g) == ZERO) then
+          cycle
+        end if
         EgoAlpha = E_bins(g) / alpha
         dE = E_bins(g) * (ONE / alpha - ONE) / real(NE_PER_GRP, 8)
         do i = 1, NE_PER_GRP
@@ -249,7 +263,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
         end do
       end do
 
-      call merge(new_pts, old_grid, Ein)
+      call merge(new_pts(1: num_pts), old_grid, Ein)
       deallocate(new_pts)
       deallocate(old_grid)
     end subroutine add_elastic_Eins
@@ -301,8 +315,6 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
       deallocate(new_grid)
 
     end subroutine add_pts_per_group
-
-
 
 !===============================================================================
 ! EXTEND_GRID increases the number of points present above a threshold (min)
@@ -446,14 +458,15 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
       allocate(temp_scatt(order, groups))
 
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
-!$omp parallel do schedule(guided,100) num_threads(omp_threads) &
+!$omp parallel do schedule(dynamic,100) num_threads(omp_threads) &
 !$omp default(shared), private(iE,mySD,norm_tot,irxn,temp_scatt)
       do iE = 1, NE
-#ifndef OPENMP
+#ifdef OPENMP
         tid = OMP_GET_THREAD_NUM()
 #else
         tid = 0
 #endif
+
         if (tid == 0) then
           if (iE_print > 0) then
             if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then

@@ -400,6 +400,7 @@ module ndpp_class
       type(SAlphaBeta), pointer :: sab => null() ! S(a,b) tables
       integer                   :: i_listing     ! index of xs_listing
       character(MAX_FILE_LEN)   :: nuc_lib_name  ! nuclidic library's filename
+      integer                   :: iEmax         ! Location of maximum useful energy
       ! Scattering specific data
       real(8), allocatable :: scatt_mat(:,:,:)   ! scattering matrix moments,
                                                  ! order x g_out x E_in
@@ -498,8 +499,17 @@ module ndpp_class
           call write_message(6)
 
           ! Create energy grid to use (nuc % energy, with points
-          ! added for each group boundary)
-          call merge(nuc % energy, self % energy_bins, self % Ein)
+          ! added for each group boundary) after limiting nuc % energy to
+          ! the maximum energy in energy_bins
+          if (self % energy_bins(size(self % energy_bins)) >= &
+              nuc % energy(size(nuc % energy))) then
+            iEmax = size(nuc % energy)
+          else
+            iEmax = binary_search(nuc % energy, size(nuc % energy), &
+                                  self % energy_bins(size(self % energy_bins)))
+          end if
+
+          call merge(nuc % energy(1:iEMax), self % energy_bins, self % Ein)
 
           ! Integrate Scattering Distributions -
           ! Calc_scatt will also update self % Ein to include data points necessary
