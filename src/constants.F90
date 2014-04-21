@@ -124,7 +124,7 @@ module constants
   integer, parameter :: SAB_EPTS_PER_BIN = 10  ! 0 Implies no expansion
 
   ! Number of Eout points per group for CM to lab conversion of inelastic collisions
-  integer, parameter :: NE_PER_GRP = 10
+  integer, parameter :: NE_PER_GRP = 20
 
   ! Number of points to extend the incoming energy grid (per ACE Ein) at
   ! energies above the inelastic level threshold: (This is to improve interpolation)

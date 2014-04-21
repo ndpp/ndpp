@@ -154,7 +154,7 @@ class NDPP_lib(object):
         # Read scattering type
         self.scatt_type = self._get_int(path='scatt_type')[0]
 
-        # Read scatering order
+        # Read scattering order
         self.scatt_order = self._get_int(path='scatt_order')[0]
 
         if self.scatt_type == SCATT_TYPE_LEGENDRE:
@@ -166,11 +166,11 @@ class NDPP_lib(object):
         # Get flag for if chi is present
         self.chi_present = bool(self._get_int(path='chi_present')[0])
 
-        # Get thinning tolerance
-        self.thin_tol = self._get_double(path='thin_tol')[0]
-
         # Get mu_bins
         self.mu_bins = self._get_int(path='mu_bins')[0]
+
+        # Get thinning tolerance
+        self.thin_tol = self._get_double(path='thin_tol')[0]
 
     def _read_scatt(self):
         # Get NE_scatt
@@ -210,8 +210,30 @@ class NDPP_lib(object):
                             self._get_double(n=self.scatt_order, path=iE_g_base))
 
     def _read_chi(self):
-        # NOT YET IMPLEMENTED!!
-        pass
+        # Get NE_Chi, number of delayed groups
+        self.NE_chi = self._get_int(path='chi/NE_chi')[0]
+        self.NP_chi = self._get_int(path='chi/NP_chi')[0]
+
+        # Get Ein
+        print self.NE_chi
+        self.Ein_chi = np.asarray(self._get_double(n=self.NE_chi,
+                                                   path='chi/Ein_chi'))
+
+
+        # Get chi data for each Ein
+        base = 'chi/data/'
+        chi_types = ['total', 'prompt', 'delay']
+        self.chi = {}
+        for chi_type in chi_types:
+            if chi_type == 'delay':
+                self.chi[chi_type] = []
+                for c in range(self.NP_chi):
+                    self.chi[chi_type].append(
+                        np.asarray(self._get_double(n=self.NE_chi,
+                                   path=base+chi_type+'/'+str(c+1))))
+            else:
+                self.chi[chi_type] = np.asarray(self._get_double(n=self.NE_chi,
+                                                                 path=base+chi_type))
 
     def condense_outgoing_scatt(self, nu=False, groups=None):
         if groups is None:

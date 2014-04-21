@@ -136,8 +136,8 @@ module scatt
       call add_elastic_Eins(nuc % awr, energy_bins, E_grid)
 
       ! Expand the Incoming energy grid (E_grid) to include points which will
-      ! significantly improve linear interpolation of inelastic level scatter
-      ! results.  These results are kind of like stair functions but with
+      ! improve linear interpolation of inelastic level scatter results.
+      ! These results are kind of like stair functions but with
       ! near-linear (depends on f(mu)) ramps inbetween each `step'.  For now
       ! we will combat this by putting EXTEND_PTS per current point above the
       ! threshold for inelastic level scatter to begin
@@ -200,117 +200,55 @@ module scatt
 
     end subroutine combine_Eins
 
+!===============================================================================
+! ADD_ELASTIC_EINS adds in incoming energy points to the Ein grid so that the
+! continuous scattering distributions can be more accurately reconstructed by
+! linear interpolation.  This specific routine adds in points which better
+! characterize the behavior as the elastic outgoing energies pass from one
+! outgoing group to another.  A total of NE_PER_GRP are added for each of these
+! transitions.
+!===============================================================================
+
     subroutine add_elastic_Eins(awr, E_bins, Ein)
       real(8), intent(in)                 :: awr       ! Atomic Weight Ratio
       real(8), intent(in)                 :: E_bins(:) ! Energy groups
       real(8), allocatable, intent(inout) :: Ein(:)    ! Incoming Energy Grid
 
-      real(8), allocatable  :: new_pts(:)
-      real(8), allocatable  :: old_grid(:)
-      integer               :: g
-      real(8)               :: alpha
-      integer               :: num_pts
+      real(8), allocatable :: new_pts(:)
+      real(8), allocatable :: old_grid(:)
+      integer              :: i, g        ! NE_PER_GRP and Group loop indices
+      real(8)              :: alpha
+      integer              :: num_pts
+      real(8)              :: EgoAlpha  ! Eg / Alpha
+      real(8)              :: newE      ! Current new incoing energy point
+      real(8)              :: dE        ! interval between each Ein point
 
       allocate(old_grid(size(Ein)))
       old_grid = Ein
 
       alpha = ((awr - ONE) / (awr + ONE))**2
 
-      allocate(new_pts(size(E_bins) - 1))
+      allocate(new_pts(NE_PER_GRP * size(E_bins) - 1))
 
       num_pts = 0
       do g = 1, size(E_bins) - 1
-        new_pts(g) = E_bins(g) / alpha
-        ! Now we increment new_pts if the new point is inside our energy range
-        ! of interest, and if not, quit this loop.  That way we dont add points
-        ! which are above the peak energy we need.
-        if (new_pts(g) < E_bins(size(E_bins))) then
-          num_pts = num_pts + 1
-        else
-          exit
-        end if
+        EgoAlpha = E_bins(g) / alpha
+        dE = E_bins(g) * (ONE / alpha - ONE) / real(NE_PER_GRP, 8)
+        do i = 1, NE_PER_GRP
+          newE = E_bins(g) + i * dE
+          if (newE < E_bins(size(E_bins))) then
+            num_pts = num_pts + 1
+            new_pts(num_pts) = newE
+          else
+            exit
+          end if
+        end do
       end do
 
       call merge(new_pts, old_grid, Ein)
       deallocate(new_pts)
       deallocate(old_grid)
     end subroutine add_elastic_Eins
-
-
-!===============================================================================
-! EXPAND_GRID Expands the Incoming energy grid to include points which will
-! significantly improve linear interpolation of inelastic level scatter
-! results.  These results are kind of like stair functions but with
-! near-linear (depends on f(mu)) ramps inbetween each `step'.  So
-! to combat this, we will put an Ein point at the start and end of this
-! `ramp'.
-!===============================================================================
-
-    subroutine expand_grid(rxn_data, E_bins, Ein)
-      type(ScattData), target, intent(in) :: rxn_data(:) ! Reaction data
-      real(8), intent(in)                 :: E_bins(:)   ! Energy groups
-      real(8), allocatable, intent(inout) :: Ein(:)      ! Incoming Energy Grid
-
-      real(8), allocatable :: new_grid(:,:)
-      integer :: groups, i_rxn, g, iE, iMT
-      type(DistEnergy), pointer :: edist => null()
-      type(Reaction),   pointer :: rxn   => null()
-      type(ScattData), pointer  :: mySD  => null()
-      real(8) :: Eo, Ei, Ap12, D1, D2, thresh
-
-
-      groups = size(E_bins) - 1
-
-      allocate(new_grid(2 * groups , N_NC - N_N1))
-      ! Set them to this so when we merge them all, duplicates are removed
-      new_grid = E_bins(1)
-
-      iMT = 0
-      do i_rxn = 1, size(rxn_data)
-        mySD => rxn_data(i_rxn)
-        if (.not. mySD % is_init) then
-          cycle
-        end if
-        rxn => mySD % rxn
-        Ap12 = (mySD % awr + ONE) * (mySD % awr + ONE)
-        ! Lets make sure that we have an inelastic level, and that law 3
-        ! is used to describe it (which it totally better, but why not check)
-        if (((rxn % MT >= N_N1) .and. (rxn % MT < N_NC)) .and. &
-            (mySD % law == 3)) then
-          edist => mySD % edist
-          ! Find which Ein puts the lowest energy point at each group boundary
-          D1 = edist % data(1)
-          D2 = edist % data(2)
-          iMT = iMT + 1
-          iE = 0
-          do g = 1, groups
-            Eo = E_bins(g)
-            ! Eo_low and Eo_high yield two possibilities on the group boundary:
-            !!! INCORRECT
-            Ei = sqrt((Ap12*(-(D1*D2)+Eo)+Ap12*Ap12*D2*(D1*D2+Eo) - &
-                      TWO*sqrt(Ap12*Ap12*D2*Eo*(-D1+Ap12*D1*D2+Ap12*Eo))) / &
-                      ((Ap12 * D2 - ONE) * (Ap12 * D2 - ONE)))
-            ! Lets check for validity (Ei above threshold)
-            if (Ei > D1) then
-              iE = iE + 1
-              new_grid(iE, iMT) = Ei
-            end if
-            !!! INCORRECT
-            Ei = sqrt((Ap12*(-(D1*D2)+Eo)+Ap12*Ap12*D2*(D1*D2+Eo) + &
-                      TWO*sqrt(Ap12*Ap12*D2*Eo*(-D1+Ap12*D1*D2+Ap12*Eo))) / &
-                      ((Ap12 * D2 - ONE) * (Ap12 * D2 - ONE)))
-            ! Lets check for validity (Ei above threshold)
-            if (Ei > D1) then
-              iE = iE + 1
-              new_grid(iE, iMT) = Ei
-            end if
-          end do
-
-        end if
-
-      end do
-
-    end subroutine expand_grid
 
 !===============================================================================
 ! ADD_PTS_PER_GROUP Checks to make sure there are EXTEND_PTS per group available.
