@@ -327,7 +327,7 @@ module scattdata_header
       end if
 
       ! Step through each incoming energy value to do these calculations
-      !$omp parallel do schedule(dynamic,50) num_threads(omp_threads) default(shared),private(iE)
+!$omp parallel do schedule(dynamic,50) num_threads(omp_threads) default(shared),private(iE)
       do iE = 1, this % NE
         this % distro(iE) % data = ZERO
         if ((this % law == 0) .or. (this % law == 3) .or. (this % law == 9)) then
@@ -342,7 +342,7 @@ module scattdata_header
             this % cdfs(iE) % data, this % distro(iE) % data)
         end if
       end do
-      !$omp end parallel do
+!$omp end parallel do
 
     end subroutine scatt_convert_distro
 

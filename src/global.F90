@@ -83,10 +83,8 @@ module global
   ! screen and in logs
   integer :: verbosity = 7
 
-#ifdef OPENMP
   ! Number of OpenMP threads to USE
   integer :: omp_threads
-#endif
 
 contains
 

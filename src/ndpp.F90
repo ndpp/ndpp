@@ -175,6 +175,8 @@ module ndpp_class
       else
         omp_threads = threads_
       end if
+#else
+      omp_threads = 1
 #endif
 
       ! Read cross_sections.xml

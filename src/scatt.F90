@@ -16,6 +16,10 @@ module scatt
   use hdf5_interface
 #endif
 
+#ifdef OPENMP
+  use omp_lib
+#endif
+
   implicit none
 
   contains
@@ -70,6 +74,8 @@ module scatt
           end do
         end if
       end do
+
+write(*,*) 'Initial Ein Grid Length:', size(Ein)
 
       ! Size rxn_data according to num_tot_rxn
       allocate(rxn_data(num_tot_rxn))
@@ -156,6 +162,8 @@ module scatt
         call rxn_data(i_rxn) % clear()
       end do
 
+write(*,*) 'Final Ein Grid Length:', size(Ein)
+
     end subroutine calc_scatt
 
 !===============================================================================
@@ -176,8 +184,6 @@ module scatt
       allocate(new_grid(1))
       new_grid = Ein(1)
 
-      write(*,*) 'Before', size(Ein)
-
       do i_rxn = 1, size(rxn_data)
         mySD => rxn_data(i_rxn)
         if (mySD % is_init) then
@@ -195,8 +201,6 @@ module scatt
       call merge(new_grid, tmp_grid, Ein)
       deallocate(tmp_grid)
       deallocate(new_grid)
-
-      write(*,*) 'After', size(Ein)
 
     end subroutine combine_Eins
 
@@ -423,7 +427,7 @@ module scatt
       integer :: iE_print            ! iE range to print status of
       integer :: iE_pct, last_iE_pct ! Current and previous pct complete
       real(8), allocatable :: temp_scatt(:,:) ! calculated scattering matrix
-
+      integer :: tid                 ! Thread id
 
       groups = size(E_bins) - 1
       NE = size(E_grid)
@@ -442,22 +446,27 @@ module scatt
       allocate(temp_scatt(order, groups))
 
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
-      !$omp parallel do schedule(dynamic,50) num_threads(omp_threads) &
-      !$omp default(shared), private(iE,mySD,norm_tot,irxn,temp_scatt)
+!$omp parallel do schedule(guided,100) num_threads(omp_threads) &
+!$omp default(shared), private(iE,mySD,norm_tot,irxn,temp_scatt)
       do iE = 1, NE
 #ifndef OPENMP
-        if (iE_print > 0) then
-          if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
-            iE_pct = 100 * iE / NE
-            if (iE_pct /= last_iE_pct) then
-              message = "    Evaluation " // &
-                trim(to_str(100 * iE / NE)) // "% Complete"
-              call write_message(7)
+        tid = OMP_GET_THREAD_NUM()
+#else
+        tid = 0
+#endif
+        if (tid == 0) then
+          if (iE_print > 0) then
+            if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
+              iE_pct = 100 * iE / NE
+              if (iE_pct /= last_iE_pct) then
+                message = "    Evaluation " // &
+                  trim(to_str(100 * iE / NE)) // "% Complete"
+                call write_message(7)
+              end if
+              last_iE_pct = iE_pct
             end if
-            last_iE_pct = iE_pct
           end if
         end if
-#endif
         if (E_grid(iE) <= E_bins(size(E_bins))) then
           scatt_mat(:, :, iE) = ZERO
           norm_tot = ZERO
@@ -500,7 +509,7 @@ module scatt
           end if
         end if
       end do
-      !$omp end parallel do
+!$omp end parallel do
 
     end subroutine calc_scatt_grid
 
