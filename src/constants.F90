@@ -79,7 +79,7 @@ module constants
   real(8), parameter :: &
        PRINT_TOL_DEFAULT   = 1.0E-8_8, & ! Value at which scattering matrices
                                          ! values are not printed
-       THIN_TOL_DEFAULT    = 1.0E-2_8    ! Value for grid thinning
+       THIN_TOL_DEFAULT    = 0.1_8       ! Value for grid thinning, in percent
 
   logical, parameter :: &
        INTEGRATE_CHI_DEFAULT = .true., & ! Integrate Chi?

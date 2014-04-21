@@ -30,14 +30,13 @@ module scatt
 !===============================================================================
 
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, mu_bins, &
-                          thin_tol, nuscatt, E_grid, scatt_mat, nuscatt_mat)
+                          nuscatt, E_grid, scatt_mat, nuscatt_mat)
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
       integer, intent(inout)              :: order          ! Scattering data order
       integer, intent(in)                 :: mu_bins        ! Number of angular points
                                                             ! to use during f_{n,MT} conversion
-      real(8), intent(in)                 :: thin_tol       ! Thinning tolerance
       logical, intent(in)                 :: nuscatt        ! Whether or not to include nuscatt
       real(8), allocatable, intent(inout) :: E_grid(:)      ! Incoming Energy Grid
       real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
@@ -47,7 +46,7 @@ module scatt
       type(Reaction),   pointer :: rxn
       integer :: num_tot_rxn
       integer :: i_rxn, i_nested_rxn, imu
-      real(8) :: max_err, dmu
+      real(8) :: dmu
       type(ScattData), allocatable, target  :: rxn_data(:)
       type(ScattData), pointer :: mySD
       real(8), allocatable     :: mu_out(:) ! The tabular output mu grid
@@ -356,7 +355,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
 !===============================================================================
 
     subroutine calc_scattsab(sab, energy_bins, scatt_type, order, &
-                             scatt_mat, mu_bins, thin_tol, E_grid)
+                             scatt_mat, mu_bins, E_grid)
       type(SAlphaBeta), pointer, intent(in) :: sab            ! Nuclide
       real(8), intent(in)                   :: energy_bins(:) ! Energy groups
       integer, intent(in)                   :: scatt_type     ! Scattering output type
@@ -364,7 +363,6 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
       real(8), allocatable, intent(inout)   :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
       integer, intent(in)                   :: mu_bins        ! Number of angular points
                                                               ! to use during f_{n,MT} conversion
-      real(8), intent(in)                   :: thin_tol       ! Thinning tolerance
       real(8), allocatable, intent(in)      :: E_grid(:)      ! Incoming Energy Grid
 
       real(8), allocatable :: mu_out(:)      ! Tabular output mu grid
@@ -531,8 +529,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
 ! in the specified format.
 !===============================================================================
 
-  subroutine print_scatt(name, lib_format, E_grid, tol, data, nudata)
-    character(len=*),     intent(in) :: name        ! (hdf5 specific) name of group
+  subroutine print_scatt(lib_format, E_grid, tol, data, nudata)
     integer,              intent(in) :: lib_format  ! Library output type
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8),              intent(in) :: tol         ! Minimum grp-to-grp prob'y
@@ -549,8 +546,10 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
         call print_scatt_bin(E_grid, tol, data, nudata)
       else if (lib_format == HUMAN) then
         call print_scatt_human(E_grid, tol, data, nudata)
+#ifdef HDF5
       else if (lib_format == H5) then
         call print_scatt_hdf5(E_grid, tol, data, nudata)
+#endif
       end if
     else
       if (lib_format == ASCII) then
@@ -559,8 +558,10 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
         call print_scatt_bin(E_grid, tol, data)
       else if (lib_format == HUMAN) then
         call print_scatt_human(E_grid, tol, data)
+#ifdef HDF5
       else if (lib_format == H5) then
         call print_scatt_hdf5(E_grid, tol, data)
+#endif
       end if
     end if
 
@@ -808,7 +809,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
 ! PRINT_SCATT_HDF5 prints the scattering data to the specified output group
 ! with the HDF5 library.
 !===============================================================================
-
+#ifdef HDF5
   subroutine print_scatt_hdf5(E_grid, tol, data, nudata)
     real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
     real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
@@ -820,7 +821,6 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
 
     integer :: g, gmin, gmax, iE
 
-#ifdef HDF5
     integer(HID_T) :: orig_group, scatt_group
     character(MAX_FILE_LEN) :: group_name, iE_name, nuc_name
     integer :: period_loc
@@ -919,7 +919,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
 
     call hdf5_close_group()
     temp_group = orig_group
-#endif
   end subroutine print_scatt_hdf5
+#endif
 
 end module scatt

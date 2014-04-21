@@ -64,8 +64,6 @@ contains
       integer, optional, intent(in)         :: precursor_grp ! Precursor grp
 
       integer :: lc ! Edist % data location counter
-      integer :: iE ! Ein loop counter
-      integer :: NP, INTTp ! Number of outgoing points and number of
 
       self % is_init = .false.
 

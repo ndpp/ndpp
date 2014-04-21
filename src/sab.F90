@@ -269,11 +269,10 @@ module sab
       real(8), allocatable, intent(inout)   :: sig(:)         ! Micros. x/s
 
       integer :: iEin      ! incoming energy counter
-      integer :: iEout     ! outgoing energy counter
       integer :: groups    ! shorthand for number of energy groups
       integer :: g, imu, l ! indices for: group, angle, legendre order
       real(8) :: mu        ! cosine of angle of scatter
-      real(8) :: Ein, Eout ! Incoming & outgoing energies
+      real(8) :: Ein       ! Incoming Energy
       integer :: isab      ! index on sab Ein grid
       real(8) :: f         ! fraction for interpolation
       real(8), allocatable :: distro(:,:,:) ! E'-mu double integral on S(a,b) Ein grid

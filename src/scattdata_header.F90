@@ -370,7 +370,6 @@ module scattdata_header
                                            ! (lower bound if Ein is provided)
       integer :: nuc_iE                    ! Energy index on the nuclide's x/s
       real(8), pointer :: sigS_array(:)    ! sigS pointer
-      integer :: g                         ! Group index
       real(8) :: Enorm ! Range of Energy space represented by this reaction
 
       ! Set up the results memory
@@ -558,8 +557,7 @@ module scattdata_header
               distro_lab = distro_int
               call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
                 this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
-                this % cdfs(iE) % data, this % E_bins, this % order, &
-                result_distro, temp_Enorm)
+                this % E_bins, this % order, result_distro, temp_Enorm)
             end if
           else
             distro_lab = distro_int
@@ -1131,7 +1129,7 @@ module scattdata_header
       real(8), allocatable :: E_bnds(:) ! Bounds of integration (energy)
       real(8) :: ap1inv     ! 1/(AWR+1)
       integer :: l, iwlo, iwhi, iw
-      real(8) :: wlo, whi, ulo, uhi, Plo, Phi, f, integlo, integhi
+      real(8) :: wlo, whi, ulo, uhi, f, integlo, integhi
       real(8) :: ulo1, uhi1
       real(8) :: dmu, E, sEiEocm
 
@@ -1265,9 +1263,9 @@ module scattdata_header
       real(8), allocatable :: E_bnds(:) ! Bounds of integration (energy)
       real(8) :: ap1inv     ! 1/(AWR+1)
       integer :: l, iwlo, iwhi, iw
-      real(8) :: wlo, whi, ulo, uhi, Plo, Phi, f, integlo, integhi
+      real(8) :: wlo, whi, ulo, uhi, f, integlo, integhi
       real(8) :: ulo1, uhi1
-      real(8) :: dmu, E, sEiEocm
+      real(8) :: dmu
 
 
       ap1inv = ONE / (awr + ONE)
@@ -1381,7 +1379,7 @@ module scattdata_header
 !===============================================================================
 
     subroutine integrate_file6_cm_leg(fEmu, mu, Ein, awr, Eout, INTT, thispdf, &
-                                      cdf, E_bins, order, distro, Enorm)
+                                      E_bins, order, distro, Enorm)
       real(8), intent(in)  :: fEmu(:,:)   ! Energy-angle distro to act on
       real(8), intent(in)  :: mu(:)       ! fEmu angular grid
       real(8), intent(in)  :: Ein         ! Incoming energy
@@ -1389,7 +1387,6 @@ module scattdata_header
       real(8), intent(in)  :: Eout(:)     ! Outgoing energies
       integer, intent(in)  :: INTT        ! Interpolation type (Hist || Lin-Lin)
       real(8), intent(in)  :: thispdf(:)  ! Outgoing E-dist PDF from mySD
-      real(8), intent(in)  :: cdf(:)      ! Outgoing E-dist CDF from mySD
       real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
       integer, intent(in)  :: order       ! Number of moments to find
       real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
@@ -1407,7 +1404,6 @@ module scattdata_header
       real(8) :: mu_l_min   ! Minimum lab angle
       real(8) :: dmu        ! change in lab angle
       real(8) :: c          ! c from eq 359
-      integer :: l          ! Scattering order counter
       real(8) :: proby, f   ! fmu at mu_c, interpolant between fmu points
       real(8) :: integ      ! the integrand
       real(8) :: J          ! the jacobian
@@ -1699,7 +1695,6 @@ module scattdata_header
 
     subroutine integrate_file6_lab_leg(fEmu, mu, Eout, INTT, thispdf, &
       E_bins, order, distro, Enorm)
-
       real(8), intent(in)    :: fEmu(:,:)     ! Energy-angle distro to act on
       real(8), intent(in)    :: mu(:)         ! fEmu angular grid
       real(8), intent(in)    :: Eout(:)       ! Outgoing energies

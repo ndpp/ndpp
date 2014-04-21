@@ -188,8 +188,10 @@ contains
       call print_chi_bin(E_grid, chi_t, chi_p, chi_d)
     else if (lib_format == HUMAN) then
       call print_chi_human(E_grid, chi_t, chi_p, chi_d)
+#ifdef HDF5
     else if (lib_format == H5) then
       call print_chi_hdf5(name, E_grid, chi_t, chi_p, chi_d)
+#endif
     end if
 
   end subroutine print_chi
@@ -355,7 +357,7 @@ contains
 ! PRINT_CHI_BIN prints the chi data to the specified output file
 ! in Fortran binary (stream) format.
 !===============================================================================
-
+#ifdef HDF5
   subroutine print_chi_hdf5(name, E_grid, chi_t, chi_p, chi_d)
     character(len=*),     intent(in) :: name       ! name of group
     real(8), allocatable, intent(in) :: E_grid(:)    ! Energy grid
@@ -363,7 +365,6 @@ contains
     real(8), allocatable, intent(in) :: chi_p(:,:)   ! Unionized Prompt Chi
     real(8), allocatable, intent(in) :: chi_d(:,:,:) ! Unionized Delayed Chi
 
-#ifdef HDF5
     ! Will follow this format
     ! <NE, num_precursors>
     ! <1:NE energies>
@@ -371,7 +372,7 @@ contains
     ! <1:NE chi_p(g,E)
     !  For each precursor:
     ! <1:NE chi_d(g,precursors,E)
-#endif
   end subroutine print_chi_hdf5
+#endif
 
 end module chi

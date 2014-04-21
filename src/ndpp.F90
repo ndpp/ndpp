@@ -517,15 +517,15 @@ module ndpp_class
           ! a priori since calc_scatt reads in the reactions.
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-            self % scatt_order, self % mu_bins, self % thin_tol, &
-            self % nuscatter, self % Ein, scatt_mat, nuscatt_mat)
+            self % scatt_order, self % mu_bins, self % nuscatter, self % Ein, &
+            scatt_mat, nuscatt_mat)
           ! Print the results to file
           call timer_start(self % time_print)
           if (self % nuscatter) then
-            call print_scatt(nuc % name, self % lib_format, self % Ein, &
+            call print_scatt(self % lib_format, self % Ein, &
               self % print_tol, scatt_mat, nuscatt_mat)
           else
-            call print_scatt(nuc % name, self % lib_format, self % Ein, &
+            call print_scatt(self % lib_format, self % Ein, &
               self % print_tol, scatt_mat)
           end if
           call timer_stop(self % time_print)
@@ -603,11 +603,11 @@ module ndpp_class
           call sab_egrid(sab, self % energy_bins, self % Ein)
           call calc_scattsab(sab, self % energy_bins, self % scatt_type, &
                              self % scatt_order, scatt_mat, self % mu_bins, &
-                             self % thin_tol, self % Ein)
+                             self % Ein)
 
           ! Print the results to file
           call timer_start(self % time_print)
-          call print_scatt(sab % name, self % lib_format, self % Ein, &
+          call print_scatt(self % lib_format, self % Ein, &
             self % print_tol, scatt_mat)
           call timer_stop(self % time_print)
 
@@ -956,10 +956,12 @@ module ndpp_class
       logical, optional, intent(in)         :: fiss      ! Is it fissionable?
 
       character(MAX_LINE_LEN) :: line
-      character(MAX_FILE_LEN) :: h_filename
-      integer                 :: chi_present_int, period_loc, nuscatter_int
+      integer                 :: chi_present_int, nuscatter_int
       logical                 :: fissionable
-      integer                 :: i
+#ifdef HDF5
+      character(MAX_FILE_LEN) :: h_filename
+      integer                 :: period_loc
+#endif
 
       ! Deal with fissionable value
       if (.not. present(fiss)) then
