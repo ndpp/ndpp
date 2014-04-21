@@ -75,7 +75,7 @@ module scatt
         end if
       end do
 
-write(*,*) 'Initial Ein Grid Length:', size(Ein)
+write(*,*) 'Initial Ein Grid Length:', size(E_grid)
 
       ! Size rxn_data according to num_tot_rxn
       allocate(rxn_data(num_tot_rxn))
@@ -162,7 +162,7 @@ write(*,*) 'Initial Ein Grid Length:', size(Ein)
         call rxn_data(i_rxn) % clear()
       end do
 
-write(*,*) 'Final Ein Grid Length:', size(Ein)
+write(*,*) 'Final Ein Grid Length:', size(E_grid)
 
     end subroutine calc_scatt
 
