@@ -218,7 +218,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
 ! continuous scattering distributions can be more accurately reconstructed by
 ! linear interpolation.  This specific routine adds in points which better
 ! characterize the behavior as the elastic outgoing energies pass from one
-! outgoing group to another.  A total of NE_PER_GRP are added for each of these
+! outgoing group to another.  A total of EXTEND_PTS are added for each of these
 ! transitions.
 !===============================================================================
 
@@ -229,7 +229,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
 
       real(8), allocatable :: new_pts(:)
       real(8), allocatable :: old_grid(:)
-      integer              :: i, g        ! NE_PER_GRP and Group loop indices
+      integer              :: i, g        ! EXTEND_PTS and Group loop indices
       real(8)              :: alpha
       integer              :: num_pts
       real(8)              :: EgoAlpha  ! Eg / Alpha
@@ -241,7 +241,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
 
       alpha = ((awr - ONE) / (awr + ONE))**2
 
-      allocate(new_pts(NE_PER_GRP * size(E_bins) - 1))
+      allocate(new_pts(EXTEND_PTS * size(E_bins) - 1))
       new_pts = ZERO
 
       num_pts = 0
@@ -250,8 +250,8 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
           cycle
         end if
         EgoAlpha = E_bins(g) / alpha
-        dE = E_bins(g) * (ONE / alpha - ONE) / real(NE_PER_GRP, 8)
-        do i = 1, NE_PER_GRP
+        dE = E_bins(g) * (ONE / alpha - ONE) / real(EXTEND_PTS, 8)
+        do i = 1, EXTEND_PTS
           newE = E_bins(g) + i * dE
           if (newE < E_bins(size(E_bins))) then
             num_pts = num_pts + 1
@@ -268,8 +268,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
     end subroutine add_elastic_Eins
 
 !===============================================================================
-! ADD_PTS_PER_GROUP Checks to make sure there are EXTEND_PTS per group available.
-! If not, then EXTEND_PTS are added to the group.
+! ADD_PTS_PER_GROUP adds EXTEND_PTS to each group.
 !===============================================================================
 
     subroutine add_pts_per_group(E_bins, Ein)
@@ -293,13 +292,11 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
       do g = 1, groups
         lo = hi
         hi = binary_search(Ein, size(Ein), E_bins(g + 1))
-        if (hi - lo < EXTEND_PTS) then
-          dE = (Ein(hi) - Ein(lo)) / real(EXTEND_PTS,8)
-          do j = 0, EXTEND_PTS - 1
-            new_grid(i + j) = Ein(lo) + real(j,8) * dE
-          end do
-          i = i + EXTEND_PTS
-        end if
+        dE = (Ein(hi) - Ein(lo)) / real(EXTEND_PTS,8)
+        do j = 0, EXTEND_PTS - 1
+          new_grid(i + j) = Ein(lo) + real(j,8) * dE
+        end do
+        i = i + EXTEND_PTS
       end do
 
       ! Now we can merge in new_grid(:i-1) with Ein to get our new grid
