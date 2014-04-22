@@ -14,17 +14,18 @@ module thin
 ! depending on the arguments.
 !===============================================================================
 
-    subroutine thin_grid(xout, yout, yout2, tol, compression)
-      real(8), allocatable, intent(inout) :: xout(:)     ! Resultant x grid
+    subroutine thin_grid(xout, yout, yout2, tol, compression, maxerr)
+      real(8), allocatable, intent(inout) :: xout(:)      ! Resultant x grid
       real(8), allocatable, intent(inout) :: yout(:,:,:)  ! Resultant y values
       real(8), allocatable, intent(inout) :: yout2(:,:,:) ! Resultant y values
-      real(8), intent(in)                 :: tol         ! Desired fractional error to maintain
-      real(8), intent(inout)              :: compression ! Data reduction fraction)
+      real(8), intent(in)                 :: tol          ! Desired fractional error to maintain
+      real(8), intent(inout)              :: compression  ! Data reduction fraction)
+      real(8), intent(inout)              :: maxerr       ! Maximum error due to compression
 
       if (allocated(yout2)) then
-        call thin_grid_two(xout, yout, yout2, tol, compression)
+        call thin_grid_two(xout, yout, yout2, tol, compression, maxerr)
       else
-        call thin_grid_one(xout, yout, tol, compression)
+        call thin_grid_one(xout, yout, tol, compression, maxerr)
       end if
 
     end subroutine thin_grid
@@ -33,11 +34,12 @@ module thin
 ! THIN_GRID_ONE implements thin-grid for only scatt_mat
 !===============================================================================
 
-    subroutine thin_grid_one(xout, yout, tol, compression)
+    subroutine thin_grid_one(xout, yout, tol, compression, maxerr)
       real(8), allocatable, intent(inout) :: xout(:)     ! Resultant x grid
       real(8), allocatable, intent(inout) :: yout(:,:,:) ! Resultant y values
       real(8), intent(in)                 :: tol         ! Desired fractional error to maintain
       real(8), intent(out)                :: compression ! Data reduction fraction
+      real(8), intent(inout)              :: maxerr      ! Maximum error due to compression
 
       real(8), allocatable :: xin(:)      ! Incoming x grid
       real(8), allocatable :: yin(:,:,:)  ! Incoming y values
@@ -46,6 +48,7 @@ module thin
       real(8) :: x1, y1, x2, y2, x, y, testval
       integer :: num_keep, remove_it
       real(8) :: initial_size
+      real(8) :: error
 
       initial_size = real(size(xout), 8)
 
@@ -55,6 +58,7 @@ module thin
       yin = yout
 
       all_ok = size(yin,dim=1) * size(yin,dim=2)
+      maxerr = 0.0_8
 
       ! This loop will step through each entry in dim==3 and check to see if
       ! all of the values in other 2 dims can be replaced with linear interp.
@@ -84,12 +88,15 @@ module thin
             x  = xin(k)
             y  = yin(i,j,k)
             testval = y1 + (y2-y1) / (x2-x1) * (x - x1)
-            if (y == 0.0_8) then
-              if (abs(testval - y) <= tol) then
-                remove_it = remove_it + 1
-              end if
-            else if (abs(testval - y) / y <= tol) then
+            error = abs(testval - y)
+            if (y /= 0.0_8) then
+              error = error / y
+            end if
+            if (error <= tol) then
               remove_it = remove_it + 1
+              if (error > maxerr) then
+                maxerr = abs(testval - y)
+              end if
             end if
           end do
         end do
@@ -139,12 +146,13 @@ module thin
 ! THIN_GRID_TWO implements thin-grid for scatt_mat and nuscatt_mat
 !===============================================================================
 
-    subroutine thin_grid_two(xout, yout, yout2, tol, compression)
+    subroutine thin_grid_two(xout, yout, yout2, tol, compression, maxerr)
       real(8), allocatable, intent(inout) :: xout(:)      ! Resultant x grid
       real(8), allocatable, intent(inout) :: yout(:,:,:)  ! Resultant y values
       real(8), allocatable, intent(inout) :: yout2(:,:,:) ! Resultant y values
       real(8), intent(in)                 :: tol          ! Desired fractional error to maintain
       real(8), intent(out)                :: compression  ! Data reduction fraction
+      real(8), intent(inout)              :: maxerr       ! Maximum error due to compression
 
       real(8), allocatable :: xin(:)       ! Incoming x grid
       real(8), allocatable :: yin(:,:,:)   ! Incoming y values
@@ -154,6 +162,7 @@ module thin
       real(8) :: x1, y1, x2, y2, x, y, testval
       integer :: num_keep, remove_it
       real(8) :: initial_size
+      real(8) :: error
 
       initial_size = real(size(xout), 8)
 
@@ -166,6 +175,7 @@ module thin
 
       all_ok = size(yin,dim=1) * size(yin,dim=2) + &
         size(yin2,dim=1) * size(yin2,dim=2)
+      maxerr = 0.0_8
 
       ! This loop will step through each entry in dim==3 and check to see if
       ! all of the values in other 2 dims can be replaced with linear interp.
@@ -198,24 +208,30 @@ module thin
             y2 = yin(i,j,khi)
             y  = yin(i,j,k)
             testval = y1 + (y2-y1) / (x2-x1) * (x - x1)
-            if (y == 0.0_8) then
-              if (abs(testval - y) <= tol) then
-                remove_it = remove_it + 1
-              end if
-            else if (abs(testval - y) / y <= tol) then
+            error = abs(testval - y)
+            if (y /= 0.0_8) then
+              error = error / y
+            end if
+            if (error <= tol) then
               remove_it = remove_it + 1
+              if (error > maxerr) then
+                maxerr = abs(testval - y)
+              end if
             end if
             ! And now check yin2
             y1 = yin2(i,j,klo)
             y2 = yin2(i,j,khi)
             y  = yin2(i,j,k)
             testval = y1 + (y2-y1) / (x2-x1) * (x - x1)
-            if (y == 0.0_8) then
-              if (abs(testval - y) <= tol) then
-                remove_it = remove_it + 1
-              end if
-            else if (abs(testval - y) / y <= tol) then
+            error = abs(testval - y)
+            if (y /= 0.0_8) then
+              error = error / y
+            end if
+            if (error <= tol) then
               remove_it = remove_it + 1
+              if (error > maxerr) then
+                maxerr = abs(testval - y)
+              end if
             end if
           end do
         end do

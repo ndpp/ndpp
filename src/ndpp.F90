@@ -403,6 +403,7 @@ module ndpp_class
       character(MAX_FILE_LEN)   :: nuc_lib_name  ! nuclidic library's filename
       integer                   :: iEmax         ! Location of maximum useful energy
       real(8)                   :: thin_compr    ! Thinning compression fraction
+      real(8)                   :: thin_err      ! Thinning compression error
       ! Scattering specific data
       real(8), allocatable :: scatt_mat(:,:,:)   ! scattering matrix moments,
                                                  ! order x g_out x E_in
@@ -524,10 +525,13 @@ module ndpp_class
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
             call thin_grid(self % Ein, scatt_mat, nuscatt_mat, self % thin_tol, &
-                           thin_compr)
+                           thin_compr, thin_err)
             ! Report results of thinning
             message = "....Completed Thinning, Reduced Storage By " // &
                       trim(to_str(100.0_8 * thin_compr)) // "%"
+            call write_message(6)
+            message = "....Maximum Thinning Error Was " // &
+                      trim(to_str(100.0_8 * thin_err)) // "%"
             call write_message(6)
           end if
 
@@ -620,10 +624,13 @@ module ndpp_class
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
             call thin_grid(self % Ein, scatt_mat, nuscatt_mat, self % thin_tol, &
-                           thin_compr)
+                           thin_compr, thin_err)
             ! Report results of thinning
             message = "....Completed Thinning, Reduced Storage By " // &
                       trim(to_str(100.0_8 * thin_compr)) // "%"
+            call write_message(6)
+            message = "....Maximum Thinning Error Was " // &
+                      trim(to_str(100.0_8 * thin_err)) // "%"
             call write_message(6)
           end if
 

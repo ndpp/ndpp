@@ -137,19 +137,18 @@ write(*,*) 'Initial Ein Grid Length:', size(E_grid)
       ! the Ein grid
       call combine_Eins(rxn_data, E_grid)
 
-      ! Add points to aid in interpolation if elastic scattering points
-      call add_elastic_Eins(nuc % awr, energy_bins, E_grid)
-
       ! Expand the Incoming energy grid (E_grid) to include points which will
       ! improve linear interpolation of inelastic level scatter results.
       ! These results are kind of like stair functions but with
       ! near-linear (depends on f(mu)) ramps inbetween each `step'.  For now
       ! we will combat this by putting EXTEND_PTS per current point above the
       ! threshold for inelastic level scatter to begin
-      call extend_grid(inel_thresh, E_grid)
+      call add_inelastic_eins(inel_thresh, E_grid)
 
-      ! Finally, we need to make sure there are at least EXTEND_PTS
-      ! incoming energy points per group.  If not, then add them in.
+      ! Add points to aid in interpolation if elastic scattering points
+      call add_elastic_Eins(nuc % awr, energy_bins, E_grid)
+
+      ! Finally, we will add EXTEND_PTS incoming energy points per group.
       call add_pts_per_group(energy_bins, E_grid)
 
       ! Now combine the results on to E_grid
@@ -313,11 +312,11 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
     end subroutine add_pts_per_group
 
 !===============================================================================
-! EXTEND_GRID increases the number of points present above a threshold (min)
+! ADD_INELASTIC_EINS increases the number of points present above a threshold (min)
 ! The number of points to increase is EXTEND_PTS for every point on Ein.
 !===============================================================================
 
-    subroutine extend_grid(min, a)
+    subroutine add_inelastic_eins(min, a)
       real(8), intent(in)                 :: min
       real(8), allocatable, intent(inout) :: a(:)
       real(8), allocatable :: temp(:)
@@ -344,7 +343,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
       a = temp
       deallocate(temp)
 
-    end subroutine extend_grid
+    end subroutine add_inelastic_eins
 
 !===============================================================================
 ! CALC_SCATTSAB Calculates the group-to-group transfer matrices and scattering
