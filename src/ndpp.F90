@@ -11,6 +11,7 @@ module ndpp_class
   use output,      only: write_message, header, time_stamp, print_ascii_array
   use scatt
   use string,      only: lower_case, starts_with, ends_with, to_str
+  use thin,        only: thin_grid
   use timer_header
 
 #ifdef OPENMP
@@ -327,13 +328,13 @@ module ndpp_class
       end if
 
       ! Get grid thinning information
-      if (thinning_tol_ > ZERO) then
-        ! Convert from percent to fraction and store
-        self % thin_tol = 0.01_8 * thinning_tol_
-      else
-        message = "Invalid thinning tolerance provided, setting to default of 0.2%."
+      if (thinning_tol_ < ZERO) then
+        message = "Invalid thinning tolerance provided, setting to default" // &
+                   " of no thinning."
         call warning()
       end if
+      ! Convert from percent to fraction and store
+      self % thin_tol = 0.01_8 * thinning_tol_
 
       ! Get printing tolerance information
       if (print_tol_ > ZERO) then
@@ -401,6 +402,7 @@ module ndpp_class
       integer                   :: i_listing     ! index of xs_listing
       character(MAX_FILE_LEN)   :: nuc_lib_name  ! nuclidic library's filename
       integer                   :: iEmax         ! Location of maximum useful energy
+      real(8)                   :: thin_compr    ! Thinning compression fraction
       ! Scattering specific data
       real(8), allocatable :: scatt_mat(:,:,:)   ! scattering matrix moments,
                                                  ! order x g_out x E_in
@@ -410,7 +412,7 @@ module ndpp_class
       real(8), allocatable   :: e_grid(:)    ! List of energy points for chi
       real(8), allocatable   :: chi_t(:,:)   ! grp x E_in chi tot values
       real(8), allocatable   :: chi_p(:,:)   ! grp x E_in chi prompt values
-      real(8), allocatable   :: chi_d(:,:,:) ! grp x E_inx precursor chi delayed
+      real(8), allocatable   :: chi_d(:,:,:) ! grp x E_in x precursor chi delayed
 
       ! S(a,b) specific data
       integer :: islash  ! location in name of slash
@@ -519,6 +521,16 @@ module ndpp_class
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
             self % scatt_order, self % mu_bins, self % nuscatter, self % Ein, &
             scatt_mat, nuscatt_mat)
+          ! Thin the grid, unless thin_tol is zero
+          if (self % thin_tol > ZERO) then
+            call thin_grid(self % Ein, scatt_mat, nuscatt_mat, self % thin_tol, &
+                           thin_compr)
+            ! Report results of thinning
+            message = "....Completed Thinning, Reduced Storage By " // &
+                      trim(to_str(100.0_8 * thin_compr)) // "%"
+            call write_message(6)
+          end if
+
           ! Print the results to file
           call timer_start(self % time_print)
           if (self % nuscatter) then
@@ -604,6 +616,16 @@ module ndpp_class
           call calc_scattsab(sab, self % energy_bins, self % scatt_type, &
                              self % scatt_order, scatt_mat, self % mu_bins, &
                              self % Ein)
+
+          ! Thin the grid, unless thin_tol is zero
+          if (self % thin_tol > ZERO) then
+            call thin_grid(self % Ein, scatt_mat, nuscatt_mat, self % thin_tol, &
+                           thin_compr)
+            ! Report results of thinning
+            message = "....Completed Thinning, Reduced Storage By " // &
+                      trim(to_str(100.0_8 * thin_compr)) // "%"
+            call write_message(6)
+          end if
 
           ! Print the results to file
           call timer_start(self % time_print)

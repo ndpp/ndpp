@@ -15,7 +15,8 @@ legendre.o \
 output.o \
 sab.o \
 scatt.o \
-scattdata_header.o
+scattdata_header.o \
+thin.o
 
 omc_objects = \
 dict_header.o \

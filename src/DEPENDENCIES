@@ -90,6 +90,7 @@ ndpp.o: global.o
 ndpp.o: output.o
 ndpp.o: scatt.o
 ndpp.o: string.o
+ndpp.o: thin.o
 ndpp.o: timer_header.o
 
 output.o: ace_header.o
