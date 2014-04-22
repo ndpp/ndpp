@@ -101,7 +101,7 @@ module thin
           ! Put it in new grid and advance iterators accordingly
           num_keep = num_keep + 1
           xout(num_keep) = xin(k)
-          yout(:,:,num_keep) = yin(:,:,num_keep)
+          yout(:,:,num_keep) = yin(:,:,k)
           klo = k
           k = k + 1
           khi = khi + 1
@@ -227,8 +227,8 @@ module thin
           ! Put it in new grid and advance iterators accordingly
           num_keep = num_keep + 1
           xout(num_keep) = xin(k)
-          yout(:,:,num_keep) = yin(:,:,num_keep)
-          yout2(:,:,num_keep) = yin2(:,:,num_keep)
+          yout(:,:,num_keep) = yin(:,:,k)
+          yout2(:,:,num_keep) = yin2(:,:,k)
           klo = k
           k = k + 1
           khi = khi + 1
