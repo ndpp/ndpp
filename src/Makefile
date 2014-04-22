@@ -31,7 +31,7 @@ HDF5     = no
 
 # These are set up to work with Arch Linux; the user should revise these
 # as necessary for their distribution
-MPI_DIR   = /opt/mpich/3.0.2-$(COMPILER)
+MPI_DIR   = /usr
 HDF5_DIR  = /usr
 
 #===============================================================================
@@ -133,7 +133,7 @@ endif
 # HDF5 for I/O
 
 ifeq ($(HDF5),yes)
-	F90 = $(HDF5_DIR)/bin/h5fc
+	F90 = $(HDF5_DIR)/bin/h5pfc
   F90FLAGS += -DHDF5
 endif
 
