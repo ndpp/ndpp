@@ -791,13 +791,14 @@ module ndpp_class
     end subroutine print_ndpp_lib_xml_header
 
 !===============================================================================
-! PRINT_NDPP_LIB_XML_NUCLIDE prints the entry for each nuclide
+! PRINT_NDPP_LIB_XML_NUCLIDE prints the entry for each nuclide to the UNIT_NUC
+! file.
 !===============================================================================
 
     subroutine print_ndpp_lib_xml_nuclide(filename, lib_format, nuc)
-      character(*), intent(in)               :: filename   ! Output filename
-      integer, intent(in)                    :: lib_format ! Library type
-      type(XsListing), intent(inout)         :: nuc        ! The nuclide to print
+      character(*), intent(in)    :: filename   ! Output filename
+      integer, intent(in)         :: lib_format ! Library type
+      type(XsListing), intent(in) :: nuc        ! The nuclide to print
 
       character(2) :: indent = '  '
 
@@ -822,6 +823,41 @@ module ndpp_class
       end if
 
     end subroutine print_ndpp_lib_xml_nuclide
+
+!===============================================================================
+! WRITE_NDPP_LIB_XML_NUCLIDE prints the entry for each nuclide but to a string
+! as opposed to the UNIT_NUC file like PRINT_NDPP_LIB_XML_NUCLIDE.
+!===============================================================================
+
+    function write_ndpp_lib_xml_nuclide(filename, lib_format, nuc) result(line)
+      character(*), intent(in)    :: filename   ! Output filename
+      integer, intent(in)         :: lib_format ! Library type
+      type(XsListing), intent(in) :: nuc        ! The nuclide to print
+
+      character(MAX_LINE_LEN) :: line
+      character(2) :: indent = '  '
+
+      ! This file is unnecessary if no output is chosen, therefore, exit if that
+      ! is the case
+      if (lib_format == NO_OUT) return
+
+      if (nuc % metastable) then ! include metastable attribute
+        write(line, '(A)') indent // '<ndpp_table alias="' // &
+          trim(nuc % alias) // '" awr="' // trim(to_str(nuc % awr)) // &
+          '" location="1" name="' // trim(nuc % name) // '" path="' // &
+          trim(filename) // '" temperature="' // trim(to_str(nuc % kT)) // &
+          '" zaid="' // trim(to_str(nuc % zaid)) // '" metastable= "1" ' // &
+          'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '"/>'
+      else
+        write(line, '(A)') indent // '<ndpp_table alias="' // &
+          trim(nuc % alias) // '" awr="' // trim(to_str(nuc % awr)) // &
+          '" location="1" name="' // trim(nuc % name) // '" path="' // &
+          trim(filename) // '" temperature="' // trim(to_str(nuc % kT)) // &
+          '" zaid="' // trim(to_str(nuc % zaid)) // '" ' // &
+          'freegas_cutoff="' // trim(to_str(nuc % freegas_cutoff)) // '"/>'
+      end if
+
+    end function write_ndpp_lib_xml_nuclide
 
 !===============================================================================
 ! PRINT_NDPP_LIB_XML_CLOSER prints the final tag of ndpp_lib.xml and closes the
