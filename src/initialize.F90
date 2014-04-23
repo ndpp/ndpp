@@ -2,9 +2,14 @@ module initialize
 
   use constants
   use error,            only: fatal_error
-  use global,           only: message, path_input, master
+  use global,           only: message, path_input, master, mpi_enabled, &
+                              n_procs, rank, mpi_err
   use string,           only: starts_with, ends_with
   use output,           only: title, header, print_usage, print_version
+
+#ifdef MPI
+  use mpi
+#endif
 
   implicit none
 
@@ -17,6 +22,10 @@ contains
 
   subroutine init_run()
 
+#ifdef MPI
+    ! Setup MPI
+    call initialize_mpi()
+#endif
 
     ! Read command line arguments
     call read_command_line()
@@ -28,6 +37,34 @@ contains
     end if
 
   end subroutine init_run
+
+#ifdef MPI
+!===============================================================================
+! INITIALIZE_MPI starts up the Message Passing Interface (MPI) and determines
+! the number of processors the problem is being run with as well as the rank of
+! each processor.
+!===============================================================================
+
+  subroutine initialize_mpi()
+    ! Indicate that MPI is turned on
+    mpi_enabled = .true.
+
+    ! Initialize MPI
+    call MPI_INIT(mpi_err)
+
+    ! Determine number of processors and rank of each processor
+    call MPI_COMM_SIZE(MPI_COMM_WORLD, n_procs, mpi_err)
+    call MPI_COMM_RANK(MPI_COMM_WORLD, rank, mpi_err)
+
+    ! Determine master
+    if (rank == 0) then
+      master = .true.
+    else
+      master = .false.
+    end if
+
+  end subroutine initialize_mpi
+#endif
 
 !===============================================================================
 ! READ_COMMAND_LINE reads all parameters from the command line

@@ -74,8 +74,6 @@ module scatt
         end if
       end do
 
-write(*,*) 'Initial Ein Grid Length:', size(E_grid)
-
       ! Size rxn_data according to num_tot_rxn
       allocate(rxn_data(num_tot_rxn))
 
@@ -159,8 +157,6 @@ write(*,*) 'Initial Ein Grid Length:', size(E_grid)
       do i_rxn = 1, num_tot_rxn
         call rxn_data(i_rxn) % clear()
       end do
-
-write(*,*) 'Final Ein Grid Length:', size(E_grid)
 
     end subroutine calc_scatt
 
@@ -461,7 +457,7 @@ write(*,*) 'Final Ein Grid Length:', size(E_grid)
         tid = 0
 #endif
 
-        if (tid == 0) then
+        if (.not. mpi_enabled .and. tid == 0) then
           if (iE_print > 0) then
             if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
               iE_pct = 100 * iE / NE

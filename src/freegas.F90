@@ -1,18 +1,18 @@
 module freegas
-  
+
   use constants
   use error,            only: fatal_error, warning
   use global,           only: nuclides, message
   use legendre
   use search,           only: binary_search
   use string,           only: to_str
-  
+
   implicit none
 
   contains
 
 !===============================================================================
-! INTEGRATE_FREEGAS_LEG Finds Legendre moments of the energy-angle 
+! INTEGRATE_FREEGAS_LEG Finds Legendre moments of the energy-angle
 ! distribution of an elastic collision using the free-gas scattering kernel.
 !===============================================================================
 
@@ -25,12 +25,12 @@ module freegas
     real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
     integer, intent(in)  :: order       ! Number of moments to find
     real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
-    
+
     integer :: g             ! outgoing energy group index
     real(8) :: p0_1g_norm    ! normalization constant so that P0 = 1.0
     integer :: l             ! Scattering order
     real(8) :: Eout_lo, Eout_hi ! Low and High bounds of Eout integration
-    real(8) :: Elo, Ehi      ! Low and High bounds of Eout integration 
+    real(8) :: Elo, Ehi      ! Low and High bounds of Eout integration
                              ! for each grp
     real(8) :: alphaEin      ! Eout lower limit for target-at-rest elastic
 
@@ -42,7 +42,7 @@ module freegas
     ! Eout integration
     alphaEin = (A - ONE) / (A + ONE)
     alphaEin = alphaEin * alphaEin * Ein
-    
+
     ! Set the normalization constant to zero so we can tally it w/ each group
     p0_1g_norm = ZERO
 
@@ -51,7 +51,7 @@ module freegas
 
     do g = 1, size(E_bins) - 1
       if ((E_bins(g) < Eout_hi) .and. (E_bins(g + 1) > Eout_lo)) then
-        ! Now lets set the lower and upper bounds of integration 
+        ! Now lets set the lower and upper bounds of integration
         ! for this group which
         ! will progress through the rest of these steps
         if (Eout_lo > E_bins(g)) then
@@ -65,7 +65,7 @@ module freegas
           Ehi = E_bins(g + 1)
         end if
 
-        ! Integrate the tails of the distribution (low grp boundary to Elo, 
+        ! Integrate the tails of the distribution (low grp boundary to Elo,
         ! Ehi to high group boundary)
         ! We do this because it is essentially free anyways (the tails
         ! should be smooth and thus very few points are needed), and has
@@ -115,7 +115,7 @@ module freegas
             E_bins(g), E_bins(g + 1))
         end do
       end if
-      
+
       ! Tally the normalization constant.
       p0_1g_norm = p0_1g_norm + distro(1, g)
     end do
@@ -156,7 +156,7 @@ module freegas
     else
       Eout_hi = 12.0_8 * kT * (A + ONE) / A + TWO * Ein
     end if
-    
+
   end subroutine calc_FG_Eout_bounds
 
 !===============================================================================
@@ -171,7 +171,7 @@ module freegas
     real(8), intent(in) :: Eout ! Outgoing energy of neutron
     real(8), intent(in) :: beta ! Energy Transfer
     real(8), intent(in) :: mu   ! Angle in question
-    
+
     real(8) :: sab   ! The result of this function
     real(8) :: alpha ! Momentum Transfer
     real(8) :: lterm ! The leading term from the rest of the integral with S(a,b)
@@ -199,7 +199,7 @@ module freegas
       sab = ZERO
     else
       ! We have an acceptable value, plug in and move on.
-      sab = lterm * exp(sab) / (sqrt(4.0_8 * PI * alpha))  
+      sab = lterm * exp(sab) / (sqrt(4.0_8 * PI * alpha))
       if (sab < lterm_min) then
         sab = ZERO
       end if
@@ -290,7 +290,7 @@ module freegas
           mflag = .true.
         else
             mflag = .false.
-        end if          
+        end if
       end if
 
       fs = calc_sab(awr, kT, Ein, Eout, beta, s) - thresh
@@ -301,7 +301,7 @@ module freegas
       if (fa * fs < ZERO) then
         b = s
         fb = fs
-      else 
+      else
         a = s
         fa = fs
       end if
@@ -325,7 +325,7 @@ module freegas
 
 !===============================================================================
 ! FIND_FG_MU calculates the angular boundaries (for a given Ein, Eout pair) to
-! use for the integration over the change in angle ($\mu$) variable.  This is 
+! use for the integration over the change in angle ($\mu$) variable.  This is
 ! needed because S(a,b) approaches a delta function as the incoming energy
 ! increases (to the order of eV - keV).  Delta functions, obviously, are very
 ! difficult to numerically integrate, so this routine puts the angular points
@@ -354,7 +354,7 @@ module freegas
     alpha_max = sqrt(beta * beta + ONE) - ONE
     ! Find the mu values corresponding to alpha_max
     mu_max = (Ein + Eout - alpha_max * A * kT) / (TWO * sqrt(Ein * Eout))
-    
+
     ! Now that I have mu_max, lets chack the values to the left and right
     ! side to try and find when we can start inspecting sab
 
@@ -378,7 +378,7 @@ module freegas
         mu_hi = ONE
       else
         mu_hi = brent_mu(A, kT, Ein, Eout, beta, sab_minthresh, mu_max, ONE)
-      end if                 
+      end if
     end if
 
     ! Now set the return values
@@ -402,7 +402,7 @@ module freegas
     real(8), intent(in) :: mu   ! Angle in question
     real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
     real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
-    
+
     real(8) :: fgk   ! The result of this function
     real(8) :: alpha ! Momentum Transfer
     real(8) :: beta  ! Energy Transfer
@@ -437,7 +437,14 @@ module freegas
     ! Find the argument to the exponent in S(a,b), for testing against
     ! sab_min
     fgk = -(alpha + beta)**2 / (4.0_8 * alpha) ! The sab exp argument
-    fgk = lterm * exp(fgk) / (sqrt(4.0_8 * PI * alpha)) * calc_pn(l, mu)
+    if (fgk <= -2300.0_8) then
+      ! This is to avoid a floating point exception b/c exp(fgk) was too small
+      ! Really would be better treated by putting a maximum Eout value
+      ! on our iterations.
+      fgk = ZERO
+    else
+      fgk = lterm * exp(fgk) / (sqrt(4.0_8 * PI * alpha)) * calc_pn(l, mu)
+    end if
 
   end function calc_fgk
 
@@ -458,7 +465,7 @@ module freegas
     integer, intent(in) :: l    ! Legendre order
     real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
     real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
-    real(8), intent(in) :: a 
+    real(8), intent(in) :: a
     real(8), intent(in) :: b
 
     real(8) :: c, h, fa, fb, fc, S
@@ -487,7 +494,7 @@ module freegas
     integer, intent(in) :: l    ! Legendre order
     real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
     real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
-    real(8), intent(in) :: a 
+    real(8), intent(in) :: a
     real(8), intent(in) :: b
     real(8), intent(in) :: eps
     real(8), intent(in) :: S
@@ -500,7 +507,7 @@ module freegas
     real(8) :: val
 
     c = 0.5_8 * (a + b)
-    h = b - a                                                                 
+    h = b - a
     d = 0.5_8 * (a + c)
     e = 0.5_8 * (c + b)
     fd = calc_fgk(awr, kT, Ein, Eout, l, d, fEmu, global_mu)
@@ -520,11 +527,11 @@ module freegas
     end if
 
   end function adaptiveSimpsonsAux_mu
- 
+
 
 !===============================================================================
-! ADAPTIVESIMPSONS_EOUT and ADAPTIVESIMPSONSAUX_EOUT in conjunction perform 
-! adaptive simpsons integration over the outgoing Energy (Eout) between bounds 
+! ADAPTIVESIMPSONS_EOUT and ADAPTIVESIMPSONSAUX_EOUT in conjunction perform
+! adaptive simpsons integration over the outgoing Energy (Eout) between bounds
 ! a and b.  The code for these routines was adapted from that found at:
 ! http://en.wikipedia.org/wiki/Adaptive_Simpson%27s_method#C
 !===============================================================================
@@ -538,7 +545,7 @@ module freegas
     integer, intent(in) :: l    ! Legendre order
     real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
     real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
-    real(8), intent(in) :: a 
+    real(8), intent(in) :: a
     real(8), intent(in) :: b
 
     real(8) :: c, h, fa, fb, fc, S
@@ -558,7 +565,7 @@ module freegas
             fEmu, global_mu, mu_b(1), mu_b(2))
     fc = adaptiveSimpsons_mu(awr, kT, Ein, c, l, &
             fEmu, global_mu, mu_c(1), mu_c(2))
-    
+
     S = (h / 6.0_8) * (fa + 4.0_8 * fc + fb)
     integral =  adaptiveSimpsonsAux_Eout(awr, kT, Ein, l, fEmu, global_mu, &
       a, b, ADAPTIVE_EOUT_TOL, S, fa, fb, fc, ADAPTIVE_EOUT_ITS)
@@ -573,7 +580,7 @@ module freegas
     integer, intent(in) :: l    ! Legendre order
     real(8), intent(in) :: fEmu(:) ! Energy-angle distro to act on
     real(8), intent(in) :: global_mu(:)   ! fEmu angular grid
-    real(8), intent(in) :: a 
+    real(8), intent(in) :: a
     real(8), intent(in) :: b
     real(8), intent(in) :: eps
     real(8), intent(in) :: S
@@ -589,7 +596,7 @@ module freegas
     c = 0.5_8 * (a + b)
     d = 0.5_8 * (a + c)
     e = 0.5_8 * (c + b)
-    h = b - a  
+    h = b - a
 
     call find_FG_mu(awr, kT, Ein, d, mu_d)
     call find_FG_mu(awr, kT, Ein, e, mu_e)

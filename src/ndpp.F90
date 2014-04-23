@@ -14,6 +14,10 @@ module ndpp_class
   use thin,        only: thin_grid
   use timer_header
 
+#ifdef MPI
+  use mpi
+#endif
+
 #ifdef OPENMP
   use omp_lib
 #endif
@@ -33,6 +37,9 @@ module ndpp_class
     character(len=255)   :: path_cross_sections
     ! Number of listings in cross_sections.xml
     integer              :: n_listings    = 0
+    ! Start and stop indices of files for me to parse
+    integer              :: list_stt      = 0
+    integer              :: list_stp      = 0
     ! Incoming energy points
     real(8), allocatable :: Ein(:)
     ! Energy group structure
@@ -218,6 +225,10 @@ module ndpp_class
         call fatal_error()
       end if
 
+      if (self % energy_bins(1) == ZERO) then
+        self % energy_bins(1) = MIN_E_BIN
+      end if
+
       ! Get the output type, if none is provided, the default is set by the class.
       call lower_case(output_format_)
       if (len_trim(output_format_) > 0) then ! one is provided, make sure it is correct
@@ -344,6 +355,8 @@ module ndpp_class
         call warning()
       end if
 
+      call partition_work(self % n_listings, self % list_stt, self % list_stp)
+
       self % is_init = .true.
 
       ! Stop initialization timer
@@ -361,6 +374,8 @@ module ndpp_class
       ! Revert to the default/uninitialized values
       self % path_cross_sections = ""
       self % n_listings     = 0
+      self % list_stt       = 0
+      self % list_stp       = 0
       if (allocated(self % Ein)) deallocate(self % Ein)
       if (allocated(self % energy_bins)) deallocate(self % energy_bins)
       self % energy_groups  = 0
@@ -404,6 +419,7 @@ module ndpp_class
       integer                   :: iEmax         ! Location of maximum useful energy
       real(8)                   :: thin_compr    ! Thinning compression fraction
       real(8)                   :: thin_err      ! Thinning compression error
+      character(MAX_LINE_LEN)   :: xmllib_line
       ! Scattering specific data
       real(8), allocatable :: scatt_mat(:,:,:)   ! scattering matrix moments,
                                                  ! order x g_out x E_in
@@ -429,34 +445,46 @@ module ndpp_class
       ! the data for all ACE libraries to be processed. This is different than
       ! the ASCII or binary files; in those cases, each nuclide has its own file.
 
-      call timer_start(self % time_print)
-      call print_ndpp_lib_xml_header(self % n_listings, self % energy_bins, &
-        self % lib_format, self % scatt_type, self % scatt_order, &
-        self % mu_bins, self % nuscatter, self % integrate_chi, &
-        self % print_tol, self % thin_tol)
+      if (master) then
+        call timer_start(self % time_print)
+        call print_ndpp_lib_xml_header(self % n_listings, self % energy_bins, &
+          self % lib_format, self % scatt_type, self % scatt_order, &
+          self % mu_bins, self % nuscatter, self % integrate_chi, &
+          self % print_tol, self % thin_tol)
 #ifdef HDF5
-      if (self % lib_format == H5) then
-        call hdf5_file_create(self % lib_name, hdf5_output_file)
-        hdf5_fh = hdf5_output_file
-        !!! Do we want header information just like in ndpp_lib.xml in here?
-        !!! Doing so would make each lib a stand-alone dataset
-      end if
+        if (self % lib_format == H5) then
+          call hdf5_file_create(self % lib_name, hdf5_output_file)
+          hdf5_fh = hdf5_output_file
+          !!! Do we want header information just like in ndpp_lib.xml in here?
+          !!! Doing so would make each lib a stand-alone dataset
+          !!! YES - when we get here do this; file will be too big otw
+        end if
 #endif
-      call timer_stop(self % time_print)
+        call timer_stop(self % time_print)
 
       ! Display output message
-      message = "Beginning Pre-Processing..."
-      call write_message(5)
+        message = "Beginning Pre-Processing..."
+        call write_message(5)
 
 #ifdef OPENMP
-      message = "Using " // trim(to_str(omp_threads)) // " OpenMP Threads"
-      call write_message(5)
+        message = "Using " // trim(to_str(omp_threads)) // " OpenMP Threads"
+        call write_message(5)
 #endif
 
-      ! Start PreProcessor Timer
-      call timer_start(self % time_preproc)
+#ifdef MPI
+        message = "Using " // trim(to_str(n_procs)) // " MPI Processes"
+        call write_message(5)
+#endif
 
-      do i_listing = 1, self % n_listings
+        ! Start PreProcessor Timer
+        call timer_start(self % time_preproc)
+      end if
+
+#ifdef mpi
+      call MPI_BARRIER(MPI_COMM_WORLD, mpi_err)
+#endif
+
+      do i_listing = self % list_stt, self % list_stp
         if (xs_listings(i_listing) % type == ACE_NEUTRON) then
           ! ===================================================================
           ! PERFORM CONTINUOUS ENERGY LIBRARY CALCULATIONS
@@ -498,8 +526,10 @@ module ndpp_class
                             nuc % fissionable)
 
           ! display message
-          message = "....Performing Scattering Integration"
-          call write_message(6)
+          if (.not. mpi_enabled) then
+            message = "....Performing Scattering Integration"
+            call write_message(6)
+          end if
 
           ! Create energy grid to use (nuc % energy, with points
           ! added for each group boundary) after limiting nuc % energy to
@@ -526,13 +556,15 @@ module ndpp_class
           if (self % thin_tol > ZERO) then
             call thin_grid(self % Ein, scatt_mat, nuscatt_mat, self % thin_tol, &
                            thin_compr, thin_err)
-            ! Report results of thinning
-            message = "....Completed Thinning, Reduced Storage By " // &
-                      trim(to_str(100.0_8 * thin_compr)) // "%"
-            call write_message(6)
-            message = "....Maximum Thinning Error Was " // &
-                      trim(to_str(100.0_8 * thin_err)) // "%"
-            call write_message(6)
+            if (.not. mpi_enabled) then
+              ! Report results of thinning
+              message = "....Completed Thinning, Reduced Storage By " // &
+                        trim(to_str(100.0_8 * thin_compr)) // "%"
+              call write_message(6)
+              message = "....Maximum Thinning Error Was " // &
+                        trim(to_str(100.0_8 * thin_err)) // "%"
+              call write_message(6)
+            end if
           end if
 
           ! Print the results to file
@@ -556,9 +588,11 @@ module ndpp_class
 
           ! Integrate Chi
           if (self % integrate_chi) then
-            ! display message
-            message = "....Performing Fission Neutron Energy Integration"
-            call write_message(6)
+            if (.not. mpi_enabled) then
+              ! display message
+              message = "....Performing Fission Neutron Energy Integration"
+              call write_message(6)
+            end if
 
             call timer_start(self % time_chi_preproc)
             if (nuc % fissionable) then
@@ -606,9 +640,11 @@ module ndpp_class
           ! Setup output for nuclear data library
           call init_library(self, nuc_lib_name, sab % name, sab % kT)
 
-          ! display message
-          message = "....Performing Scattering Integration"
-          call write_message(6)
+          if (.not. mpi_enabled) then
+            ! display message
+            message = "....Performing Scattering Integration"
+            call write_message(6)
+          end if
 
 
           ! Integrate Scattering Distributions
@@ -625,13 +661,15 @@ module ndpp_class
           if (self % thin_tol > ZERO) then
             call thin_grid(self % Ein, scatt_mat, nuscatt_mat, self % thin_tol, &
                            thin_compr, thin_err)
-            ! Report results of thinning
-            message = "....Completed Thinning, Reduced Storage By " // &
-                      trim(to_str(100.0_8 * thin_compr)) // "%"
-            call write_message(6)
-            message = "....Maximum Thinning Error Was " // &
-                      trim(to_str(100.0_8 * thin_err)) // "%"
-            call write_message(6)
+            if (.not. mpi_enabled) then
+              ! Report results of thinning
+              message = "....Completed Thinning, Reduced Storage By " // &
+                        trim(to_str(100.0_8 * thin_compr)) // "%"
+              call write_message(6)
+              message = "....Maximum Thinning Error Was " // &
+                        trim(to_str(100.0_8 * thin_err)) // "%"
+              call write_message(6)
+            end if
           end if
 
           ! Print the results to file
@@ -654,28 +692,56 @@ module ndpp_class
         end if
 
         ! Write this nuclide to the ndpp_lib.xml file
-        call timer_start(self % time_print)
-        call print_ndpp_lib_xml_nuclide(nuc_lib_name, &
-          self % lib_format, xs_listings(i_listing))
-        call timer_stop(self % time_print)
+        if (master) then
+          call timer_start(self % time_print)
+
+          call print_ndpp_lib_xml_nuclide(nuc_lib_name, &
+            self % lib_format, xs_listings(i_listing))
+        else
+          xmllib_line = write_ndpp_lib_xml_nuclide(nuc_lib_name, &
+            self % lib_format, xs_listings(i_listing))
+          call MPI_SEND(xmllib_line, MAX_LINE_LEN, MPI_CHARACTER, 0, &
+                        i_listing, MPI_COMM_WORLD, mpi_err)
+        end if
+        if (master) then
+          call timer_stop(self % time_print)
+        end if
 
         ! Close the file or HDF5 group
         call finalize_library(self % lib_format)
 
         deallocate(self % Ein)
       end do
-      call timer_stop(self % time_preproc)
 
-      ! Close the ndpp_lib.xml file
-      call timer_start(self % time_print)
-      call print_ndpp_lib_xml_closer(self % lib_format)
-#ifdef HDF5
-      ! Close the hdf5 file
-      if (self % lib_format == H5) then
-        call hdf5_file_close(hdf5_output_file)
+#ifdef MPI
+      call MPI_BARRIER(MPI_COMM_WORLD, mpi_err)
+
+      ! Now we have to receive all those xmllib_line vals and print them
+      if (master) then
+        do i_listing = self % list_stp + 1, self % n_listings
+          call MPI_RECV(xmllib_line, MAX_LINE_LEN, MPI_CHARACTER, &
+                        MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &
+                        MPI_STATUS_IGNORE, mpi_err)
+          write(UNIT_NDPP, '(A)') xmllib_line
+        end do
       end if
 #endif
-      call timer_stop(self % time_print)
+
+      if (master) then
+        call timer_stop(self % time_preproc)
+
+        ! Close the ndpp_lib.xml file
+        call timer_start(self % time_print)
+        call print_ndpp_lib_xml_closer(self % lib_format)
+#ifdef HDF5
+        ! Close the hdf5 file
+        if (self % lib_format == H5) then
+          call hdf5_file_close(hdf5_output_file)
+        end if
+#endif
+
+        call timer_stop(self % time_print)
+      end if
 
     end subroutine preprocess_ndpp
 
@@ -692,21 +758,23 @@ module ndpp_class
 
       call timer_stop(self % time_total)
 
-      ! display header block
-      call header("Timing Statistics")
+      if (master) then
+        ! display header block
+        call header("Timing Statistics")
 
-      ! display time elapsed for various sections
-      write(ou,100) "Total time for initialization", self % time_initialize % elapsed
-      write(ou,100) "Total time for data pre-processing", self % time_preproc % elapsed
-      write(ou,100) "  Reading cross sections", self % time_read_xs % elapsed
-      write(ou,100) "  Time for scattering integration", &
-        self % time_scatt_preproc % elapsed
-      write(ou,100) "  Time for chi integration", &
-        self % time_chi_preproc % elapsed
-      write(ou,100) "Total time elapsed", self % time_total % elapsed
+        ! display time elapsed for various sections
+        write(ou,100) "Total time for initialization", self % time_initialize % elapsed
+        write(ou,100) "Total time for data pre-processing", self % time_preproc % elapsed
+        write(ou,100) "  Reading cross sections", self % time_read_xs % elapsed
+        write(ou,100) "  Time for scattering integration", &
+          self % time_scatt_preproc % elapsed
+        write(ou,100) "  Time for chi integration", &
+          self % time_chi_preproc % elapsed
+        write(ou,100) "Total time elapsed", self % time_total % elapsed
 
-      ! format for write statements
-  100 format (1X,A,T36,"= ",ES11.4," seconds")
+        ! format for write statements
+        100 format (1X,A,T36,"= ",ES11.4," seconds")
+      end if
 
     end subroutine print_runtime_ndpp
 
@@ -715,6 +783,30 @@ module ndpp_class
 ! SUBROUTINES/FUNCTIONS TO SUPPORT nuclearDataPreProc CLASS
 !===============================================================================
 !===============================================================================
+
+!===============================================================================
+! PARTITION_WORK sets the boundaries of the work to be performed by each distrib.
+! memory process.
+!===============================================================================
+
+  subroutine partition_work(n_listings, stt, stp)
+    integer, intent(in)    :: n_listings ! Total # of work items
+    integer, intent(inout) :: stt  ! Starting index for this processor to work
+    integer, intent(inout) :: stp  ! Final index for this processor to work on
+
+    integer :: work_per ! Work per process
+
+    work_per = n_listings / n_procs
+
+    stt = 1 + rank * work_per
+    stp = (rank + 1) * work_per
+
+    if (rank == n_procs - 1) then
+      stp = n_listings
+    end if
+
+  end subroutine partition_work
+
 
 !===============================================================================
 ! PRINT_NDPP_LIB_XML_HEADER prints the metadata for this run of ndpp to

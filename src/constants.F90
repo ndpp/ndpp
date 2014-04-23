@@ -86,6 +86,10 @@ module constants
        USE_FREEGAS_DEFAULT   = .true., &  ! Use free-gas treatment?
        NUSCATTER_DEFAULT     = .false.    ! Include neutron multiplication
 
+  ! Minimum incoming energy to consider for groups - to avoid division by 0
+  ! in free gas kernel and likely other places.
+  real(8), parameter :: MIN_E_BIN = 1E-14_8
+
 
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS
