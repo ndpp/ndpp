@@ -6,7 +6,8 @@ module scatt
   use error,            only: fatal_error, warning
   use global
   use interpolation,    only: interpolate_tab1
-  use output,           only: write_message, print_ascii_array
+  use output,           only: write_message, print_ascii_array, &
+                              print_ascii_integer_array
   use sab
   use scattdata_header, only: scattdata
   use search,           only: binary_search
@@ -521,38 +522,39 @@ module scatt
 ! in the specified format.
 !===============================================================================
 
-  subroutine print_scatt(lib_format, E_grid, tol, data, nudata)
-    integer,              intent(in) :: lib_format  ! Library output type
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
-    real(8),              intent(in) :: tol         ! Minimum grp-to-grp prob'y
-                                                    ! to keep
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
+  subroutine print_scatt(lib_format, grp_index, E_grid, tol, data, nudata)
+    integer,              intent(in) :: lib_format   ! Library output type
+    integer,              intent(in) :: grp_index(:) ! energy_group locations in E_grid
+    real(8), allocatable, intent(in) :: E_grid(:)    ! Unionized E_{in} grid
+    real(8),              intent(in) :: tol          ! Minimum grp-to-grp prob'y
+                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:)  ! Scatt data to print
+                                                     ! (order x g x Ein)
     real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
-                                                    !            (order x g x Ein)
+                                                     !            (order x g x Ein)
 
     if (present(nudata)) then
       if (lib_format == ASCII) then
-        call print_scatt_ascii(E_grid, tol, data, nudata)
+        call print_scatt_ascii(grp_index, E_grid, tol, data, nudata)
       else if (lib_format == BINARY) then
-        call print_scatt_bin(E_grid, tol, data, nudata)
+        call print_scatt_bin(grp_index, E_grid, tol, data, nudata)
       else if (lib_format == HUMAN) then
-        call print_scatt_human(E_grid, tol, data, nudata)
+        call print_scatt_human(grp_index, E_grid, tol, data, nudata)
 #ifdef HDF5
       else if (lib_format == H5) then
-        call print_scatt_hdf5(E_grid, tol, data, nudata)
+        call print_scatt_hdf5(grp_index, E_grid, tol, data, nudata)
 #endif
       end if
     else
       if (lib_format == ASCII) then
-        call print_scatt_ascii(E_grid, tol, data)
+        call print_scatt_ascii(grp_index, E_grid, tol, data)
       else if (lib_format == BINARY) then
-        call print_scatt_bin(E_grid, tol, data)
+        call print_scatt_bin(grp_index, E_grid, tol, data)
       else if (lib_format == HUMAN) then
-        call print_scatt_human(E_grid, tol, data)
+        call print_scatt_human(grp_index, E_grid, tol, data)
 #ifdef HDF5
       else if (lib_format == H5) then
-        call print_scatt_hdf5(E_grid, tol, data)
+        call print_scatt_hdf5(grp_index, E_grid, tol, data)
 #endif
       end if
     end if
@@ -564,12 +566,13 @@ module scatt
 ! in an ASCII format.
 !===============================================================================
 
-  subroutine print_scatt_ascii(E_grid, tol, data, nudata)
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
-    real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
-                                                    ! to keep
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
+  subroutine print_scatt_ascii(grp_index, E_grid, tol, data, nudata)
+    integer, intent(in)              :: grp_index(:) ! E_bins locations in E_grid
+    real(8), allocatable, intent(in) :: E_grid(:)    ! Unionized E_{in} grid
+    real(8), intent(in)              :: tol          ! Minimum grp-to-grp prob'y
+                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:)  ! Scatt data to print
+                                                     ! (order x g x Ein)
     real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
                                                                 ! (order x g x Ein)
 
@@ -578,12 +581,16 @@ module scatt
     ! Assumes that the file and header information is already printed
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format with at max 4 entries per line:
+    ! <Group Indices>
     ! <size of incoming energy array, # E pts>
     ! <incoming energy array>
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
 
     ! Begin writing:
+
+    ! # Group Indices
+    call print_ascii_integer_array(grp_index, UNIT_NUC)
 
     ! # energy points
     write(UNIT_NUC,'(I20)') size(E_grid)
@@ -640,12 +647,13 @@ module scatt
 ! in an ASCII format.
 !===============================================================================
 
-  subroutine print_scatt_human(E_grid, tol, data, nudata)
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
-    real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
-                                                    ! to keep
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
+  subroutine print_scatt_human(grp_index, E_grid, tol, data, nudata)
+    integer, intent(in)              :: grp_index(:) ! E_bins locations in E_grid
+    real(8), allocatable, intent(in) :: E_grid(:)    ! Unionized E_{in} grid
+    real(8), intent(in)              :: tol          ! Minimum grp-to-grp prob'y
+                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:)  ! Scatt data to print
+                                                     ! (order x g x Ein)
     real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
                                                                 ! (order x g x Ein)
 
@@ -654,12 +662,16 @@ module scatt
     ! Assumes that the file and header information is already printed
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format with at max 4 entries per line:
+    ! <Group Indices>
     ! <size of incoming energy array, # E pts>
     ! <incoming energy array>
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
 
     ! Begin writing:
+
+    ! Group Indices
+    call print_ascii_integer_array(grp_index, UNIT_NUC)
 
     ! # energy points
     write(UNIT_NUC,'(I20)') size(E_grid)
@@ -724,12 +736,13 @@ module scatt
 ! in a native Fortran stream format.
 !===============================================================================
 
-  subroutine print_scatt_bin(E_grid, tol, data, nudata)
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
-    real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
-                                                    ! to keep
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
+  subroutine print_scatt_bin(grp_index, E_grid, tol, data, nudata)
+    integer, intent(in)              :: grp_index(:) ! E_bins locations in E_grid
+    real(8), allocatable, intent(in) :: E_grid(:)    ! Unionized E_{in} grid
+    real(8), intent(in)              :: tol          ! Minimum grp-to-grp prob'y
+                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:)  ! Scatt data to print
+                                                     ! (order x g x Ein)
     real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
                                                                 ! (order x g x Ein)
 
@@ -738,6 +751,7 @@ module scatt
     ! Assumes that the file and header information is already printed
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format:
+    ! <Group Indices>
     ! <size of incoming energy array, # E pts>
     ! <incoming energy array>
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
@@ -745,8 +759,11 @@ module scatt
 
     ! Begin writing:
 
+    ! Group Indices
+    write(UNIT_NUC) grp_index
+
     ! # energy points
-    write(UNIT_NUC)  size(E_grid)
+    write(UNIT_NUC) size(E_grid)
 
     ! <incoming energy array>
     write(UNIT_NUC) E_grid
@@ -802,12 +819,13 @@ module scatt
 ! with the HDF5 library.
 !===============================================================================
 #ifdef HDF5
-  subroutine print_scatt_hdf5(E_grid, tol, data, nudata)
-    real(8), allocatable, intent(in) :: E_grid(:)   ! Unionized E_{in} grid
-    real(8), intent(in)              :: tol         ! Minimum grp-to-grp prob'y
-                                                    ! to keep
-    real(8), allocatable, intent(in) :: data(:,:,:) ! Scatt data to print
-                                                    ! (order x g x Ein)
+  subroutine print_scatt_hdf5(grp_index, E_grid, tol, data, nudata)
+    integer, intent(in)              :: grp_index(:) ! E_bins locations in E_grid
+    real(8), allocatable, intent(in) :: E_grid(:)    ! Unionized E_{in} grid
+    real(8), intent(in)              :: tol          ! Minimum grp-to-grp prob'y
+                                                     ! to keep
+    real(8), allocatable, intent(in) :: data(:,:,:)  ! Scatt data to print
+                                                     ! (order x g x Ein)
     real(8), allocatable, optional, intent(in) :: nudata(:,:,:) ! Nu-Scatt data to print
                                                                 ! (order x g x Ein)
 
@@ -829,12 +847,17 @@ module scatt
     ! Assumes that the file and header information is already printed
     ! (including # of groups and bins, and thinning tolerance)
     ! Will follow this format:
+    ! <Group Indices>
     ! <size of incoming energy array, # E pts>
     ! <incoming energy array>
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
 
     ! Begin writing:
+
+    ! Group Indices
+    call hdf5_write_integer_1Darray(temp_group, 'Group_Index', grp_index, &
+                                    size(grp_index))
 
     ! # energy points !!! Maybe not necessary with HDF5, can I get the size
     ! easily???

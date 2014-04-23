@@ -116,7 +116,7 @@ contains
     ! print header based on level
     select case (header_level)
     case (1)
-      write(UNIT=unit_, FMT='(/3(1X,A/))') repeat('=', 75), & 
+      write(UNIT=unit_, FMT='(/3(1X,A/))') repeat('=', 75), &
            repeat('=', n) // '>     ' // trim(line) // '     <' // &
            repeat('=', m), repeat('=', 75)
     case (2)
@@ -163,7 +163,7 @@ contains
   end subroutine print_usage
 
 !===============================================================================
-! WRITE_MESSAGE displays an informational message to the log file and the 
+! WRITE_MESSAGE displays an informational message to the log file and the
 ! standard output stream.
 !===============================================================================
 
@@ -213,10 +213,10 @@ contains
   subroutine print_ascii_array(array, ou)
     real(8), intent(in) :: array(:)
     integer, intent(in) :: ou
-    
+
     integer                 :: i_array
     character(MAX_LINE_LEN) :: line
-    
+
     i_array = 1
     do
       line = ''
@@ -243,5 +243,39 @@ contains
       end if
     end do
   end subroutine print_ascii_array
-  
+
+  subroutine print_ascii_integer_array(array, ou)
+    integer, intent(in) :: array(:)
+    integer, intent(in) :: ou
+
+    integer                 :: i_array
+    character(MAX_LINE_LEN) :: line
+
+    i_array = 1
+    do
+      line = ''
+      if ((size(array) - i_array) >= 3) then
+        write(line, '(I20,I20,I20,I20)') &
+          array(i_array), array(i_array + 1), array(i_array + 2), &
+          array(i_array + 3)
+        i_array = i_array + 4
+        write(ou, '(A)') trim(line)
+      else
+        select case(size(array) - i_array)
+        case (0)
+          write(line, '(I20)') array(i_array)
+          write(ou, '(A)') trim(line)
+        case (1)
+          write(line, '(I20,I20)') array(i_array), array(i_array + 1)
+          write(ou, '(A)') trim(line)
+        case (2)
+          write(line, '(I20,I20,I20)') array(i_array), &
+            array(i_array + 1), array(i_array + 2)
+          write(ou, '(A)') trim(line)
+        end select
+        exit
+      end if
+    end do
+  end subroutine print_ascii_integer_array
+
 end module output

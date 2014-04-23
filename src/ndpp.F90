@@ -412,15 +412,17 @@ module ndpp_class
     subroutine preprocess_ndpp(self)
       class(nuclearDataPreProc), intent(inout) :: self ! data preprocessor to preprocess
 
-      type(Nuclide), pointer    :: nuc => null() ! Nuclide cross-sections
-      type(SAlphaBeta), pointer :: sab => null() ! S(a,b) tables
-      integer                   :: i_listing     ! index of xs_listing
-      character(MAX_FILE_LEN)   :: nuc_lib_name  ! nuclidic library's filename
-      integer                   :: iEmax         ! Location of maximum useful energy
-      real(8)                   :: thin_compr    ! Thinning compression fraction
-      real(8)                   :: thin_err      ! Thinning compression error
-      character(MAX_LINE_LEN)   :: xmllib_line   ! XML library tag for nuclides
-      character(MAX_LINE_LEN)   :: msg_prepend   ! Text to print before current working lib
+      type(Nuclide), pointer    :: nuc => null()  ! Nuclide cross-sections
+      type(SAlphaBeta), pointer :: sab => null()  ! S(a,b) tables
+      integer                   :: i_listing      ! index of xs_listing
+      character(MAX_FILE_LEN)   :: nuc_lib_name   ! nuclidic library's filename
+      integer                   :: iEmax          ! Location of maximum useful energy
+      integer                   :: g              ! Energy group index
+      real(8)                   :: thin_compr     ! Thinning compression fraction
+      real(8)                   :: thin_err       ! Thinning compression error
+      character(MAX_LINE_LEN)   :: xmllib_line    ! XML library tag for nuclides
+      character(MAX_LINE_LEN)   :: msg_prepend    ! Text to print before current working lib
+      integer, allocatable      :: group_index(:) ! Group locations in self % Ein
       ! Scattering specific data
       real(8), allocatable :: scatt_mat(:,:,:)   ! scattering matrix moments,
                                                  ! order x g_out x E_in
@@ -561,6 +563,7 @@ module ndpp_class
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
             self % scatt_order, self % mu_bins, self % nuscatter, self % Ein, &
             scatt_mat, nuscatt_mat)
+
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
             call thin_grid(self % Ein, scatt_mat, nuscatt_mat, self % thin_tol, &
@@ -576,13 +579,20 @@ module ndpp_class
             end if
           end if
 
+          ! Get the energy group boundary indices in self % Ein for printing
+          allocate(group_index(size(self % energy_bins)))
+          do g = 1, size(self % energy_bins)
+            group_index(g) = binary_search(self % Ein, size(self % Ein), &
+                                           self % energy_bins(g))
+          end do
+
           ! Print the results to file
           call timer_start(self % time_print)
           if (self % nuscatter) then
-            call print_scatt(self % lib_format, self % Ein, &
+            call print_scatt(self % lib_format, group_index, self % Ein, &
               self % print_tol, scatt_mat, nuscatt_mat)
           else
-            call print_scatt(self % lib_format, self % Ein, &
+            call print_scatt(self % lib_format, group_index, self % Ein, &
               self % print_tol, scatt_mat)
           end if
           call timer_stop(self % time_print)
@@ -681,9 +691,16 @@ module ndpp_class
             end if
           end if
 
+          ! Get the energy group boundary indices in self % Ein for printing
+          allocate(group_index(size(self % energy_bins)))
+          do g = 1, size(self % energy_bins)
+            group_index(g) = binary_search(self % Ein, size(self % Ein), &
+                                           self % energy_bins(g))
+          end do
+
           ! Print the results to file
           call timer_start(self % time_print)
-          call print_scatt(self % lib_format, self % Ein, &
+          call print_scatt(self % lib_format, group_index, self % Ein, &
             self % print_tol, scatt_mat)
           call timer_stop(self % time_print)
 
@@ -706,11 +723,13 @@ module ndpp_class
 
           call print_ndpp_lib_xml_nuclide(nuc_lib_name, &
             self % lib_format, xs_listings(i_listing))
+#ifdef MPI
         else
           xmllib_line = write_ndpp_lib_xml_nuclide(nuc_lib_name, &
             self % lib_format, xs_listings(i_listing))
           call MPI_SEND(xmllib_line, MAX_LINE_LEN, MPI_CHARACTER, 0, &
                         i_listing, MPI_COMM_WORLD, mpi_err)
+#endif
         end if
         if (master) then
           call timer_stop(self % time_print)
