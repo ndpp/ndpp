@@ -419,7 +419,8 @@ module ndpp_class
       integer                   :: iEmax         ! Location of maximum useful energy
       real(8)                   :: thin_compr    ! Thinning compression fraction
       real(8)                   :: thin_err      ! Thinning compression error
-      character(MAX_LINE_LEN)   :: xmllib_line
+      character(MAX_LINE_LEN)   :: xmllib_line   ! XML library tag for nuclides
+      character(MAX_LINE_LEN)   :: msg_prepend   ! Text to print before current working lib
       ! Scattering specific data
       real(8), allocatable :: scatt_mat(:,:,:)   ! scattering matrix moments,
                                                  ! order x g_out x E_in
@@ -480,11 +481,19 @@ module ndpp_class
         call timer_start(self % time_preproc)
       end if
 
-#ifdef mpi
+#ifdef MPI
       call MPI_BARRIER(MPI_COMM_WORLD, mpi_err)
 #endif
 
       do i_listing = self % list_stt, self % list_stp
+        if (mpi_enabled) then
+          msg_prepend = "Processor " // trim(adjustl(to_str(rank))) // ":"
+        else
+          msg_prepend = ""
+        end if
+        message = trim(adjustl(msg_prepend)) // " Performing Pre-Processing For " // &
+          trim(adjustl(xs_listings(i_listing) % name))
+        call write_message()
         if (xs_listings(i_listing) % type == ACE_NEUTRON) then
           ! ===================================================================
           ! PERFORM CONTINUOUS ENERGY LIBRARY CALCULATIONS
@@ -763,13 +772,15 @@ module ndpp_class
         call header("Timing Statistics")
 
         ! display time elapsed for various sections
-        write(ou,100) "Total time for initialization", self % time_initialize % elapsed
-        write(ou,100) "Total time for data pre-processing", self % time_preproc % elapsed
-        write(ou,100) "  Reading cross sections", self % time_read_xs % elapsed
-        write(ou,100) "  Time for scattering integration", &
-          self % time_scatt_preproc % elapsed
-        write(ou,100) "  Time for chi integration", &
-          self % time_chi_preproc % elapsed
+        if (.not. mpi_enabled) then
+          write(ou,100) "Total time for initialization", self % time_initialize % elapsed
+          write(ou,100) "Total time for data pre-processing", self % time_preproc % elapsed
+          write(ou,100) "  Reading cross sections", self % time_read_xs % elapsed
+          write(ou,100) "  Time for scattering integration", &
+            self % time_scatt_preproc % elapsed
+          write(ou,100) "  Time for chi integration", &
+            self % time_chi_preproc % elapsed
+        end if
         write(ou,100) "Total time elapsed", self % time_total % elapsed
 
         ! format for write statements

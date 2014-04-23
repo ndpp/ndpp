@@ -225,10 +225,6 @@ contains
       call fatal_error()
     end if
 
-    ! display message
-    message = "Loading ACE cross section table: " // listing % name
-    call write_message(6)
-
     if (filetype == ASCII) then
       ! =======================================================================
       ! READ ACE TABLE IN ASCII FORMAT
