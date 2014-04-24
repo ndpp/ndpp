@@ -739,6 +739,7 @@ module ndpp_class
         call finalize_library(self % lib_format)
 
         deallocate(self % Ein)
+        deallocate(group_index)
       end do
 
 #ifdef MPI
