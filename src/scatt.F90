@@ -250,10 +250,10 @@ module scatt
         if (E_bins(g) == ZERO) then
           cycle
         end if
-        dE = E_bins(g) * (ONE / alpha - ONE) / real(EXTEND_PTS, 8)
+        dE = log(ONE / alpha) / real(EXTEND_PTS, 8)
         Ehi = E_bins(g + 1)
         do i = 1, EXTEND_PTS
-          newE = E_bins(g) + i * dE
+          newE = E_bins(g) * exp(real(i, 8) * dE)
           if (newE <= Ehi) then
             num_pts = num_pts + 1
             new_pts(num_pts) = newE
@@ -293,9 +293,11 @@ module scatt
       do g = 1, groups
         lo = hi
         hi = binary_search(Ein, size(Ein), E_bins(g + 1))
-        dE = (Ein(hi) - Ein(lo)) / real(EXTEND_PTS,8)
+        !dE = (Ein(hi) - Ein(lo)) / real(EXTEND_PTS,8)
+        dE = log(Ein(hi) / Ein(lo)) / real(EXTEND_PTS,8)
         do j = 1, EXTEND_PTS - 1  ! Start at one to skip group boundary value
-          new_grid(i) = Ein(lo) + real(j,8) * dE
+          !new_grid(i) = Ein(lo) + real(j,8) * dE
+          new_grid(i) = Ein(lo) * exp(real(j,8) * dE)
           i = i + 1
         end do
       end do
@@ -358,9 +360,11 @@ module scatt
 
       j = k
       do i = k, size(a) - 1
-        dE = (a(i + 1) - a(i)) / real(EXTEND_PTS,8)
+        !dE = (a(i + 1) - a(i)) / real(EXTEND_PTS,8)
+        dE = log(a(i + 1) / a(i)) / real(EXTEND_PTS,8)
         do l = 0, EXTEND_PTS - 1
-          temp(j + l) = a(i) + real(l,8) * dE
+          !temp(j + l) = a(i) + real(l,8) * dE
+          temp(j + l) = a(i) * exp(real(l,8) * dE)
         end do
         j = j + EXTEND_PTS
       end do
