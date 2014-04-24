@@ -443,9 +443,14 @@ module scattdata_header
         end if
 
         ! Interpolate the distribution
-        f = (Ein - this % E_grid(iE)) / &
-          (this % E_grid(iE + 1) - this % E_grid(iE))
-        ! Do on nearest neighbor, or with linear interpolation?
+        !f = (Ein - this % E_grid(iE)) / &
+        !  (this % E_grid(iE + 1) - this % E_grid(iE))
+        !
+        ! Interpolate the distribution on a logarithmic basis
+        f = (log(Ein) - log(this % E_grid(iE))) / &
+          (log(this % E_grid(iE + 1)) - log(this % E_grid(iE)))
+
+        ! Do on nearest neighbor, or with interpolation?
         if (INTERP_NEAREST) then
           if (f >= 0.5_8) iE = iE + 1
           allocate(distro_int(size(this % distro(iE) % data, dim=1), &

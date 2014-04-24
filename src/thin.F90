@@ -87,7 +87,9 @@ module thin
             y2 = yin(i,j,khi)
             x  = xin(k)
             y  = yin(i,j,k)
-            testval = y1 + (y2-y1) / (x2-x1) * (x - x1)
+            !testval = y1 + (y2 - y1) / (x2 - x1) * (x - x1)
+            testval = y1 + (y2 - y1) / log(x2 / x1) * log(x / x1)
+
             error = abs(testval - y)
             if (y /= 0.0_8) then
               error = error / y
