@@ -115,6 +115,7 @@ class NDPP_lib(object):
 
         # Initialize arrays for Energies, group structures, scatter and chi
         # data.
+        self.group_index = []
         self.NE_scatt = 0
         self.Ein_scatt = []
         self.gmin = []
@@ -173,6 +174,9 @@ class NDPP_lib(object):
         self.thin_tol = self._get_double(path='thin_tol')[0]
 
     def _read_scatt(self):
+        # Get group_index
+        self.group_index = np.asarray(self._get_int(n=self.NG + 1,
+                                    path='scatt/Group_Index'))
         # Get NE_scatt
         self.NE_scatt = self._get_int(path='scatt/NE_scatt')[0]
 
