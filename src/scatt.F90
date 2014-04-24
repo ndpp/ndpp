@@ -233,7 +233,7 @@ module scatt
       integer              :: i, g        ! EXTEND_PTS and Group loop indices
       real(8)              :: alpha
       integer              :: num_pts
-      real(8)              :: EgoAlpha  ! Eg / Alpha
+      real(8)              :: Ehi
       real(8)              :: newE      ! Current new incoing energy point
       real(8)              :: dE        ! interval between each Ein point
 
@@ -250,11 +250,11 @@ module scatt
         if (E_bins(g) == ZERO) then
           cycle
         end if
-        EgoAlpha = E_bins(g) / alpha
         dE = E_bins(g) * (ONE / alpha - ONE) / real(EXTEND_PTS, 8)
+        Ehi = E_bins(g + 1)
         do i = 1, EXTEND_PTS
           newE = E_bins(g) + i * dE
-          if (newE < E_bins(size(E_bins))) then
+          if (newE <= Ehi) then
             num_pts = num_pts + 1
             new_pts(num_pts) = newE
           else
@@ -294,10 +294,10 @@ module scatt
         lo = hi
         hi = binary_search(Ein, size(Ein), E_bins(g + 1))
         dE = (Ein(hi) - Ein(lo)) / real(EXTEND_PTS,8)
-        do j = 0, EXTEND_PTS - 1
-          new_grid(i + j) = Ein(lo) + real(j,8) * dE
+        do j = 1, EXTEND_PTS - 1  ! Start at one to skip group boundary value
+          new_grid(i) = Ein(lo) + real(j,8) * dE
+          i = i + 1
         end do
-        i = i + EXTEND_PTS
       end do
 
       ! Now we can merge in new_grid(:i-1) with Ein to get our new grid
