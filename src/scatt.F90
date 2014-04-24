@@ -147,8 +147,12 @@ module scatt
       ! Add points to aid in interpolation if elastic scattering points
       call add_elastic_Eins(nuc % awr, energy_bins, E_grid)
 
-      ! Finally, we will add EXTEND_PTS incoming energy points per group.
+      ! Add EXTEND_PTS incoming energy points per group.
       call add_pts_per_group(energy_bins, E_grid)
+
+      ! Finally add in one point above energy_bins to give MC code something to
+      ! interpolate to if Ein==E_bins(size(E_bins))
+      call add_one_more_point(E_grid)
 
       ! Now combine the results on to E_grid
       call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
@@ -175,21 +179,22 @@ module scatt
       real(8), allocatable      :: tmp_grid(:)
       type(ScattData), pointer  :: mySD
       integer :: i_rxn, iEmax
+      real(8) :: max_grp, min_grp
 
       allocate(new_grid(1))
       new_grid = Ein(1)
       do i_rxn = 1, size(rxn_data)
         mySD => rxn_data(i_rxn)
         if (mySD % is_init) then
+          min_grp = mySD % E_bins(1)
+          max_grp = mySD % E_bins(size(mySD % E_bins))
           ! Find maximum point that is within our group boundaries before merging
-          if (mySD % E_grid(1) <= mySD % E_bins(size(mySD % E_bins))) then
-            iEmax = 1
-          else if (mySD % E_grid(size(mySD % E_grid)) >= &
-                   mySD % E_bins(size(mySD % E_bins))) then
-            iEmax = size(mySD % E_grid) - 1
+          if (min_grp >= mySD % E_grid(size(mySD % E_grid))) then
+            cycle
+          else if (max_grp <= mySD % E_grid(1)) then
+            cycle
           else
-            iEmax = binary_search(mySD % E_grid, size(mySD % E_grid), &
-                                  mySD % E_bins(size(mySD % E_bins)))
+            iEmax = binary_search(mySD % E_grid, size(mySD % E_grid), max_grp)
           end if
           ! Now combine with the rest
           call merge(mySD % E_grid(1: iEmax), new_grid, tmp_grid)
@@ -307,6 +312,32 @@ module scatt
       deallocate(new_grid)
 
     end subroutine add_pts_per_group
+
+!===============================================================================
+! ADD_ONE_MORE_POINT adds ... one more point. To the top, to provide MC code with
+! something to interpolate to if particle is exactly the top energy boundary.
+!===============================================================================
+
+    subroutine add_one_more_point(Ein)
+      real(8), allocatable, intent(inout) :: Ein(:)      ! Incoming Energy Grid
+
+      real(8), allocatable :: temp_grid(:)
+      real(8)              :: Ehi
+      integer              :: NEin
+
+      Ehi = Ein(size(Ein))
+      NEin = size(Ein)
+
+      allocate(temp_grid(NEin + 1))
+      temp_grid(1: NEin) = Ein(1:NEin)
+      temp_grid(NEin + 1) = Ehi * (ONE + 1.0E-3)
+
+      deallocate(Ein)
+      allocate(Ein(size(temp_grid)))
+      Ein = temp_grid
+      deallocate(temp_grid)
+
+    end subroutine add_one_more_point
 
 !===============================================================================
 ! ADD_INELASTIC_EINS increases the number of points present above a threshold (min)
