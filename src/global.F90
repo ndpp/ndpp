@@ -67,8 +67,8 @@ module global
   ! HDF5 VARIABLES
 
 #ifdef HDF5
-  integer(HID_T) :: hdf5_output_file   ! identifier for output file
-  integer(HID_T) :: hdf5_integer8_t    ! type for integer(8)
+  integer(HID_T) :: h5_file         ! identifier for output file
+  integer(HID_T) :: hdf5_integer8_t ! type for integer(8)
 #endif
 
   ! ============================================================================

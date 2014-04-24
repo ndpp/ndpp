@@ -831,18 +831,13 @@ module scatt
 
     integer :: g, gmin, gmax, iE
 
-    integer(HID_T) :: orig_group, scatt_group
+    integer(HID_T) :: orig_group, temp_group, scatt_group
     character(MAX_FILE_LEN) :: group_name, iE_name, nuc_name
     integer :: period_loc
 
    ! Create a new hdf5 group for the scatter.
-    nuc_name = trim(adjustl(name))
-    period_loc = scan(nuc_name, '.')
-    nuc_name(period_loc : period_loc) = '/'
-    group_name = "/" // trim(adjustl(nuc_name)) // "/scatt"
-    orig_group = temp_group
-    call hdf5_open_group(group_name)
-    scatt_group = temp_group
+    group_name = "/scatt"
+    call hdf5_open_group(h5_file, group_name, temp_group)
 
     ! Assumes that the file and header information is already printed
     ! (including # of groups and bins, and thinning tolerance)
@@ -866,10 +861,11 @@ module scatt
     ! <incoming energy array>
     call hdf5_write_double_1Darray(temp_group, 'Ein', E_grid, size(E_grid))
 
-    call hdf5_close_group()
+    call hdf5_close_group(temp_group)
 
     ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
     ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
+    ! THis would be better served with a data set.
     do iE = 1, size(E_grid)
       iE_name = trim(adjustl(group_name)) // "/iE" // trim(adjustl(to_str(iE)))
       call hdf5_open_group(iE_name)

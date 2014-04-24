@@ -454,15 +454,6 @@ module ndpp_class
           self % lib_format, self % scatt_type, self % scatt_order, &
           self % mu_bins, self % nuscatter, self % integrate_chi, &
           self % print_tol, self % thin_tol)
-#ifdef HDF5
-        if (self % lib_format == H5) then
-          call hdf5_file_create(self % lib_name, hdf5_output_file)
-          hdf5_fh = hdf5_output_file
-          !!! Do we want header information just like in ndpp_lib.xml in here?
-          !!! Doing so would make each lib a stand-alone dataset
-          !!! YES - when we get here do this; file will be too big otw
-        end if
-#endif
         call timer_stop(self % time_print)
 
       ! Display output message
@@ -1227,7 +1218,10 @@ module ndpp_class
         period_loc = scan(h_filename, '.')
         h_filename(period_loc : period_loc) = '_'
         h_filename = "/" // trim(adjustl(h_filename))
-        call hdf5_open_group(h_filename)
+
+        call hdf5_file_create(h_filename, h5_file)
+
+        call hdf5_open_group(h5_file, 'metadata', temp_group)
 
         ! Write name, kt, energy_groups, energy_bins,
         ! scatt_type, scatt_order, nuscatter, integrate_chi, thin_tol, mu_bins
@@ -1248,6 +1242,8 @@ module ndpp_class
         call hdf5_write_integer(temp_group, 'integrate_chi', chi_present_int)
         call hdf5_write_double(temp_group, 'thin_tol', this_ndpp % thin_tol)
         call hdf5_write_integer(temp_group, 'mu_bins', this_ndpp % mu_bins)
+
+        call hdf5_close_group(temp_group)
 #endif
       end if
 
@@ -1263,7 +1259,7 @@ module ndpp_class
         close(UNIT_NUC)
 #ifdef HDF5
       else
-        call hdf5_close_group()
+        call hdf5_file_close(h5_file)
 #endif
       end if
     end subroutine finalize_library
