@@ -663,6 +663,9 @@ module ndpp_class
           ! Create energy grid to use (inelastic_e_in, elastic_e_in,
           ! energy_bins)
           call sab_egrid(sab, self % energy_bins, self % Ein)
+          ! Finally add in one point above energy_bins to give MC code something to
+          ! interpolate to if Ein==E_bins(size(E_bins))
+          call add_one_more_point(self % Ein)
           call calc_scattsab(sab, self % energy_bins, self % scatt_type, &
                              self % scatt_order, scatt_mat, self % mu_bins, &
                              self % Ein)
@@ -683,10 +686,23 @@ module ndpp_class
           end if
 
           ! Get the energy group boundary indices in self % Ein for printing
-          allocate(group_index(size(self % energy_bins)))
-          do g = 1, size(self % energy_bins)
-            group_index(g) = binary_search(self % Ein, size(self % Ein), &
-                                           self % energy_bins(g))
+          ! First, find out how many groups data we actually have information for
+          ! Search for the top self % Ein value in energy_bins
+          !if (self % energy_bins(size(self % energy_bins)) > &
+          !    self % Ein(size(self % Ein))) then
+          !  g = binary_search(self % energy_bins, size(self % energy_bins), &
+          !                    self % Ein(size(self % Ein))) + 1
+          !else
+            g = size(self % energy_bins)
+          !end if
+          allocate(group_index(g))
+          do g = 1, size(group_index)
+            if (self % energy_bins(g) > self % Ein(size(self % Ein))) then
+              group_index(g) = size(self % Ein)
+            else
+              group_index(g) = binary_search(self % Ein, size(self % Ein), &
+                                             self % energy_bins(g))
+            end if
           end do
 
           ! Print the results to file
