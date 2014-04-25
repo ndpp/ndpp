@@ -505,14 +505,14 @@ module sab
         j = 0
         do iE = 1, i_max_ein - 1
           !!!TD: Logarithmic or linear? Right now its linear (uncomment for ln)
-          dE = (e_grid_tmp(iE + 1) - e_grid_tmp(iE)) / real(SAB_EPTS_PER_BIN + 1, 8)
-          ! dE = (log(e_grid_tmp(iE + 1)) - log(e_grid_tmp(iE))) / real(SAB_EPTS_PER_BIN + 1, 8)
+          !dE = (e_grid_tmp(iE + 1) - e_grid_tmp(iE)) / real(SAB_EPTS_PER_BIN + 1, 8)
+          dE = (log(e_grid_tmp(iE + 1) / e_grid_tmp(iE))) / real(SAB_EPTS_PER_BIN + 1, 8)
           j = j + 1
           Ein(j) = e_grid_tmp(iE)
           do i = 1, SAB_EPTS_PER_BIN
             j = j + 1
-            Ein(j) = Ein(j - 1) + dE
-            ! Ein(j) = Ein(j - 1) * exp(dE)
+            !Ein(j) = Ein(j - 1) + dE
+            Ein(j) = Ein(j - 1) * exp(dE)
           end do
         end do
         Ein(num_pts) = e_grid_tmp(i_max_ein)

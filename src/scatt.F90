@@ -137,7 +137,7 @@ module scatt
       call combine_Eins(rxn_data, E_grid)
 
       ! Expand the Incoming energy grid (E_grid) to include points which will
-      ! improve linear interpolation of inelastic level scatter results.
+      ! improve interpolation of inelastic level scatter results.
       ! These results are kind of like stair functions but with
       ! near-linear (depends on f(mu)) ramps inbetween each `step'.  For now
       ! we will combat this by putting EXTEND_PTS per current point above the

@@ -685,17 +685,7 @@ module ndpp_class
             end if
           end if
 
-          ! Get the energy group boundary indices in self % Ein for printing
-          ! First, find out how many groups data we actually have information for
-          ! Search for the top self % Ein value in energy_bins
-          !if (self % energy_bins(size(self % energy_bins)) > &
-          !    self % Ein(size(self % Ein))) then
-          !  g = binary_search(self % energy_bins, size(self % energy_bins), &
-          !                    self % Ein(size(self % Ein))) + 1
-          !else
-            g = size(self % energy_bins)
-          !end if
-          allocate(group_index(g))
+          allocate(group_index(size(self % energy_bins)))
           do g = 1, size(group_index)
             if (self % energy_bins(g) > self % Ein(size(self % Ein))) then
               group_index(g) = size(self % Ein)
