@@ -442,10 +442,6 @@ module scattdata_header
           iE = binary_search(this % E_grid, this % NE, Ein)
         end if
 
-        ! Interpolate the distribution
-        !f = (Ein - this % E_grid(iE)) / &
-        !  (this % E_grid(iE + 1) - this % E_grid(iE))
-        !
         ! Interpolate the distribution on a logarithmic basis
         f = (log(Ein) - log(this % E_grid(iE))) / &
           (log(this % E_grid(iE + 1)) - log(this % E_grid(iE)))
