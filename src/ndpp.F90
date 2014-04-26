@@ -605,7 +605,7 @@ module ndpp_class
 
             call timer_start(self % time_chi_preproc)
             if (nuc % fissionable) then
-              call calc_chi(nuc, self%energy_bins, e_grid, chi_t, chi_p, chi_d)
+              call calc_chi(nuc, self % energy_bins, e_grid, chi_t, chi_p, chi_d)
 
               ! Print the results to file
               call timer_start(self % time_print)
