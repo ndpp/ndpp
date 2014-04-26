@@ -543,7 +543,6 @@ module ndpp_class
             iEmax = binary_search(nuc % energy, size(nuc % energy), &
                                   self % energy_bins(size(self % energy_bins)))
           end if
-
           call merge(nuc % energy(1:iEMax), self % energy_bins, self % Ein)
 
           ! Integrate Scattering Distributions -
@@ -666,6 +665,7 @@ module ndpp_class
           ! Finally add in one point above energy_bins to give MC code something to
           ! interpolate to if Ein==E_bins(size(E_bins))
           call add_one_more_point(self % Ein)
+
           call calc_scattsab(sab, self % energy_bins, self % scatt_type, &
                              self % scatt_order, scatt_mat, self % mu_bins, &
                              self % Ein)

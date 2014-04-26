@@ -536,20 +536,19 @@ module scattdata_header
               result_distro)
             temp_Enorm = ONE
           else
-            !call file4_cm_leg(distro_lab(:, 1), Ein, &
-            !      this % awr, this % E_bins, this % mu, this % order, &
-            !      result_distro, temp_Enorm)
             if (this % rxn % scatter_in_cm) then
-              call cm2lab(Ein, this % rxn % Q_value, this % awr, this % mu, &
-                distro_int, distro_lab)
+              call integrate_file4_cm_leg(distro_int(:,1), Ein, this % awr, &
+                                          this % rxn % Q_value, this % E_bins, &
+                                          this % mu, this % order, &
+                                          result_distro, temp_Enorm)
             else
               distro_lab = distro_int
+              call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
+                this % E_bins, this % mu, interp, vals, bins, temp_Enorm)
+              ! integrate according to scatt_type
+              call integrate_file4_lab_leg(distro_lab(:, 1), this % mu, &
+                interp, vals, bins, this % order, result_distro)
             end if
-            call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
-              this % E_bins, this % mu, interp, vals, bins, temp_Enorm)
-            ! integrate according to scatt_type
-            call integrate_file4_lab_leg(distro_lab(:, 1), this % mu, &
-              interp, vals, bins, this % order, result_distro)
           end if
         else if (associated(this % edist)) then
           if (this % rxn % scatter_in_cm) then
@@ -962,7 +961,7 @@ module scattdata_header
         end do
       else
         do imu = 1, mu_bins
-          ! Calculat the w to mu conversion terms
+          ! Calculate the w to mu conversion terms
           mu2   = mu(imu) * mu(imu)
           S     = sqrt(mu2 + R2 - ONE)
           wi    = Rinv * (mu2 - ONE + mu(imu) * S)
@@ -1247,13 +1246,17 @@ module scattdata_header
 
     end subroutine law3_scatter_cm_leg
 
+!===============================================================================
+! INTEGRATE_FILE4_CM_LEG Calculates the legendre Moments of a file 4 distrib.
+!===============================================================================
 
-    subroutine file4_cm_leg(fmu, Ein, awr, E_bins, mu, order, distro, Enorm)
-      real(8), intent(in)  :: fmu(:)      ! Angle distro to act on
+    subroutine integrate_file4_cm_leg(fw, Ein, awr, Q, E_bins, w, order, distro, Enorm)
+      real(8), intent(in)  :: fw(:)       ! CM Angle distro to act on
       real(8), intent(in)  :: Ein         ! Incoming energy
       real(8), intent(in)  :: awr         ! atomic weight ratio
+      real(8), intent(in)  :: Q           ! Energy level of excited nucleus
       real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
-      real(8), intent(in)  :: mu(:)       ! fmu angular grid
+      real(8), intent(in)  :: w(:)        ! fw angular grid
       integer, intent(in)  :: order       ! Number of moments to find
       real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
       real(8), intent(out) :: Enorm       ! Fraction of possible energy space
@@ -1263,119 +1266,72 @@ module scattdata_header
 
       integer :: g          ! Group index variable, mu point index
       real(8) :: R          ! Reduced Mass
-      real(8) :: Eo_lo, Eo_hi ! Laboratory Eout bounds
-      integer :: g_lo, g_hi ! Lower and upper groups
-      real(8), allocatable :: E_bnds(:) ! Bounds of integration (energy)
-      real(8) :: ap1inv     ! 1/(AWR+1)
-      integer :: l, iwlo, iwhi, iw
-      real(8) :: wlo, whi, ulo, uhi, f, integlo, integhi
-      real(8) :: ulo1, uhi1
-      real(8) :: dmu
+      real(8) :: wlo, whi   ! CM mu-bounds of integration
+      integer :: ilo, ihi   ! Grid locations of lo and hi pts
+      integer :: iw         ! loop counter for w
+      real(8) :: flo, fhi   ! f(w) at low and high points
+      real(8) :: interp     ! Interpolation factor between w points in fw
+      real(8) :: onepawr2   ! (1+AWR)^2
+      real(8) :: onepR2
 
+      R = awr * sqrt((ONE + Q * (awr + ONE) / (awr * Ein)))
+      onepawr2 = (ONE + awr)**2
+      onepR2 = ONE + R * R
 
-      ap1inv = ONE / (awr + ONE)
-      R = awr  ! Temporary, for now
+      do g = 1, size(E_bins) - 1
+        ! Get bounds of integration, starting with low
+        wlo = (E_bins(g) * onepawr2 - Ein * onepR2) / (TWO * R * Ein)
+        ! Check to make sure wlo is in bounds
+        if (wlo < -ONE) then
+          wlo = -ONE
+        else if (wlo > ONE) then
+          wlo = ONE
+        end if
+        ilo = binary_search(w, size(w), wlo)
+        ! Repeat for high end
+        whi = (E_bins(g + 1) * onepawr2 - Ein * onepR2) / (TWO * R * Ein)
+        ! Check to make sure whi is in bounds
+        if (whi < -ONE) then
+          whi = -ONE
+        else if (whi > ONE) then
+          whi = ONE
+        end if
+        ihi = binary_search(w, size(w), whi)
 
-      Eo_lo = Ein * (ONE + R * R - TWO * R) * ap1inv * ap1inv
-      Eo_lo = 1E-12_8
-      Eo_hi = Ein * (ONE + R * R + TWO * R) * ap1inv * ap1inv
+        ! Get corresponding values of fw at wlo and whi
+        ! Do low
+        interp = (wlo - w(ilo)) / (w(ilo + 1) - w(ilo))
+        flo = (ONE - interp) * fw(ilo) + interp * fw(ilo + 1)
+        ! Do high
+        interp = (whi - w(ihi)) / (w(ihi + 1) - w(ihi))
+        fhi = (ONE - interp) * fw(ihi) + interp * fw(ihi + 1)
+
+        ! Now we simply integrate f(w) * Pl(mu(w))dw between wlo and whi
+        if (ilo /= ihi) then
+          ! Integrate part of the moment from the low point to the index above
+          ! the low point
+          distro(:, g) = &
+            calc_int_pn_tablelin(order, wlo, w(ilo + 1), flo, fw(ilo + 1))
+          ! Integrate the inbetween pts
+          do iw = ilo + 1, ihi -1
+            distro(:, g) = distro(:, g) + &
+              calc_int_pn_tablelin(order, w(iw), w(iw + 1), fw(iw), fw(iw + 1))
+          end do
+          ! Integrate part of the moment from the index below the high point to
+          ! the high point
+          distro(:, g) = distro(:, g) + &
+            calc_int_pn_tablelin(order, w(ihi), whi, fw(ihi), fhi)
+        else
+          ! The points are all within the same bin, can get flo and fhi directly
+          distro(:, g) = distro(:, g) + &
+            calc_int_pn_tablelin(order, wlo, whi, flo, fhi)
+        end if
+
+      end do
 
       Enorm = ONE
 
-      if (Eo_lo <= E_bins(1)) then
-        g_lo = 1
-      else if (Eo_lo >= E_bins(size(E_bins))) then
-        return
-      else
-        g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
-      end if
-      if (Eo_hi <= E_bins(1)) then
-        return
-      else if (Eo_hi >= E_bins(size(E_bins))) then
-        g_hi = size(E_bins) - 1
-        allocate(E_bnds(g_lo : g_hi + 1))
-        E_bnds(g_lo) = Eo_lo
-        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
-        E_bnds(g_hi + 1) = E_bins(g_hi + 1)
-      else
-        g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
-        allocate(E_bnds(g_lo : g_hi + 1))
-        E_bnds(g_lo) = Eo_lo
-        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
-        E_bnds(g_hi + 1) = Eo_hi
-      end if
-
-      do g = g_lo, g_hi
-        ! Step through w between w(E_g) and w(E_g-1), find Pl(u(w)) and
-        ! fmu(w), multiply, and do trapezoidal integration of.
-        ! Start with bottom point
-        ! wlo should be between [-1,1] b/c of calculation of Eo_lo and Eo_hi,
-        ! but floating point error could make it be outside. So just force it.
-        if (E_bnds(g) == Eo_lo) then
-          wlo = -ONE
-          iwlo = 1
-          integlo = fmu(iwlo)
-          ulo = -ONE
-        else if (E_bnds(g) == Eo_hi) then
-          exit
-        else
-          wlo = (E_bnds(g) * (awr + ONE) * (awr + ONE) - Ein * (ONE + R * R)) / &
-                (TWO * R * Ein)
-          iwlo = binary_search(mu, size(mu), wlo)
-          f = (wlo - mu(iwlo)) / (mu(iwlo + 1) - mu(iwlo))
-          integlo = (ONE - f) * fmu(iwlo) + f * fmu(iwlo + 1)
-          ulo = (ONE + R * wlo) / sqrt(ONE + R * R + TWO * R * wlo)
-        end if
-
-        ! Get data for high point of integration
-        if (E_bnds(g + 1) == Eo_hi) then
-          whi = ONE
-          iwhi = size(mu) - 1
-          integhi = fmu(size(mu))
-          uhi = ONE
-        else
-          whi = (E_bnds(g + 1) * (awr + ONE) * (awr + ONE) - Ein * (ONE + R * R)) / &
-                (TWO * R * Ein)
-          iwhi = binary_search(mu, size(mu), whi)
-          f = (whi - mu(iwhi)) / (mu(iwhi + 1) - mu(iwhi))
-          integhi = (ONE - f) * fmu(iwhi) + f * fmu(iwhi + 1)
-          uhi = (ONE + R * whi) / sqrt(ONE + R * R + TWO * R * whi)
-        end if
-
-        ! Now we can do trapezoidal integration, beginning with bottom and top pts
-        if (iwlo == iwhi) then
-          do l = 1, order
-            distro(l, g) = 0.5_8 * ((whi - wlo) * &
-                           (integlo * calc_pn(l - 1, ulo) + &
-                            integhi * calc_pn(l - 1, uhi)))
-          end do
-        else
-          do l = 1, order
-            ulo1 = (ONE + R * mu(iwlo + 1)) / sqrt(ONE + R * R + TWO * R * mu(iwlo + 1))
-            uhi1 = (ONE + R * mu(iwhi)) / sqrt(ONE + R * R + TWO * R * mu(iwhi))
-            distro(l, g) = 0.5_8 * ((mu(iwlo + 1) - wlo) * &
-                           (integlo * calc_pn(l - 1, ulo) + &
-                            fmu(iwlo + 1) * calc_pn(l - 1, ulo1)) + &
-                           ((whi - mu(iwhi)) * &
-                           (integhi * calc_pn(l - 1, uhi) + &
-                            fmu(iwhi) * calc_pn(l - 1, uhi1))))
-          end do
-        end if
-
-        ! And the points inbetween
-        dmu = mu(2) - mu(1)
-        do iw = iwlo + 1, iwhi-1
-          ulo1 = (ONE + R * mu(iw)) / sqrt(ONE + R * R + TWO * R * mu(iw))
-          uhi1 = (ONE + R * mu(iw+1)) / sqrt(ONE + R * R + TWO * R * mu(iw+1))
-          do l = 1, order
-            distro(l, g) = distro(l, g) + 0.5_8 * dmu * &
-                           (fmu(iw) * calc_pn(l - 1, ulo1) + &
-                            fmu(iw + 1) * calc_pn(l - 1, uhi1))
-          end do
-        end do
-      end do
-
-    end subroutine file4_cm_leg
+    end subroutine integrate_file4_cm_leg
 
 
 !===============================================================================

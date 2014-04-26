@@ -81,7 +81,7 @@ module scatt
       ! Allocate all the rxn_data objects with the correct energy distro, if
       ! needed.
       i_nested_rxn = 0
-      inel_thresh = E_grid(size(E_grid))
+      inel_thresh = energy_bins(size(energy_bins))
       do i_rxn = 1, nuc % n_reaction
         i_nested_rxn = i_nested_rxn + 1
 
@@ -132,28 +132,29 @@ module scatt
         end do
       end if
 
+      ! Build our incoming energy grid to use. This will be common to all
+      ! reaction channels and they will be combined on to this grid for
+      ! publishing to the library.
+      !call create_Ein_grid(rxn_data, energy_bins, nuc % energy, nuc % awr, &
+      !                     inel_thresh, E_grid)
+
       ! Add in incoming energies from all reaction channel distributions to
       ! the Ein grid
       call combine_Eins(rxn_data, E_grid)
-
+      ! Add points to aid in interpolation if elastic scattering points
+      call add_elastic_Eins(nuc % awr, energy_bins, E_grid)
+      ! Add EXTEND_PTS incoming energy points per group.
+      call add_pts_per_group(energy_bins, E_grid)
       ! Expand the Incoming energy grid (E_grid) to include points which will
       ! improve interpolation of inelastic level scatter results.
       ! These results are kind of like stair functions but with
       ! near-linear (depends on f(mu)) ramps inbetween each `step'.  For now
       ! we will combat this by putting EXTEND_PTS per current point above the
       ! threshold for inelastic level scatter to begin
-      call add_inelastic_eins(inel_thresh, E_grid)
-
-      ! Add points to aid in interpolation if elastic scattering points
-      call add_elastic_Eins(nuc % awr, energy_bins, E_grid)
-
-      ! Add EXTEND_PTS incoming energy points per group.
-      call add_pts_per_group(energy_bins, E_grid)
-
+      call add_inelastic_Eins(inel_thresh, E_grid)
       ! Finally add in one point above energy_bins to give MC code something to
       ! interpolate to if Ein==E_bins(size(E_bins))
       call add_one_more_point(E_grid)
-
       ! Now combine the results on to E_grid
       call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
         energy_bins, nuscatt, scatt_mat, nuscatt_mat)
@@ -164,6 +165,57 @@ module scatt
       end do
 
     end subroutine calc_scatt
+
+!===============================================================================
+! CREATE_EIN_GRID creates the incoming energy grid to be provided to in the
+! output library.  It effectively takes the nuclide's energy grid then calls
+! combine_eins, add_elastic_Eins, add_inelastic_Eins, add_pts_per_group,
+! and add_one_more_point.
+!===============================================================================
+
+    subroutine create_Ein_grid(rxn_data, E_bins, nuc_grid, awr, thresh, Ein)
+      type(ScattData), target, intent(in) :: rxn_data(:) ! Reaction data
+      real(8), intent(in)                 :: E_bins(:)   ! Group structure
+      real(8), allocatable, intent(in)    :: nuc_grid(:) ! Nuclidic Ein points
+      real(8), intent(in)                 :: awr         ! Atomic weight ratio
+      real(8), intent(in)                 :: thresh      ! Inelastic threshold
+      real(8), allocatable, intent(inout) :: Ein(:)      ! Incoming Energy Grid
+
+      integer :: iEmax
+      ! Create energy grid to use after limiting nuc_grid to
+      ! the maximum energy in E_bins
+      if (E_bins(size(E_bins)) >= nuc_grid(size(nuc_grid))) then
+        iEmax = size(nuc_grid)
+      else
+        iEmax = binary_search(nuc_grid, size(nuc_grid), E_bins(size(E_bins)))
+      end if
+
+      call merge(nuc_grid(1:iEMax), E_bins, Ein)
+
+      ! Add in incoming energies from all reaction channel distributions to
+      ! the Ein grid
+      call combine_Eins(rxn_data, Ein)
+
+      ! Add points to aid in interpolation if elastic scattering points
+      call add_elastic_Eins(awr, E_bins, Ein)
+
+      ! Add EXTEND_PTS incoming energy points per group.
+      call add_pts_per_group(E_bins, Ein)
+
+      ! Expand the Incoming energy grid (E_grid) to include points which will
+      ! improve interpolation of inelastic level scatter results.
+      ! These results are kind of like stair functions but with
+      ! near-linear (depends on f(mu)) ramps inbetween each `step'.  For now
+      ! we will combat this by putting EXTEND_PTS per current point above the
+      ! threshold for inelastic level scatter to begin
+      call add_inelastic_Eins(thresh, Ein)
+
+      ! Finally add in one point above energy_bins to give MC code something to
+      ! interpolate to if Ein==E_bins(size(E_bins))
+      call add_one_more_point(Ein)
+
+    end subroutine create_Ein_grid
+
 
 !===============================================================================
 ! COMBINE_EINS ensures that the incoming energies from all of the different
@@ -346,7 +398,7 @@ module scatt
 ! The number of points to increase is EXTEND_PTS for every point on Ein.
 !===============================================================================
 
-    subroutine add_inelastic_eins(min, a)
+    subroutine add_inelastic_Eins(min, a)
       real(8), intent(in)                 :: min
       real(8), allocatable, intent(inout) :: a(:)
       real(8), allocatable :: temp(:)

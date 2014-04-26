@@ -93,7 +93,7 @@ module constants
 
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS
-  integer, parameter :: MAX_LEGENDRE_ORDER   = 10
+  integer, parameter :: MAX_LEGENDRE_ORDER = 10
 
   ! Number of equiprobable bins
   integer, parameter :: NUM_EP = 32
