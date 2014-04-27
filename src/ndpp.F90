@@ -218,7 +218,7 @@ module ndpp_class
           end if
         end do
         ! Ensure that self % energy_bins(1) is 0
-        if (self % energy_bins(1) /= ZERO) then
+        if (energy_bins_(1) /= ZERO) then
           message = "Invalid Lower Energy Boundary: Bottom of Lowest Group " // &
                     " Must be Zero!"
           call fatal_error()
