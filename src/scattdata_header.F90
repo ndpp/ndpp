@@ -905,15 +905,17 @@ module scattdata_header
       real(8) :: flo, fhi   ! f(w) at low and high points
       real(8) :: interp     ! Interpolation factor between w points in fw
       real(8) :: onepawr2   ! (1+AWR)^2
-      real(8) :: onepR2
+      real(8) :: onepR2     ! ( 1 + R^2)
+      real(8) :: inv2REin   ! 1/(2*R*Ein)
 
       R = awr * sqrt((ONE + Q * (awr + ONE) / (awr * Ein)))
       onepawr2 = (ONE + awr)**2
       onepR2 = ONE + R * R
+      inv2REin = 0.5_8 / (R * Ein)
 
       do g = 1, size(E_bins) - 1
         ! Get bounds of integration, starting with low
-        wlo = (E_bins(g) * onepawr2 - Ein * onepR2) / (TWO * R * Ein)
+        wlo = (E_bins(g) * onepawr2 - Ein * onepR2) * inv2REin
         ! Check to make sure wlo is in bounds
         if (wlo < -ONE) then
           wlo = -ONE
@@ -922,7 +924,7 @@ module scattdata_header
         end if
         ilo = binary_search(w, size(w), wlo)
         ! Repeat for high end
-        whi = (E_bins(g + 1) * onepawr2 - Ein * onepR2) / (TWO * R * Ein)
+        whi = (E_bins(g + 1) * onepawr2 - Ein * onepR2) * inv2REin
         ! Check to make sure whi is in bounds
         if (whi < -ONE) then
           whi = -ONE
@@ -930,6 +932,18 @@ module scattdata_header
           whi = ONE
         end if
         ihi = binary_search(w, size(w), whi)
+
+        ! Now we can skip groups we do not need to consider.
+        ! We will cycle if wlo = - 1 since that means we have not yet reached
+        ! the 'active' groups.  We will return if wlo = 1 since that means
+        ! we have already passed the `active` groups.
+        if (wlo == whi) then
+          if (wlo == -ONE) then
+            cycle
+          else if (wlo == ONE) then
+            return
+          end if
+        end if
 
         ! Get corresponding values of fw at wlo and whi
         ! Do low
