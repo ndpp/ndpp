@@ -380,12 +380,10 @@ module scattdata_header
                                            ! (lower bound if Ein is provided)
       integer :: nuc_iE                    ! Energy index on the nuclide's x/s
       real(8), pointer :: sigS_array(:)    ! sigS pointer
-      real(8) :: Enorm ! Range of Energy space represented by this reaction
 
       ! Set up the results memory
       allocate(distro(this % order, this % groups))
       distro = ZERO
-      Enorm  = ZERO
 
       ! Set rxn, so we can save some characters throughout this function.
       rxn => this % rxn
@@ -416,7 +414,7 @@ module scattdata_header
           size(this % distro(iE) % data, dim=2)))
         distro_int = this % distro(iE) % data
 
-        distro = integrate_distro(this, Ein, iE, ONE, distro_int, Enorm)
+        distro = integrate_distro(this, Ein, iE, ONE, distro_int)
       else
         if (Ein <= nuc % energy(1)) then
           nuc_iE = 1
@@ -463,21 +461,20 @@ module scattdata_header
             size(this % distro(iE) % data, dim=2)))
           distro_int = this % distro(iE) % data
 
-          distro = integrate_distro(this, Ein, iE, ONE, distro_int, Enorm)
+          distro = integrate_distro(this, Ein, iE, ONE, distro_int)
 
         else ! Linear interpolation it is
           ! Do the lower distribution
           allocate(distro_int(size(this % distro(iE) % data, dim=1), &
             size(this % distro(iE) % data, dim=2)))
           distro_int = this % distro(iE) % data
-          distro = integrate_distro(this, Ein, iE, (ONE - f), distro_int, Enorm)
+          distro = integrate_distro(this, Ein, iE, (ONE - f), distro_int)
           deallocate(distro_int)
           ! Do the upper distribution
           allocate(distro_int(size(this % distro(iE + 1) % data, dim=1), &
             size(this % distro(iE + 1) % data, dim=2)))
           distro_int = this % distro(iE + 1) % data
-          distro = distro + integrate_distro(this, Ein, iE + 1, f, distro_int, &
-            Enorm)
+          distro = distro + integrate_distro(this, Ein, iE + 1, f, distro_int)
         end if
       end if
 
@@ -508,7 +505,7 @@ module scattdata_header
 ! requested at iE.
 !===============================================================================
 
-    function integrate_distro(this, Ein, iE, f, distro_int, Enorm) &
+    function integrate_distro(this, Ein, iE, f, distro_int) &
       result(result_distro)
 
       class(ScattData), target, intent(in) :: this ! Working ScattData object
@@ -516,13 +513,10 @@ module scattdata_header
       real(8), intent(in) :: f        ! Interpolation factor for this distro_int
       integer, intent(in) :: iE       ! incoming energy index (searched)
       real(8), intent(in) :: distro_int(:,:) ! the distribution at Ein before cm2lab
-      real(8), intent(out) :: Enorm   ! Range of Energy space represented by
-                                      ! this reaction
       real(8), allocatable :: result_distro(:,:)  ! the output distribution
 
       ! the distribution in the lab frame
       real(8) :: distro_lab(size(distro_int, dim=1), size(distro_int, dim=2))
-      real(8) :: temp_Enorm               ! Storage for Enorm (for summing to Enorm)
 
       ! Set up the results memory
       allocate(result_distro(this % order, this % groups))
@@ -538,13 +532,12 @@ module scattdata_header
             call integrate_freegas_leg(Ein, this % awr, this % kT, &
               distro_lab(:, 1), this % mu, this % E_bins, this % order, &
               result_distro)
-            temp_Enorm = ONE
           else
             if (this % rxn % scatter_in_cm) then
               call integrate_file4_cm_leg(distro_int(:,1), Ein, this % awr, &
                                           this % rxn % Q_value, this % E_bins, &
                                           this % mu, this % order, &
-                                          result_distro, temp_Enorm)
+                                          result_distro)
             else
               ! As a notification of future issues:
               message = "File 4 Reaction Found With Lab Angle Distribution and &
@@ -557,7 +550,7 @@ module scattdata_header
             distro_lab = distro_int
             call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
               this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
-              this % E_bins, this % order, result_distro, temp_Enorm)
+              this % E_bins, this % order, result_distro)
           else
             distro_lab = distro_int
             if (associated(this % adist)) then
@@ -571,7 +564,7 @@ module scattdata_header
                 ! The group transfer should also be normalized by the prob. of
                 ! transfer to that group.
                 call law9_scatter_lab_leg(distro_lab(:, 1), this % edist, Ein, &
-                  this % E_bins, this % mu, this % order, result_distro, temp_Enorm)
+                  this % E_bins, this % mu, this % order, result_distro)
 
               else
                 ! As a notification of future issues:
@@ -581,7 +574,7 @@ module scattdata_header
             else
               call integrate_file6_lab_leg(distro_lab, this % mu, &
                 this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
-                this % E_bins, this % order, result_distro, temp_Enorm)
+                this % E_bins, this % order, result_distro)
             end if
           end if
         end if
@@ -591,7 +584,6 @@ module scattdata_header
 
       ! Multiply by f for interpolation.
       result_distro = result_distro * f
-      Enorm = Enorm + temp_Enorm * f
 
     end function integrate_distro
 
@@ -883,7 +875,7 @@ module scattdata_header
 ! INTEGRATE_FILE4_CM_LEG Calculates the legendre Moments of a file 4 distrib.
 !===============================================================================
 
-    subroutine integrate_file4_cm_leg(fw, Ein, awr, Q, E_bins, w, order, distro, Enorm)
+    subroutine integrate_file4_cm_leg(fw, Ein, awr, Q, E_bins, w, order, distro)
       real(8), intent(in)  :: fw(:)       ! CM Angle distro to act on
       real(8), intent(in)  :: Ein         ! Incoming energy
       real(8), intent(in)  :: awr         ! atomic weight ratio
@@ -892,10 +884,6 @@ module scattdata_header
       real(8), intent(in)  :: w(:)        ! fw angular grid
       integer, intent(in)  :: order       ! Number of moments to find
       real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
-      real(8), intent(out) :: Enorm       ! Fraction of possible energy space
-                                          ! of this Ein reaction represented by
-                                          ! the energy group structure of the
-                                          ! problem
 
       integer :: g          ! Group index variable, mu point index
       real(8) :: R          ! Reduced Mass
@@ -976,18 +964,16 @@ module scattdata_header
 
       end do
 
-      Enorm = ONE
-
     end subroutine integrate_file4_cm_leg
 
 
 !===============================================================================
-! INTEGRATE_FILE6_CM_LEG Finds which group contains the inelastic level outgoing energy
-! and sets interp, vals, bins, and Enorm accordingly for later integration.
+! INTEGRATE_FILE6_CM_LEG Integrated the Center-of-Mass combined energy/angle
+! distribution over all outgoing groups.
 !===============================================================================
 
     subroutine integrate_file6_cm_leg(fEmu, mu, Ein, awr, Eout, INTT, thispdf, &
-                                      E_bins, order, distro, Enorm)
+                                      E_bins, order, distro)
       real(8), intent(in)  :: fEmu(:,:)   ! Energy-angle distro to act on
       real(8), intent(in)  :: mu(:)       ! fEmu angular grid
       real(8), intent(in)  :: Ein         ! Incoming energy
@@ -998,10 +984,6 @@ module scattdata_header
       real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
       integer, intent(in)  :: order       ! Number of moments to find
       real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
-      real(8), intent(out) :: Enorm       ! Fraction of possible energy space
-                                          ! of this Ein reaction represented by
-                                          ! the energy group structure of the
-                                          ! problem
 
       integer :: g, imu_c   ! Group index variable, mu point index
       integer :: imu        ! Lab mu index
@@ -1068,16 +1050,6 @@ module scattdata_header
         E_bnds(g_lo) = Eo_lo
         E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
         E_bnds(g_hi + 1) = Eo_hi
-      end if
-
-      ! Set Enorm, the desired normalization
-      if ((Eo_lo >= E_bins(1)) .and. (Eo_hi <= E_bins(size(E_bins)))) then
-        Enorm = ONE
-      else
-        ! Otherwise, find the CDF at Eo_lo and Eo_hi and subtract these
-        ! CDFs from 1.0 to get Enorm
-        !!! TO BE IMPLEMENTED!!!
-        Enorm = ONE
       end if
 
       do g = g_lo, g_hi
@@ -1180,8 +1152,7 @@ module scattdata_header
 ! law 9 evaporation spectrum) according to the probabilities.
 !===============================================================================
 
-    subroutine law9_scatter_lab_leg(fmu, edist, Ein, E_bins, mu, order, distro, &
-      Enorm)
+    subroutine law9_scatter_lab_leg(fmu, edist, Ein, E_bins, mu, order, distro)
 
       real(8), intent(in)  :: fmu(:)      ! Angle distro to act on
       type(DistEnergy), pointer, intent(in) :: edist    ! My energy dist
@@ -1190,16 +1161,11 @@ module scattdata_header
       real(8), intent(in)  :: mu(:)       ! fEmu angular grid
       integer, intent(in)  :: order       ! Number of moments to find
       real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
-      real(8), intent(out) :: Enorm       ! Fraction of possible energy space
-                                          ! of this Ein reaction represented by
-                                          ! the energy group structure of the
-                                          ! problem
 
       integer :: g, NR, NE, lc, imu
       real(8) :: T, U, x, I, Egp1, Eg, pE_xfer
 
       pE_xfer = ZERO
-      Enorm = ZERO
 
       ! read number of interpolation regions and incoming energies
       NR  = int(edist % data(1))
@@ -1232,8 +1198,6 @@ module scattdata_header
             calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &
               fmu(imu), fmu(imu + 1)) * pE_xfer
         end do
-        ! Add pE_xfer to running tally in Enorm
-        Enorm = Enorm + pE_xfer
       end do
 
     end subroutine law9_scatter_lab_leg
@@ -1245,7 +1209,7 @@ module scattdata_header
 !===============================================================================
 
     subroutine integrate_file6_lab_leg(fEmu, mu, Eout, INTT, thispdf, &
-      E_bins, order, distro, Enorm)
+      E_bins, order, distro)
       real(8), intent(in)    :: fEmu(:,:)     ! Energy-angle distro to act on
       real(8), intent(in)    :: mu(:)         ! fEmu angular grid
       real(8), intent(in)    :: Eout(:)       ! Outgoing energies
@@ -1254,7 +1218,6 @@ module scattdata_header
       real(8), intent(in)    :: E_bins(:)     ! Energy group boundaries
       integer, intent(in)    :: order         ! Number of moments to find
       real(8), intent(out)   :: distro(:,:)   ! Resultant integrated distro
-      real(8), intent(inout) :: Enorm         ! Energy normalization, will be one.
 
       real(8), allocatable   :: fEmu_int(:,:) ! Integrated (over E) fEmu
       real(8), allocatable   :: pdf(:)        ! local version of pdf to mess with
@@ -1268,8 +1231,6 @@ module scattdata_header
       allocate(fEmu_int(size(mu), size(E_bins) - 1))
       fEmu_int = ZERO
       NEout = size(Eout)
-
-      Enorm = ONE
 
       ! First lets normalize the PDF
       allocate(pdf(NEout))

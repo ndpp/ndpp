@@ -513,6 +513,8 @@ module scatt
       integer :: iE_pct, last_iE_pct ! Current and previous pct complete
       real(8), allocatable :: temp_scatt(:,:) ! calculated scattering matrix
       integer :: tid                 ! Thread id
+      real(8) :: outsum              ! Outgoing energy transfer probability sum
+      integer :: g                   ! group index
 
       groups = size(E_bins) - 1
       NE = size(E_grid)
@@ -584,6 +586,22 @@ module scatt
           if (nuscatt) then
             nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) / norm_tot
           end if
+
+          ! Finally, if the number of mu points are too few, the sum of outgoing
+          ! probabilities (sum of P0) will not be 1.0 as it should be.
+          ! Therefore, normalize the results accordingly.
+          outsum = sum(scatt_mat(1, :, iE))
+          if (outsum /= ZERO) then
+            scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / outsum
+          end if
+
+          if (nuscatt) then
+            outsum = sum(nuscatt_mat(1, :, iE))
+            if (outsum /= ZERO) then
+              nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) / outsum
+            end if
+          end if
+
         else
           ! This step is taken so that interpolation works OK if the MC code
           ! has a particle with an energy == the top energy group value.
