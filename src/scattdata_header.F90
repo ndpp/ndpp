@@ -133,15 +133,29 @@ module scattdata_header
       if (rxn % has_angle_dist) then
         this % adist => rxn % adist
         if (associated(edist)) then ! Like for inelastic level scattering
-          this % edist => edist
+          if (edist % law == 3) then
+            ! Set the edist to null (rxn already has Q_value so we dont need
+            ! any data from edist)
+            this % edist => null()
+          else
+            this % edist => edist
+          end if
+          this % law = edist % law
         else
           this % edist => null()
+          this % law = 0
         end if
       else if (associated(edist)) then
         if ((edist % law == 3) .or. (edist % law == 9)) then
           ! We have either an isotropic inelastic level scatter or an evaporation
           ! spectrum
-          this % edist => edist
+          ! If the reaction is isotropic inelastic, then we should set up an
+          ! isotropic reaction, but not point this % edist to edist.
+          ! Doin so allows integrate_distro to correctly enter the
+          ! integrate_file4_cm_* path.
+          if (edist % law == 9) then
+            this % edist => edist
+          end if
           ! set up the isotropic adist
           rxn % adist % n_energy = 2
           if (allocated(rxn % adist % energy)) deallocate(rxn % adist % energy)
@@ -171,6 +185,7 @@ module scattdata_header
           this % edist => edist ! We dont use rxn % edist because this allows
                                 ! ScattData type to be used for nested distros.
         end if
+        this % law = edist % law
       else
         ! This is an isotropic distribution, to reduce the amount of code later,
         ! lets set up rxn % adist to reflect that and point to it.
@@ -196,6 +211,7 @@ module scattdata_header
         this % adist => rxn % adist
         rxn % scatter_in_cm = .true.
         this % edist => null()
+        this % law = 0
       end if
 
       ! Get the number of energy points; doing so depends on where the info
@@ -246,13 +262,6 @@ module scattdata_header
       ! Allocate the group-dependent attributes
       this % E_bins => E_bins
       this % groups = size(E_bins) - 1
-
-      ! Store the law
-      if (associated(this % edist)) then
-        this % law = this % edist % law
-      else
-        this % law = 0
-      end if
 
       ! The final initialization
       this % is_init = .true.
@@ -331,7 +340,8 @@ module scattdata_header
       do iE = 1, this % NE
         this % distro(iE) % data = ZERO
         if ((this % law == 0) .or. (this % law == 3) .or. (this % law == 9)) then
-          ! angle distribution only. N_Nx will enter through here.
+          ! angle distribution only. elastic, inelastic level, &
+          ! N_Nx will enter through here.
           call convert_file4(iE, this % mu, this % adist, &
             this % Eouts(iE) % data, this % INTT(iE), &
             this % distro(iE) % data(:, 1))
@@ -512,9 +522,6 @@ module scattdata_header
 
       ! the distribution in the lab frame
       real(8) :: distro_lab(size(distro_int, dim=1), size(distro_int, dim=2))
-      integer :: bins(2, this % groups)   ! Start/end energy/angle bin indices
-      real(8) :: vals(2, this % groups)   ! values on start/end energy/angle
-      real(8) :: interp(2, this % groups) ! interpolation on start/end energy/angle
       real(8) :: temp_Enorm               ! Storage for Enorm (for summing to Enorm)
 
       ! Set up the results memory
@@ -525,7 +532,8 @@ module scattdata_header
       case (SCATT_TYPE_LEGENDRE)
         if ((associated(this % adist)) .and. &
           (.not. associated(this % edist))) then
-          if (Ein < this % freegas_cutoff) then
+          if ((Ein < this % freegas_cutoff) .and. &
+              (this % rxn % MT == ELASTIC)) then
             distro_lab = distro_int
             call integrate_freegas_leg(Ein, this % awr, this % kT, &
               distro_lab(:, 1), this % mu, this % E_bins, this % order, &
@@ -538,27 +546,18 @@ module scattdata_header
                                           this % mu, this % order, &
                                           result_distro, temp_Enorm)
             else
-              distro_lab = distro_int
-              call calc_mu_bounds(this % awr, this % rxn % Q_value, Ein, &
-                this % E_bins, this % mu, interp, vals, bins, temp_Enorm)
-              ! integrate according to scatt_type
-              call integrate_file4_lab_leg(distro_lab(:, 1), this % mu, &
-                interp, vals, bins, this % order, result_distro)
+              ! As a notification of future issues:
+              message = "File 4 Reaction Found With Lab Angle Distribution and &
+                        &No Energy Distribution!"
+              call fatal_error()
             end if
           end if
         else if (associated(this % edist)) then
           if (this % rxn % scatter_in_cm) then
-            if (this % law == 3) then
-                distro_lab = distro_int
-                call law3_scatter_cm_leg(distro_lab(:, 1), this % edist, Ein, &
-                  this % awr, this % E_bins, this % mu, this % order, &
-                  result_distro, temp_Enorm)
-            else
-              distro_lab = distro_int
-              call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
-                this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
-                this % E_bins, this % order, result_distro, temp_Enorm)
-            end if
+            distro_lab = distro_int
+            call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
+              this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
+              this % E_bins, this % order, result_distro, temp_Enorm)
           else
             distro_lab = distro_int
             if (associated(this % adist)) then
@@ -573,6 +572,11 @@ module scattdata_header
                 ! transfer to that group.
                 call law9_scatter_lab_leg(distro_lab(:, 1), this % edist, Ein, &
                   this % E_bins, this % mu, this % order, result_distro, temp_Enorm)
+
+              else
+                ! As a notification of future issues:
+                message = " Associated Edist and Adist, but not law 9: " // &
+                  to_str(this % edist % law) //", "//to_str(this % rxn % MT)
               end if
             else
               call integrate_file6_lab_leg(distro_lab, this % mu, &
@@ -874,264 +878,6 @@ module scattdata_header
       end if
 
     end subroutine convert_file6
-
-!===============================================================================
-! CALC_MU_BOUNDS Calculates the mu-values corresponding to the energy-out
-! bins for a given input energy.
-!===============================================================================
-
-    subroutine calc_mu_bounds(awr, Q, Ein, E_bins, mu, interp, vals, bins, Enorm)
-
-      real(8), intent(in)  :: awr         ! Atomic-weight ratio
-      real(8), intent(in)  :: Q           ! Q-Value of this reaction
-      real(8), intent(in)  :: Ein         ! Incoming energy
-      real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
-      real(8), intent(in)  :: mu(:)       ! tabular mu values
-      real(8), intent(out) :: interp(:,:) ! Outgoing mu interpolants
-                                          ! corresponding to the energy groups
-      real(8), intent(out) :: vals(:,:)   ! Outgoing mu values corresponding
-                                          ! to the energy groups
-      integer, intent(out) :: bins(:,:)   ! Outgoing mu indices corresponding
-                                          ! to the energy groups
-      real(8), intent(out) :: Enorm       ! Fraction of possible energy space
-                                          ! of this Ein reaction represented by
-                                          ! the energy group structure of the
-                                          ! problem
-
-      real(8) :: Emin, Emax       ! Max/Min E transfer of this reaction
-      real(8) :: R                ! The Reduced Mass (takes in to account Qval)
-      real(8) :: mu_low, mu_high  ! Low and high angular points
-      integer :: g                ! Group index variable
-      integer :: imu              ! angle bin counter
-
-      R = awr * sqrt((ONE + Q * (awr + ONE) / (awr * Ein)))
-
-      do g = 1, size(E_bins) - 1
-        ! Calculate the values of mu corresponding to this energy group
-        ! These come from eqs. 232-233 in Methods for Processing ENDF/B-VII,
-        ! also on pg 2798
-
-        if (R < ONE) then
-          ! Set R = 1/R, to conserve the min being alpha*Ein, but
-          ! avoid the sqrt(-1) issues.
-          if (E_bins(g) == ZERO) then
-            mu_low = -ONE
-          else
-            mu_low  = 0.5_8 * ((ONE + ONE / awr) * sqrt(E_bins(g) / Ein) + &
-              (ONE - ONE / (R * R)) / (ONE + ONE / awr) * sqrt(Ein / E_bins(g)))
-          end if
-          mu_high = 0.5_8 * ((ONE + ONE / awr) * sqrt(E_bins(g + 1) / Ein) + &
-            (ONE - ONE / (R * R)) / (ONE + ONE / awr) * sqrt(Ein / E_bins(g + 1)))
-        else if (E_bins(g) > ZERO) then
-          mu_low  = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g) / Ein) + &
-            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g)))
-          mu_high = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g + 1) / Ein) + &
-            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g + 1)))
-        else
-          mu_low = -ONE
-          mu_high = 0.5_8 * ((ONE + awr) * sqrt(E_bins(g + 1) / Ein) + &
-            (ONE - R * R) / (ONE + awr) * sqrt(Ein / E_bins(g + 1)))
-        end if
-
-        ! Find the index in mu corresponding to mu_low
-        if (mu_low <= -ONE) then
-          bins(MU_LO, g) = 1
-          vals(MU_LO, g) = -ONE
-          interp(MU_LO, g) = ZERO
-        else if (mu_low >= ONE) then
-          bins(MU_LO, g) = size(mu) - 1
-          vals(MU_LO, g) = ONE
-          interp(MU_LO, g) = ONE
-        else
-          imu = binary_search(mu, size(mu), mu_low)
-          bins(MU_LO, g) = imu
-          vals(MU_LO, g) = mu_low
-          interp(MU_LO, g) = (mu_low - mu(imu)) / (mu(imu + 1) - mu(imu))
-        end if
-
-        ! Find the index in mu corresponding to mu_high
-        if (mu_high <= -ONE) then
-          bins(MU_HI, g) = 1
-          vals(MU_HI, g) = -ONE
-          interp(MU_HI, g) = ZERO
-        else if (mu_high >= ONE) then
-          bins(MU_HI, g) = size(mu) - 1
-          vals(MU_HI, g) = ONE
-          interp(MU_HI, g) = ONE
-        else
-          imu = binary_search(mu, size(mu), mu_high)
-          bins(MU_HI, g) = imu
-          vals(MU_HI, g) = mu_high
-          interp(MU_HI, g) = (mu_high - mu(imu)) / (mu(imu + 1) - mu(imu))
-        end if
-
-      end do
-
-      ! Now set the normalization term (this is the fraction of all energy
-      ! space that this Ein -> g transfer represents out of all g.
-      Emin = Ein * (ONE + R * R - TWO * R) / ((ONE + awr) * (ONE + awr))
-      Emax = Ein * (ONE + R * R + TWO * R) / ((ONE + awr) * (ONE + awr))
-
-      ! Three cases to consider for assigning the normalization:
-      ! 1) Emin and Emax within this group (transfer probability = 1)
-      ! 2) Emin and Emax outside this group (transfer probability = 0)
-      ! 3) Emin, Emax span multiple groups
-      ! These correspond to the if branches below.
-
-      if (((Emin >= E_bins(1)) .and. (Emin <= E_bins(size(E_bins)))) .and. &
-        ((Emax >= E_bins(1)) .and. (Emax <= E_bins(size(E_bins))))) then
-
-        Enorm = ONE
-      else if (((Emin < E_bins(1)) .or. (Emin > E_bins(size(E_bins)))) .and. &
-        ((Emax < E_bins(1)) .or. (Emax > E_bins(size(E_bins))))) then
-
-        Enorm = ZERO
-      else
-        Enorm = (min(Emax, E_bins(size(E_bins))) - max(Emin, E_bins(1))) / &
-          (Emax - Emin)
-      end if
-
-    end subroutine calc_mu_bounds
-
-!===============================================================================
-! LAW3_SCATTER_CM_LEG Finds which group contains the inelastic level outgoing energy
-! and sets interp, vals, bins, and Enorm accordingly for later integration.
-!===============================================================================
-
-    subroutine law3_scatter_cm_leg(fmu, edist, Ein, awr, E_bins, mu, order, &
-                                   distro, Enorm)
-      real(8), intent(in)  :: fmu(:)      ! Angle distro to act on
-      type(DistEnergy), pointer, intent(in) :: edist ! My energy dist
-      real(8), intent(in)  :: Ein         ! Incoming energy
-      real(8), intent(in)  :: awr         ! atomic weight ratio
-      real(8), intent(in)  :: E_bins(:)   ! Energy group boundaries
-      real(8), intent(in)  :: mu(:)       ! fmu angular grid
-      integer, intent(in)  :: order       ! Number of moments to find
-      real(8), intent(out) :: distro(:,:) ! Resultant integrated distribution
-      real(8), intent(out) :: Enorm       ! Fraction of possible energy space
-                                          ! of this Ein reaction represented by
-                                          ! the energy group structure of the
-                                          ! problem
-
-      integer :: g          ! Group index variable, mu point index
-      real(8) :: Eo_cm      ! CM Outgoing Energ
-      real(8) :: Eo_lo, Eo_hi ! Laboratory Eout bounds
-      integer :: g_lo, g_hi ! Lower and upper groups
-      real(8), allocatable :: E_bnds(:) ! Bounds of integration (energy)
-      real(8) :: ap1inv     ! 1/(AWR+1)
-      integer :: l, iwlo, iwhi, iw
-      real(8) :: wlo, whi, ulo, uhi, f, integlo, integhi
-      real(8) :: ulo1, uhi1
-      real(8) :: dmu, E, sEiEocm
-
-
-      ap1inv = ONE / (awr + ONE)
-
-      Eo_cm = edist % data(2) * (Ein - edist % data(1))
-      sEiEocm = sqrt(Ein * Eo_cm)
-      Eo_lo = Eo_cm + (Ein - TWO * sEiEocm / ap1inv) * ap1inv * ap1inv
-      Eo_hi = Eo_cm + (Ein + TWO * sEiEocm / ap1inv) * ap1inv * ap1inv
-
-      Enorm = ONE
-
-      if (Eo_lo <= E_bins(1)) then
-        g_lo = 1
-      else if (Eo_lo >= E_bins(size(E_bins))) then
-        return
-      else
-        g_lo = binary_search(E_bins, size(E_bins), Eo_lo)
-      end if
-      if (Eo_hi <= E_bins(1)) then
-        return
-      else if (Eo_hi >= E_bins(size(E_bins))) then
-        g_hi = size(E_bins) - 1
-        allocate(E_bnds(g_lo : g_hi + 1))
-        E_bnds(g_lo) = Eo_lo
-        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
-        E_bnds(g_hi + 1) = E_bins(g_hi + 1)
-      else
-        g_hi = binary_search(E_bins, size(E_bins), Eo_hi)
-        allocate(E_bnds(g_lo : g_hi + 1))
-        E_bnds(g_lo) = Eo_lo
-        E_bnds(g_lo + 1: g_hi) = E_bins(g_lo + 1: g_hi)
-        E_bnds(g_hi + 1) = Eo_hi
-      end if
-
-      do g = g_lo, g_hi
-        ! Step through w between w(E_g) and w(E_g-1), find Pl(u(w)) and
-        ! fmu(w), multiply, and do trapezoidal integration of.
-        ! Start with bottom point
-        ! wlo should be between [-1,1] b/c of calculation of Eo_lo and Eo_hi,
-        ! but floating point error could make it be outside. So just force it.
-        if (E_bnds(g) == Eo_lo) then
-          wlo = -ONE
-          iwlo = 1
-          integlo = fmu(iwlo)
-          ulo = -ONE
-        else if (E_bnds(g) == Eo_hi) then
-          exit
-        else
-          wlo = ((E_bnds(g) - Eo_cm) * ((awr + ONE) * (awr + ONE)) - Ein) / &
-                  (TWO * (awr + ONE) * sqrt(Ein * Eo_cm))
-          iwlo = binary_search(mu, size(mu), wlo)
-          f = (wlo - mu(iwlo)) / (mu(iwlo + 1) - mu(iwlo))
-          integlo = (ONE - f) * fmu(iwlo) + f * fmu(iwlo + 1)
-          ulo = wlo * sqrt(Eo_cm / E_bnds(g)) +  sqrt(Ein / E_bnds(g)) * ap1inv
-        end if
-
-        ! Get data for high point of integration
-        if (E_bnds(g + 1) == Eo_hi) then
-          whi = ONE
-          iwhi = size(mu) - 1
-          integhi = fmu(size(mu))
-          uhi = ONE
-        else
-          whi = ((E_bnds(g + 1) - Eo_cm) * ((awr + ONE) * (awr + ONE)) - Ein) / &
-                  (TWO * (awr + ONE) * sqrt(Ein * Eo_cm))
-          iwhi = binary_search(mu, size(mu), whi)
-          f = (whi - mu(iwhi)) / (mu(iwhi + 1) - mu(iwhi))
-          integhi = (ONE - f) * fmu(iwhi) + f * fmu(iwhi + 1)
-          uhi = whi * sqrt(Eo_cm / E_bnds(g + 1)) +  sqrt(Ein / E_bnds(g + 1)) * ap1inv
-        end if
-
-        ! Now we can do trapezoidal integration, beginning with bottom and top pts
-        if (iwlo == iwhi) then
-          do l = 1, order
-            distro(l, g) = 0.5_8 * ((whi - wlo) * &
-                           (integlo * calc_pn(l - 1, ulo) + &
-                            integhi * calc_pn(l - 1, uhi)))
-          end do
-        else
-          do l = 1, order
-            E = Eo_cm + (Ein + TWO * mu(iwlo + 1) * (awr+ONE) * sEiEocm) * ap1inv * ap1inv
-            ulo1 = mu(iwlo + 1) * sqrt(Eo_cm / E) + sqrt(Ein / E) * ap1inv
-            E = Eo_cm + (Ein + TWO * mu(iwhi) * (awr+ONE) * sEiEocm) * ap1inv * ap1inv
-            uhi1 = mu(iwhi) * sqrt(Eo_cm / E) + sqrt(Ein / E) * ap1inv
-            distro(l, g) = 0.5_8 * ((mu(iwlo + 1) - wlo) * &
-                           (integlo * calc_pn(l - 1, ulo) + &
-                            fmu(iwlo + 1) * calc_pn(l - 1, ulo1)) + &
-                           ((whi - mu(iwhi)) * &
-                           (integhi * calc_pn(l - 1, uhi) + &
-                            fmu(iwhi) * calc_pn(l - 1, uhi1))))
-          end do
-        end if
-
-        ! And the points inbetween
-        dmu = mu(2) - mu(1)
-        do iw = iwlo + 1, iwhi-1
-          E = Eo_cm + (Ein + TWO * mu(iw) * (awr+ONE) * sEiEocm) * ap1inv * ap1inv
-          ulo1 = mu(iw) * sqrt(Eo_cm / E) + sqrt(Ein / E) * ap1inv
-          E = Eo_cm + (Ein + TWO * mu(iw + 1) * (awr+ONE) * sEiEocm) * ap1inv * ap1inv
-          uhi1 = mu(iw + 1) * sqrt(Eo_cm / E) + sqrt(Ein / E) * ap1inv
-          do l = 1, order
-            distro(l, g) = distro(l, g) + 0.5_8 * dmu * &
-                           (fmu(iw) * calc_pn(l - 1, ulo1) + &
-                            fmu(iw + 1) * calc_pn(l - 1, uhi1))
-          end do
-        end do
-      end do
-
-    end subroutine law3_scatter_cm_leg
 
 !===============================================================================
 ! INTEGRATE_FILE4_CM_LEG Calculates the legendre Moments of a file 4 distrib.
@@ -1479,67 +1225,10 @@ module scattdata_header
     end subroutine law9_scatter_lab_leg
 
 !===============================================================================
-! INTEGRATE_FILE*_LAB_LEG Finds Legendre moments of the energy-angle
+! INTEGRATE_FILE6_LAB_LEG Finds Legendre moments of the energy-angle
 ! distribution in fEmu over each of the outgoing energy groups and stores the
-! result in distro. The FILE4 version does this for only an angular distribution,
-! while the FILE6 version does the same for a combined energy-angle distribution
+! result in distro.
 !===============================================================================
-
-    subroutine integrate_file4_lab_leg(fEmu, mu, interp, vals, &
-      bins, order, distro)
-
-      real(8), intent(in)  :: fEmu(:)        ! Energy-angle distro to act on
-      real(8), intent(in)  :: mu(:)          ! fEmu angular grid
-      real(8), intent(in)  :: interp(:,:)    ! interpolants of mu values
-      real(8), intent(in)  :: vals(:,:)      ! mu values
-      integer, intent(in)  :: bins(:,:)      ! indices of fEmu corresponding to
-                                             ! the group boundaries
-
-      integer, intent(in)  :: order          ! Number of moments to find
-      real(8), intent(out) :: distro(:,:)    ! Resultant integrated distribution
-
-      integer :: g                           ! outgoing energy group index
-      integer :: imu                         ! angle bin index
-      real(8) :: flo, fhi                    ! pdf low and high values
-
-      ! Integrating over each of the bins.
-      do g = 1, size(distro, dim = 2)
-        if (bins(MU_LO, g) /= bins(MU_HI, g)) then
-          ! Integrate part of the moment from the low point to the index above
-          ! the low point
-          flo = fEmu(bins(MU_LO, g)) + interp(MU_LO, g) * &
-            (fEmu(bins(MU_LO, g) + 1) - fEmu(bins(MU_LO, g)))
-          distro(:, g) = &
-            calc_int_pn_tablelin(order, vals(MU_LO, g), &
-            mu(bins(MU_LO, g) + 1), flo, fEmu(bins(MU_LO, g) + 1))
-          ! Integrate the inbetween pts
-          do imu = bins(MU_LO, g) + 1, bins(MU_HI, g) -1
-            distro(:, g) = distro(:, g) + &
-              calc_int_pn_tablelin(order, mu(imu), &
-              mu(imu + 1), fEmu(imu), fEmu(imu + 1))
-          end do
-          ! Integrate part of the moment from the index below the high point to
-          ! the high point
-          fhi = fEmu(bins(MU_HI, g)) + interp(MU_HI, g) * &
-            (fEmu(bins(MU_HI, g) + 1) - fEmu(bins(MU_HI, g)))
-          distro(:, g) = distro(:, g) + &
-            calc_int_pn_tablelin(order, mu(bins(MU_HI, g)), vals(MU_HI, g), &
-            fEmu(bins(MU_HI, g)), fhi)
-
-        else
-          ! The points are all within the same bin, can get flo and fhi directly
-          flo = fEmu(bins(MU_LO, g)) + interp(MU_LO, g) * &
-            (fEmu(bins(MU_LO, g) + 1) - fEmu(bins(MU_LO, g)))
-          fhi = fEmu(bins(MU_HI, g)) + interp(MU_HI, g) * &
-            (fEmu(bins(MU_HI, g) + 1) - fEmu(bins(MU_HI, g)))
-          distro(:, g) = distro(:, g) + &
-            calc_int_pn_tablelin(order, vals(MU_LO, g), vals(MU_HI, g), &
-            flo, fhi)
-
-        end if
-      end do
-
-    end subroutine integrate_file4_lab_leg
 
     subroutine integrate_file6_lab_leg(fEmu, mu, Eout, INTT, thispdf, &
       E_bins, order, distro, Enorm)
