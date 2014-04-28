@@ -401,8 +401,7 @@ module scattdata_header
         (Ein > this % E_bins(size(this % E_bins)))) then
         ! This is a catch-all, our energy was below the threshold or above the
         ! max group value,
-        ! distro should be set to zero and we shall just exit this function
-        distro = ZERO
+        ! distro should be left as zero and we shall just exit this function
         return
       else if (Ein >= nuc % energy(nuc % n_grid)) then
         ! We are above the global energy grid, so take the highest value
@@ -439,7 +438,6 @@ module scattdata_header
         ! its possible that a x/s was just set to 0 for this particular pt because
         ! its value was below the threshold (perhaps in a resonance dip?)
         if (sigs == ZERO) then
-          distro = ZERO
           return
         end if
         ! Search on the angular distribution's energy grid to find what energy
@@ -448,6 +446,13 @@ module scattdata_header
           iE = 1
         else
           iE = binary_search(this % E_grid, this % NE, Ein)
+        end if
+
+        ! Some reactions, ENDF-VII.0's O-16, and Ca-40 e.g., have two angdist Ein
+        ! points in a row being the same value. Check for this and just skip
+        ! the first point
+        if (this % E_grid(iE) >= this % E_grid(iE + 1)) then
+          return
         end if
 
         ! Interpolate the distribution on a logarithmic basis
@@ -890,11 +895,16 @@ module scattdata_header
       real(8) :: wlo, whi   ! CM mu-bounds of integration
       integer :: ilo, ihi   ! Grid locations of lo and hi pts
       integer :: iw         ! loop counter for w
+      real(8) :: ulo, uhi   ! Lab angles for input in legendre
       real(8) :: flo, fhi   ! f(w) at low and high points
       real(8) :: interp     ! Interpolation factor between w points in fw
       real(8) :: onepawr2   ! (1+AWR)^2
       real(8) :: onepR2     ! ( 1 + R^2)
       real(8) :: inv2REin   ! 1/(2*R*Ein)
+      real(8) :: dw         ! Bin spacing of w array
+      integer :: l          ! Legendre moment index
+
+      dw = w(2) - w(1)
 
       R = awr * sqrt((ONE + Q * (awr + ONE) / (awr * Ein)))
       onepawr2 = (ONE + awr)**2
@@ -910,7 +920,7 @@ module scattdata_header
         else if (wlo > ONE) then
           wlo = ONE
         end if
-        ilo = binary_search(w, size(w), wlo)
+        ilo = int((wlo + ONE) / dw) + 1
         ! Repeat for high end
         whi = (E_bins(g + 1) * onepawr2 - Ein * onepR2) * inv2REin
         ! Check to make sure whi is in bounds
@@ -919,7 +929,7 @@ module scattdata_header
         else if (whi > ONE) then
           whi = ONE
         end if
-        ihi = binary_search(w, size(w), whi)
+        ihi = int((whi + ONE) / dw) + 1
 
         ! Now we can skip groups we do not need to consider.
         ! We will cycle if wlo = - 1 since that means we have not yet reached
@@ -945,22 +955,43 @@ module scattdata_header
         if (ilo /= ihi) then
           ! Integrate part of the moment from the low point to the index above
           ! the low point
-          distro(:, g) = &
-            calc_int_pn_tablelin(order, wlo, w(ilo + 1), flo, fw(ilo + 1))
+          ulo = tolab(R, wlo)
+          uhi = tolab(R, w(ilo + 1))
+          do l = 1, order
+            distro(l, g) = (w(ilo + 1) - wlo) * (flo * calc_pn(l - 1, ulo) + &
+              fw(ilo + 1) * calc_pn(l - 1, uhi))
+          end do
           ! Integrate the inbetween pts
           do iw = ilo + 1, ihi -1
-            distro(:, g) = distro(:, g) + &
-              calc_int_pn_tablelin(order, w(iw), w(iw + 1), fw(iw), fw(iw + 1))
+            ulo = uhi
+            uhi = tolab(R, w(iw + 1))
+            do l = 1, order
+              distro(l, g) = distro(l, g) + (w(iw + 1) - w(iw)) * &
+                (fw(iw) * calc_pn(l - 1, ulo) + fw(iw + 1) * calc_pn(l - 1, uhi))
+            end do
           end do
           ! Integrate part of the moment from the index below the high point to
           ! the high point
-          distro(:, g) = distro(:, g) + &
-            calc_int_pn_tablelin(order, w(ihi), whi, fw(ihi), fhi)
+          ulo = uhi
+          uhi = tolab(R, whi)
+          do l = 1, order
+            distro(l, g) = distro(l, g) + (whi - w(ihi)) * &
+              (fw(ihi) * calc_pn(l - 1, ulo) + fhi * calc_pn(l - 1, uhi))
+          end do
         else
           ! The points are all within the same bin, can get flo and fhi directly
-          distro(:, g) = distro(:, g) + &
-            calc_int_pn_tablelin(order, wlo, whi, flo, fhi)
+          ulo = tolab(R, wlo)
+          uhi = tolab(R, whi)
+          ulo = (ONE + R * wlo) / sqrt(ONE + R * R + TWO * R * wlo)
+          uhi = (ONE + R * whi) / sqrt(ONE + R * R + TWO * R * whi)
+          do l = 1, order
+            distro(l, g) = (whi - wlo) * &
+              (flo * calc_pn(l - 1, ulo) + fhi * calc_pn(l - 1, uhi))
+          end do
         end if
+
+        ! Now perform multiplication by 1/2, the last step of trapezoidal rule
+        distro(:, g) = 0.5_8 * distro(:, g)
 
       end do
 
@@ -1331,6 +1362,42 @@ module scattdata_header
 !===============================================================================
 
 !!! NOT YET IMPLEMENTED
+
+!===============================================================================
+! TOLAB Calculates the Lab angle u given the CM angle w and reduced mass R
+!===============================================================================
+
+  pure function tolab(R, w) result(u)
+    real(8), intent(in) :: R ! Reduced Mass
+    real(8), intent(in) :: w ! Center-of-Mass Angle
+    real(8)             :: u ! Resultant Lab angle
+
+    real(8) :: f ! Interpolant
+
+    if (R > ONE) then
+      u = (ONE + R * w) / sqrt(ONE + R * R + TWO * R * w)
+    else if (R == ONE) then
+      ! divide by zero error at w=-1, avoid this
+      if (w == -ONE) then
+        u = -ONE
+      else
+        u = (ONE + R * w) / sqrt(ONE + R * R + TWO * R * w)
+      end if
+    else ! R < ONE
+      if (w < -R) then
+        ! Avoid unphysical results for w=[-1,-R]:
+        ! Assume a linear shape to u(w) from w=-1 to w=-R
+        ! First find u(-R)
+        u = sqrt(ONE - R * R)
+        ! Now do the linear interpolation
+        f = (w - (-ONE)) / (-R - ONE)
+        u = (ONE - f) * (-ONE) + f * u
+      else
+        u = (ONE + R * w) / sqrt(ONE + R * R + TWO * R * w)
+      end if
+    end if
+
+  end function tolab
 
 !===============================================================================
 ! IS_VALID_SCATTER determines if a given MT number is that of a scattering event
