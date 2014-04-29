@@ -109,6 +109,8 @@ module scatt
           inittedSD => rxn_data(i_rxn)
           rxn => mySD % rxn
           edist => rxn % edist
+          ! Find the threshold of the inelastic reactions so we can tell
+          ! where to begin placing additional points for interpolation.
           if ((rxn % MT >= N_N1) .and. (rxn % MT < N_NC)) then
             if (edist % data(1) < inel_thresh) then
               inel_thresh = edist % data(1)
@@ -497,8 +499,6 @@ module scatt
       integer :: iE_pct, last_iE_pct ! Current and previous pct complete
       real(8), allocatable :: temp_scatt(:,:) ! calculated scattering matrix
       integer :: tid                 ! Thread id
-      real(8) :: outsum              ! Outgoing energy transfer probability sum
-      integer :: g                   ! group index
 
       groups = size(E_bins) - 1
       NE = size(E_grid)
