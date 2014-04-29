@@ -526,7 +526,7 @@ module ndpp_class
 
           ! Setup output for nuclear data library
           call init_library(self, nuc_lib_name, nuc % name, nuc % kT, &
-                            nuc % fissionable)
+                            fiss=nuc % fissionable, sab=.false.)
 
           ! display message
           if (.not. mpi_enabled) then
@@ -640,7 +640,7 @@ module ndpp_class
           end if
 
           ! Setup output for nuclear data library
-          call init_library(self, nuc_lib_name, sab % name, sab % kT)
+          call init_library(self, nuc_lib_name, sab % name, sab % kT, sab=.true.)
 
           if (.not. mpi_enabled) then
             ! display message
@@ -678,9 +678,12 @@ module ndpp_class
             end if
           end if
 
+          ! Get the energy group boundary indices in self % Ein for printing
           allocate(group_index(size(self % energy_bins)))
-          do g = 1, size(group_index)
-            if (self % energy_bins(g) > self % Ein(size(self % Ein))) then
+          do g = 1, size(self % energy_bins)
+            if (self % energy_bins(g) < self % Ein(1)) then
+              group_index(g) = 1
+            else if (self % energy_bins(g) > self % Ein(size(self % Ein))) then
               group_index(g) = size(self % Ein)
             else
               group_index(g) = binary_search(self % Ein, size(self % Ein), &
@@ -1126,12 +1129,13 @@ module ndpp_class
 ! options and nuclidic information and writes the header lines as appropriate.
 !===============================================================================
 
-    subroutine init_library(this_ndpp, filename, name, kT, fiss)
+    subroutine init_library(this_ndpp, filename, name, kT, fiss, sab)
       class(nuclearDataPreProc), intent(in) :: this_ndpp ! NDPP data
       character(*), intent(in)              :: filename  ! output filename
       character(*), intent(in)              :: name      ! Library name
       real(8), intent(in)                   :: kT        ! Library Temperature
       logical, optional, intent(in)         :: fiss      ! Is it fissionable?
+      logical, optional, intent(in)         :: sab       ! Is it an S(a,b) table?
 
       character(MAX_LINE_LEN) :: line
       integer                 :: chi_present_int, nuscatter_int
@@ -1151,7 +1155,7 @@ module ndpp_class
       ! First convert the logical value of nuscatter & Chi Present to an integer.
       ! It seemas as if a type-cast is not in the standard, so the next
       ! if-then  block will explicitly do the cast.
-      if (this_ndpp % nuscatter) then
+      if (this_ndpp % nuscatter .and. (.not. sab)) then
         nuscatter_int = 1
       else
         nuscatter_int = 0
