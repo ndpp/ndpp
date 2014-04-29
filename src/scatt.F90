@@ -135,27 +135,10 @@ module scatt
       ! Build our incoming energy grid to use. This will be common to all
       ! reaction channels and they will be combined on to this grid for
       ! publishing to the library.
-      !call create_Ein_grid(rxn_data, energy_bins, nuc % energy, nuc % awr, &
-      !                     inel_thresh, E_grid)
+      call create_Ein_grid(rxn_data, energy_bins, nuc % energy, nuc % awr, &
+                           inel_thresh, E_grid)
 
-      ! Add in incoming energies from all reaction channel distributions to
-      ! the Ein grid
-      call combine_Eins(rxn_data, E_grid)
-      ! Add points to aid in interpolation if elastic scattering points
-      call add_elastic_Eins(nuc % awr, energy_bins, E_grid)
-      ! Add EXTEND_PTS incoming energy points per group.
-      call add_pts_per_group(energy_bins, E_grid)
-      ! Expand the Incoming energy grid (E_grid) to include points which will
-      ! improve interpolation of inelastic level scatter results.
-      ! These results are kind of like stair functions but with
-      ! near-linear (depends on f(mu)) ramps inbetween each `step'.  For now
-      ! we will combat this by putting EXTEND_PTS per current point above the
-      ! threshold for inelastic level scatter to begin
-      call add_inelastic_Eins(inel_thresh, E_grid)
-      ! Finally add in one point above energy_bins to give MC code something to
-      ! interpolate to if Ein==E_bins(size(E_bins))
-      call add_one_more_point(E_grid)
-      ! Now combine the results on to E_grid
+      ! Now combine the results on to this E_grid
       call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
         energy_bins, nuscatt, scatt_mat, nuscatt_mat)
 
@@ -182,6 +165,7 @@ module scatt
       real(8), allocatable, intent(inout) :: Ein(:)      ! Incoming Energy Grid
 
       integer :: iEmax
+
       ! Create energy grid to use after limiting nuc_grid to
       ! the maximum energy in E_bins
       if (E_bins(size(E_bins)) >= nuc_grid(size(nuc_grid))) then
@@ -578,21 +562,6 @@ module scatt
 
           if (nuscatt) then
             nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) / norm_tot
-          end if
-
-          ! Finally, if the number of mu points are too few, the sum of outgoing
-          ! probabilities (sum of P0) will not be 1.0 as it should be.
-          ! Therefore, normalize the results accordingly.
-          outsum = sum(scatt_mat(1, :, iE))
-          if (outsum /= ZERO) then
-            scatt_mat(:, :, iE) = scatt_mat(:, :, iE) / outsum
-          end if
-
-          if (nuscatt) then
-            outsum = sum(nuscatt_mat(1, :, iE))
-            if (outsum /= ZERO) then
-              nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) / outsum
-            end if
           end if
 
         else

@@ -947,9 +947,14 @@ module scattdata_header
         ! Do low
         interp = (wlo - w(ilo)) / (w(ilo + 1) - w(ilo))
         flo = (ONE - interp) * fw(ilo) + interp * fw(ilo + 1)
+
         ! Do high
-        interp = (whi - w(ihi)) / (w(ihi + 1) - w(ihi))
-        fhi = (ONE - interp) * fw(ihi) + interp * fw(ihi + 1)
+        if (ihi == size(w)) then
+          fhi = fw(size(w))
+        else
+          interp = (whi - w(ihi)) / (w(ihi + 1) - w(ihi))
+          fhi = (ONE - interp) * fw(ihi) + interp * fw(ihi + 1)
+        end if
 
         ! Now we simply integrate f(w) * Pl(mu(w))dw between wlo and whi
         if (ilo /= ihi) then
