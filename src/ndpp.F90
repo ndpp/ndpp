@@ -231,10 +231,6 @@ module ndpp_class
         call fatal_error()
       end if
 
-      if (self % energy_bins(1) == ZERO) then
-        self % energy_bins(1) = MIN_E_BIN
-      end if
-
       ! Get the output type, if none is provided, the default is set by the class.
       call lower_case(output_format_)
       if (len_trim(output_format_) > 0) then ! one is provided, make sure it is correct
@@ -565,8 +561,12 @@ module ndpp_class
           ! Get the energy group boundary indices in self % Ein for printing
           allocate(group_index(size(self % energy_bins)))
           do g = 1, size(self % energy_bins)
-            group_index(g) = binary_search(self % Ein, size(self % Ein), &
-                                           self % energy_bins(g))
+            if (self % energy_bins(g) < self % Ein(1)) then
+              group_index(g) = 1
+            else
+              group_index(g) = binary_search(self % Ein, size(self % Ein), &
+                                             self % energy_bins(g))
+            end if
           end do
 
           ! Print the results to file

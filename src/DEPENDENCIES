@@ -27,6 +27,8 @@ ace.o: output.o
 ace.o: set_header.o
 ace.o: string.o
 
+array_merge.o: constants.o
+
 chidata_header.o: ace_header.o
 chidata_header.o: constants.o
 chidata_header.o: dict_header.o
@@ -54,7 +56,6 @@ freegas.o: constants.o
 freegas.o: error.o
 freegas.o: global.o
 freegas.o: legendre.o
-freegas.o: search.o
 freegas.o: string.o
 
 global.o: ace_header.o

@@ -104,7 +104,7 @@ module scatt
         mySD => rxn_data(i_rxn)
         ! Convert the angular distributions from the ACE data to Tabular format
         call mySD % convert_distro()
-        ! Get the threshold for inelastic collisions
+        ! Also get the threshold for inelastic collisions
         if (mySD % is_init) then
           inittedSD => rxn_data(i_rxn)
           rxn => mySD % rxn

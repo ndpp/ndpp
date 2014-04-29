@@ -1,5 +1,7 @@
 module array_merge
 
+  use constants, only: MIN_EIN
+
   implicit none
 
   contains
@@ -45,7 +47,7 @@ module array_merge
             ! Even more desirable, perhaps, would be interpolating between
             ! a suitably low, but non-zero Ein, and the next highest Ein
             if (data1(idata1) == 0.0_8) then
-              merged(ires) = data2(idata2) * 1.0E-3_8
+              merged(ires) = MIN_EIN
             else
               merged(ires) = data1(idata1)
             end if
@@ -64,7 +66,7 @@ module array_merge
             ! Even more desirable, perhaps, would be interpolating between
             ! a suitably low, but non-zero Ein, and the next highest Ein
             if (data2(idata2) == 0.0_8) then
-              merged(ires) = data1(idata1) * 1.0E-3_8
+              merged(ires) = MIN_EIN
             else
               merged(ires) = data2(idata2)
             end if

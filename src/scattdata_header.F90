@@ -945,8 +945,12 @@ module scattdata_header
 
         ! Get corresponding values of fw at wlo and whi
         ! Do low
-        interp = (wlo - w(ilo)) / (w(ilo + 1) - w(ilo))
-        flo = (ONE - interp) * fw(ilo) + interp * fw(ilo + 1)
+        if (ilo == size(w)) then
+          flo = fw(size(w))
+        else
+          interp = (wlo - w(ilo)) / (w(ilo + 1) - w(ilo))
+          flo = (ONE - interp) * fw(ilo) + interp * fw(ilo + 1)
+        end if
 
         ! Do high
         if (ihi == size(w)) then
@@ -1043,6 +1047,9 @@ module scattdata_header
       real(8) :: ap1inv     ! 1/(AWR+1)
       real(8), allocatable :: fmu(:), mu_l(:)
       real(8), allocatable :: pdf(:) ! Eout PDF
+      real(8) :: deltamu    ! mu bin spacing
+
+      deltamu = mu(2) - mu(1)
 
       ! First lets normalize the PDF
       allocate(pdf(size(Eout)))
@@ -1142,8 +1149,14 @@ module scattdata_header
               mu_c = (mu_l(imu) - c) * J
               if (abs(mu_c) > ONE) cycle
             end if
-            imu_c = binary_search(mu, size(mu), mu_c)
-            f = (mu_c - mu(imu_c)) / (mu(imu_c + 1) - mu(imu_c))
+
+            if (mu_c == ONE) then
+              imu_c = size(mu) - 1
+              f = ONE
+            else
+              imu_c = int((mu_c + ONE) / deltamu) + 1
+              f = (mu_c - mu(imu_c)) / (mu(imu_c + 1) - mu(imu_c))
+            end if
             ! Do lower Eout point
             proby = (ONE - fEo) * &
               ((ONE - f) * fEmu(imu_c, iEo) + f * fEmu(imu_c + 1, iEo))

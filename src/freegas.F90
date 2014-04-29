@@ -4,7 +4,6 @@ module freegas
   use error,            only: fatal_error, warning
   use global,           only: nuclides, message
   use legendre
-  use search,           only: binary_search
   use string,           only: to_str
 
   implicit none
@@ -33,6 +32,7 @@ module freegas
     real(8) :: Elo, Ehi      ! Low and High bounds of Eout integration
                              ! for each grp
     real(8) :: alphaEin      ! Eout lower limit for target-at-rest elastic
+    real(8) :: Ebottom       ! Lower value to use in place of E_bins(g)
 
     ! This routine does the double integration of the free-gas kernel
     ! using an adaptive simpsons integration scheme for both Eout and mu.
@@ -70,10 +70,17 @@ module freegas
         ! We do this because it is essentially free anyways (the tails
         ! should be smooth and thus very few points are needed), and has
         ! led to small but sensible improvements in accuracy.
+        ! A slight adjustment is necessary if E_bins(g) is ZERO, however,
+        ! for that we will just use 1% of Elo
+        if (E_bins(g) == ZERO) then
+          Ebottom = 0.01_8 * Elo
+        else
+          Ebottom = E_bins(g)
+        end if
         do l = 1, order
           distro(l, g) = &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
-            E_bins(g), Elo) + &
+            Ebottom, Elo) + &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
             Ehi, E_bins(g + 1))
         end do
@@ -109,6 +116,13 @@ module freegas
         end do
 
       else ! What the heck, do the integral anyways, should be pretty cheap.
+        ! A slight adjustment is necessary if E_bins(g) is ZERO, however,
+        ! for that we will just use a suitably small number
+        if (E_bins(g) == ZERO) then
+          Ebottom = 1E-7_8 * (E_bins(g + 1) - E_bins(g))
+        else
+          Ebottom = E_bins(g)
+        end if
         do l = 1, order
           distro(l, g) = &
             adaptiveSimpsons_Eout(A, kT, Ein, l - 1, fEmu, mu, &
@@ -411,6 +425,9 @@ module freegas
     integer :: i                    ! Global mu index
     real(8) :: interp, fEmu_val     ! interpolation fraction and interpolated value
                                     ! of the angular distribution
+    real(8) :: dmu   ! Delta-mu in global_mu
+
+    dmu = global_mu(2) - global_mu(1)
 
     ! Find fEmu val to use
     if (mu <= global_mu(1)) then
@@ -418,7 +435,7 @@ module freegas
       else if (mu >= global_mu(size(global_mu))) then
         i = size(global_mu) - 1
       else
-        i = binary_search(global_mu, size(global_mu), mu)
+        i = int((mu + ONE) / dmu) + 1
       end if
     interp = (mu - global_mu(i)) / (global_mu(i + 1) - global_mu(i))
     fEmu_val = (ONE - interp) * fEmu(i) + interp * fEmu(i + 1)
