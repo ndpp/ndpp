@@ -289,7 +289,7 @@ module scatt
 
       alpha = ((awr - ONE) / (awr + ONE))**2
 
-      allocate(new_pts(EXTEND_PTS * size(E_bins) - 1))
+      allocate(new_pts(2 * EXTEND_PTS * size(E_bins) - 1))
       new_pts = ZERO
 
       lo_shift = kT * (awr + ONE) / awr
