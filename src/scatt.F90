@@ -53,6 +53,9 @@ module scatt
       real(8), allocatable     :: mu_out(:) ! The tabular output mu grid
       type(ScattData), pointer :: inittedSD => null()
       real(8) :: inel_thresh
+      real(8) :: cutoff
+
+      cutoff = ZERO
 
       ! This routine will parse through each nuc % reaction entry.
       ! For each, it will determine if the rxn is a scattering reaction, and if
@@ -84,7 +87,6 @@ module scatt
       inel_thresh = energy_bins(size(energy_bins))
       do i_rxn = 1, nuc % n_reaction
         i_nested_rxn = i_nested_rxn + 1
-
         rxn => nuc % reactions(i_rxn)
         mySD => rxn_data(i_nested_rxn)
         edist => rxn % edist
@@ -120,6 +122,8 @@ module scatt
             if (mySD % E_grid(1) < inel_thresh) then
               inel_thresh = mySD % E_grid(1)
             end if
+          else if (rxn % MT == ELASTIC) then
+            cutoff = mySD % freegas_cutoff
           end if
         end if
         nullify(mySD)
@@ -138,7 +142,7 @@ module scatt
       ! reaction channels and they will be combined on to this grid for
       ! publishing to the library.
       call create_Ein_grid(rxn_data, energy_bins, nuc % energy, nuc % awr, &
-                           inel_thresh, E_grid)
+                           nuc % kT, cutoff, inel_thresh, E_grid)
 
       ! Now combine the results on to this E_grid
       call calc_scatt_grid(nuc, mu_out, rxn_data, E_grid, inittedSD % order, &
@@ -158,11 +162,14 @@ module scatt
 ! and add_one_more_point.
 !===============================================================================
 
-    subroutine create_Ein_grid(rxn_data, E_bins, nuc_grid, awr, thresh, Ein)
+    subroutine create_Ein_grid(rxn_data, E_bins, nuc_grid, awr, kT, cutoff, &
+                               thresh, Ein)
       type(ScattData), target, intent(in) :: rxn_data(:) ! Reaction data
       real(8), intent(in)                 :: E_bins(:)   ! Group structure
       real(8), allocatable, intent(in)    :: nuc_grid(:) ! Nuclidic Ein points
+      real(8), intent(in)                 :: kT          ! Library Temperature
       real(8), intent(in)                 :: awr         ! Atomic weight ratio
+      real(8), intent(in)                 :: cutoff      ! Free Gas cutoff E
       real(8), intent(in)                 :: thresh      ! Inelastic threshold
       real(8), allocatable, intent(inout) :: Ein(:)      ! Incoming Energy Grid
 
@@ -183,7 +190,7 @@ module scatt
       call combine_Eins(rxn_data, Ein)
 
       ! Add points to aid in interpolation if elastic scattering points
-      call add_elastic_Eins(awr, E_bins, Ein)
+      call add_elastic_Eins(awr, kT, cutoff, E_bins, Ein)
 
       ! Add EXTEND_PTS incoming energy points per group.
       call add_pts_per_group(E_bins, Ein)
@@ -260,8 +267,10 @@ module scatt
 ! transitions.
 !===============================================================================
 
-    subroutine add_elastic_Eins(awr, E_bins, Ein)
+    subroutine add_elastic_Eins(awr, kT, cutoff, E_bins, Ein)
       real(8), intent(in)                 :: awr       ! Atomic Weight Ratio
+      real(8), intent(in)                 :: kT        ! Library Temperature
+      real(8), intent(in)                 :: cutoff    ! Free-Gas Cutoff Energy
       real(8), intent(in)                 :: E_bins(:) ! Energy groups
       real(8), allocatable, intent(inout) :: Ein(:)    ! Incoming Energy Grid
 
@@ -270,9 +279,10 @@ module scatt
       integer              :: i, g        ! EXTEND_PTS and Group loop indices
       real(8)              :: alpha
       integer              :: num_pts
-      real(8)              :: Ehi
-      real(8)              :: newE      ! Current new incoing energy point
-      real(8)              :: dE        ! interval between each Ein point
+      real(8)              :: Ehi, Elo
+      real(8)              :: newE       ! Current new incoing energy point
+      real(8)              :: dElo, dEhi ! interval between each Ein point
+      real(8)              :: lo_shift
 
       allocate(old_grid(size(Ein)))
       old_grid = Ein
@@ -282,15 +292,33 @@ module scatt
       allocate(new_pts(EXTEND_PTS * size(E_bins) - 1))
       new_pts = ZERO
 
+      lo_shift = kT * (awr + ONE) / awr
+      dEhi = log(ONE / alpha) / real(EXTEND_PTS, 8)
+
       num_pts = 0
       do g = 1, size(E_bins) - 1
+        Ehi = E_bins(g + 1)
+
+        if (Ehi <= cutoff) then
+          dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
+          Elo = E_bins(g)
+          do i = -EXTEND_PTS, 1
+            newE = Ehi * exp(real(i, 8) * dElo)
+            if (newE >= Elo) then
+              num_pts = num_pts + 1
+              new_pts(num_pts) = newE
+            else
+              exit
+            end if
+          end do
+        end if
+
         if (E_bins(g) == ZERO) then
           cycle
         end if
-        dE = log(ONE / alpha) / real(EXTEND_PTS, 8)
-        Ehi = E_bins(g + 1)
+
         do i = 1, EXTEND_PTS
-          newE = E_bins(g) * exp(real(i, 8) * dE)
+          newE = E_bins(g) * exp(real(i, 8) * dEhi)
           if (newE <= Ehi) then
             num_pts = num_pts + 1
             new_pts(num_pts) = newE
