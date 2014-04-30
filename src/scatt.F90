@@ -289,7 +289,7 @@ module scatt
 
       alpha = ((awr - ONE) / (awr + ONE))**2
 
-      allocate(new_pts(2 * EXTEND_PTS * size(E_bins) - 1))
+      allocate(new_pts(EXTEND_PTS * size(E_bins) - 1))
       new_pts = ZERO
 
       lo_shift = kT * (awr + ONE) / awr
@@ -308,14 +308,27 @@ module scatt
               num_pts = num_pts + 1
               new_pts(num_pts) = newE
             else
-              exit
+              cycle
             end if
           end do
         end if
+      end do
 
+      call merge(new_pts(1: num_pts), old_grid, Ein)
+      deallocate(new_pts)
+      deallocate(old_grid)
+      allocate(old_grid(size(Ein)))
+      old_grid = Ein
+      allocate(new_pts(EXTEND_PTS * size(E_bins) - 1))
+      new_pts = ZERO
+      num_pts = 0
+
+      do g = 1, size(E_bins) - 1
         if (E_bins(g) == ZERO) then
           cycle
         end if
+
+        Ehi = E_bins(g + 1)
 
         do i = 1, EXTEND_PTS
           newE = E_bins(g) * exp(real(i, 8) * dEhi)

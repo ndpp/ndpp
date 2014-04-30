@@ -454,7 +454,7 @@ module freegas
     ! Find the argument to the exponent in S(a,b), for testing against
     ! sab_min
     fgk = -(alpha + beta)**2 / (4.0_8 * alpha) ! The sab exp argument
-    if (fgk <= -2300.0_8) then
+    if (fgk <= -708.0_8) then
       ! This is to avoid a floating point exception b/c exp(fgk) was too small
       ! Really would be better treated by putting a maximum Eout value
       ! on our iterations.
