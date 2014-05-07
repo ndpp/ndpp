@@ -18,16 +18,15 @@ module sab
 ! collisions and places the result in sab_int
 !===============================================================================
 
-    subroutine integrate_sab_el(sab, ein_grid, e_bins, scatt_type, order, &
-                                sab_int, sig)
+    subroutine integrate_sab_el(sab, ein_grid, e_bins, scatt_type, order, sab_int)
       type(SAlphaBeta), pointer, intent(in) :: sab            ! Nuclide
       real(8), intent(in)                   :: ein_grid(:)    ! Pre-set incoming E grid
       real(8), intent(in)                   :: e_bins(:)      ! Energy groups
       integer, intent(in)                   :: scatt_type     ! Scattering output type
       integer, intent(in)                   :: order          ! Scattering data order
       real(8), intent(inout)                :: sab_int(:,:,:) ! Integrated SAB data [L, G, NEin]
-      real(8), allocatable, intent(inout)   :: sig(:)         ! Micros. x/s
 
+      real(8) :: sig       ! Micros. x/s
       integer :: iEin      ! incoming energy counter
       integer :: groups    ! shorthand for number of energy groups
       integer :: g, imu, l ! indices for: group, angle, legendre order
@@ -40,12 +39,9 @@ module sab
       ! Initialize data
       sab_int = ZERO
       groups = size(e_bins) - 1
-      allocate(sig(size(ein_grid)))
-      sig = ZERO
 
-      ! We have to exit if there are no elastic reactions
+      ! Exit if there are no elastic reactions
       if (sab % threshold_elastic == ZERO) then
-        sig = ZERO
         return
       end if
 
@@ -59,10 +55,8 @@ module sab
         Ein = ein_grid(iEin)
         ! Find the index and interpolation factor
         if (Ein < sab % elastic_e_in(1)) then
-          sig(iEin) = ZERO
           cycle
         else if (Ein >= sab % threshold_elastic) then
-          sig(iEin) = ZERO
           cycle
         else
           isab = binary_search(sab % elastic_e_in, sab % n_elastic_e_in, Ein)
@@ -82,9 +76,9 @@ module sab
 
         ! Get x/s for normalizing
         if (sab % elastic_mode == SAB_ELASTIC_EXACT) then
-          sig(iEin) = sab % elastic_P(isab) / Ein
+          sig = sab % elastic_P(isab) / Ein
         else if (sab % elastic_mode == SAB_ELASTIC_DISCRETE) then
-          sig(iEin) = (ONE - f) * sab % elastic_P(isab) + &
+          sig = (ONE - f) * sab % elastic_P(isab) + &
             f * sab % elastic_P(isab + 1)
         end if
 
@@ -100,8 +94,7 @@ module sab
             ! Find our interpolated mu
             mu = (ONE - f) * sab % elastic_mu(imu, isab) + &
               f * sab % elastic_mu(imu, isab + 1)
-            ! Probably could write a function to do this using Legendre recursion
-            ! avoiding the loop over order. Oh well, this should be pretty cheap
+            ! And add the discrete point to our integration
             do l = 1, order + 1
               sab_int(l, g, iEin) = sab_int(l, g, iEin) + wgt * &
                 calc_pn(l - 1, mu)
@@ -110,7 +103,7 @@ module sab
         else
           ! pass
         end if
-        sab_int(:, :, iEin) = sig(iEin) * sab_int(:, :, iEin)
+        sab_int(:, :, iEin) = sig * sab_int(:, :, iEin)
       end do
 
     end subroutine integrate_sab_el
@@ -122,22 +115,21 @@ module sab
 !===============================================================================
 
     subroutine integrate_sab_inel(sab, ein_grid, e_bins, scatt_type, order, &
-                                  sab_int, sig)
+                                  sab_int)
       type(SAlphaBeta), pointer, intent(in) :: sab            ! Nuclide
       real(8), intent(in)                   :: ein_grid(:)    ! Pre-set incoming E grid
       real(8), intent(in)                   :: e_bins(:)      ! Energy groups
       integer, intent(in)                   :: scatt_type     ! Scattering output type
       integer, intent(in)                   :: order          ! Scattering data order
       real(8), intent(inout)                :: sab_int(:,:,:) ! Integrated SAB data [L, G, NEin]
-      real(8), allocatable, intent(inout)   :: sig(:)         ! Micros. x/s
 
       if ((sab % secondary_mode == SAB_SECONDARY_EQUAL) .or. &
           (sab % secondary_mode == SAB_SECONDARY_SKEWED)) then
           call integrate_sab_inel_disc(sab, ein_grid, e_bins, scatt_type, &
-                                       order, sab_int, sig)
+                                       order, sab_int)
       else if (sab % secondary_mode == SAB_SECONDARY_CONT) then
           call integrate_sab_inel_cont(sab, ein_grid, e_bins, scatt_type, &
-                                       order, sab_int, sig)
+                                       order, sab_int)
       end if
     end subroutine integrate_sab_inel
 
@@ -148,15 +140,15 @@ module sab
 !===============================================================================
 
     subroutine integrate_sab_inel_disc(sab, ein_grid, e_bins, scatt_type, &
-                                       order, sab_int, sig)
+                                       order, sab_int)
       type(SAlphaBeta), pointer, intent(in) :: sab            ! Nuclide
       real(8), intent(in)                   :: ein_grid(:)    ! Pre-set incoming E grid
       real(8), intent(in)                   :: e_bins(:)      ! Energy groups
       integer, intent(in)                   :: scatt_type     ! Scattering output type
       integer, intent(in)                   :: order          ! Scattering data order
       real(8), intent(inout)                :: sab_int(:,:,:) ! Integrated SAB data [L, G, NEin]
-      real(8), allocatable, intent(inout)   :: sig(:)         ! Micros. x/s
 
+      real(8) :: sig       ! Micros. x/s
       integer :: iEin      ! incoming energy counter
       integer :: iEout     ! outgoing energy counter
       integer :: groups    ! shorthand for number of energy groups
@@ -170,7 +162,6 @@ module sab
       ! Initialize data
       sab_int = ZERO
       groups = size(e_bins) - 1
-      allocate(sig(size(ein_grid)))
 
       ! First lets set up our weighting
       if (sab % secondary_mode == SAB_SECONDARY_EQUAL) then
@@ -204,7 +195,6 @@ module sab
           isab = 1
           f = ZERO
         else if (Ein >= sab % threshold_inelastic) then
-          sig(iEin) = ZERO
           cycle
         else
           isab = binary_search(sab % inelastic_e_in, sab % n_inelastic_e_in, Ein)
@@ -213,7 +203,7 @@ module sab
         end if
 
         ! Get x/s for normalizing
-        sig(iEin) = (ONE - f) * sab % inelastic_sigma(isab) + &
+        sig = (ONE - f) * sab % inelastic_sigma(isab) + &
           f * sab % inelastic_sigma(isab + 1)
 
         ! Integrate over outgoing energy (outer) and outgoing mu (inner)
@@ -248,7 +238,7 @@ module sab
             end do
           end do
         end do
-        sab_int(:, :, iEin) = sig(iEin) * sab_int(:, :, iEin)
+        sab_int(:, :, iEin) = sig * sab_int(:, :, iEin)
       end do
     end subroutine integrate_sab_inel_disc
 
@@ -259,15 +249,15 @@ module sab
 !===============================================================================
 
     subroutine integrate_sab_inel_cont(sab, ein_grid, e_bins, scatt_type, &
-                                       order, sab_int, sig)
+                                       order, sab_int)
       type(SAlphaBeta), pointer, intent(in) :: sab            ! Nuclide
       real(8), intent(in)                   :: ein_grid(:)    ! Pre-set incoming E grid
       real(8), intent(in)                   :: e_bins(:)      ! Energy groups
       integer, intent(in)                   :: scatt_type     ! Scattering output type
       integer, intent(in)                   :: order          ! Scattering data order
       real(8), intent(inout)                :: sab_int(:,:,:) ! Integrated SAB data [L, G, NEin]
-      real(8), allocatable, intent(inout)   :: sig(:)         ! Micros. x/s
 
+      real(8) :: sig       ! Micros. x/s
       integer :: iEin      ! incoming energy counter
       integer :: groups    ! shorthand for number of energy groups
       integer :: g, imu, l ! indices for: group, angle, legendre order
@@ -286,8 +276,6 @@ module sab
       ! Initialize data
       sab_int = ZERO
       groups = size(e_bins) - 1
-      allocate(sig(size(ein_grid)))
-      sig = ZERO
       allocate(distro(order + 1, groups, sab % n_inelastic_e_in))
       distro = ZERO
 
@@ -298,7 +286,7 @@ module sab
 
       ! So, start with the energy-angle double integral of the S(a,b) data
       !$omp parallel do schedule(dynamic,20) num_threads(omp_threads) &
-      !$omp default(private),shared(sab,groups,order,e_bins,distro,sab_int,sig)
+      !$omp default(private),shared(sab,groups,order,e_bins,distro,sab_int)
       do iEin = 1, sab % n_inelastic_e_in
         NEout = sab % inelastic_data(iEin) % n_e_out
         allocate(pdf(NEout))
@@ -397,11 +385,10 @@ module sab
           isab = 1
           f = ZERO
           ! Get x/s for normalizing
-          sig(iEin) = sab % inelastic_sigma(isab)
+          sig = sab % inelastic_sigma(isab)
           ! Find the sab integral
-          sab_int(:,:,iEin) = distro(:,:,isab) * sig(iEin)
+          sab_int(:,:,iEin) = distro(:,:,isab) * sig
         else if (Ein >= sab % threshold_inelastic) then
-          sig(iEin) = ZERO
           sab_int(:,:,iEin) = ZERO
           cycle
         else
@@ -409,11 +396,11 @@ module sab
           f = (Ein - sab % inelastic_e_in(isab)) / &
             (sab % inelastic_e_in(isab + 1) - sab % inelastic_e_in(isab))
           ! Get x/s for normalizing
-          sig(iEin) = (ONE - f) * sab % inelastic_sigma(isab) + &
+          sig = (ONE - f) * sab % inelastic_sigma(isab) + &
             f * sab % inelastic_sigma(isab + 1)
           ! Find the sab integral
           sab_int(:,:,iEin) = ((ONE - f) * distro(:,:,isab) + &
-            f * distro(:,:,isab + 1)) * sig(iEin)
+            f * distro(:,:,isab + 1)) * sig
         end if
       end do
     end subroutine integrate_sab_inel_cont
@@ -423,30 +410,34 @@ module sab
 ! same grid by weighting by the x/s
 !===============================================================================
 
-  subroutine combine_sab_grid(sab_int_el, sab_int_inel, sig_el, sig_inel,  &
-                              scatt_mat)
+  subroutine combine_sab_grid(sab_int_el, sab_int_inel, scatt_mat)
     real(8), intent(in) :: sab_int_el(:,:,:)   ! Integrated SAB elastic data [L, G, NEin]
     real(8), intent(in) :: sab_int_inel(:,:,:) ! Integrated SAB inelastic data [L, G, NEin]
-    real(8), intent(in) :: sig_el(:)           ! Elastic x/s on E_grid
-    real(8), intent(in) :: sig_inel(:)         ! Inelastic x/s on E_grid
     real(8), allocatable, intent(inout) :: scatt_mat(:,:,:) ! Unionized Scattering Matrices
 
-    integer :: iE
-    real(8) :: sig_tot_inv
+    integer :: iE, NE
+    real(8) :: norm_sum
 
     ! set up our scatt_mat space
     allocate(scatt_mat(size(sab_int_el, 1), size(sab_int_el, 2), &
              size(sab_int_el, 3)))
 
+    NE = size(sab_int_el, dim=3)
+
     !$omp parallel do schedule(dynamic,20) num_threads(omp_threads) &
-    !$omp default(shared),private(iE, sig_tot_inv)
-    do iE = 1, size(sig_el) - 1
-      sig_tot_inv = sig_el(iE) + sig_inel(iE)
-      ! Treat a potential division-by-zero
-      if (sig_tot_inv > ZERO) then
-        sig_tot_inv = ONE / sig_tot_inv
-        scatt_mat(:, :, iE) = (sab_int_el(:, :, iE) + sab_int_inel(:, :, iE)) * &
-          sig_tot_inv
+    !$omp default(shared),private(iE, norm_sum)
+    do iE = 1, NE
+
+      ! Combine the elastic and inelastic data to the same grid and
+      ! normalize the results since the PDF weighting doesn't seem
+      ! to be guaranteed to be normalized, at least in lwtr.26t
+      ! Never-the-less, since Emin is forced to 0 by NDPP, and Emax is assumed
+      ! sufficiently high, we know the PDF should normalize to 1,
+      scatt_mat(:, :, iE) = (sab_int_el(:, :, iE) + sab_int_inel(:, :, iE))
+      norm_sum = sum(scatt_mat(1, :, iE))
+      if (norm_sum > ZERO) then
+        norm_sum = ONE / norm_sum
+        scatt_mat(:, :, iE) = scatt_mat(:, :, iE) * norm_sum
       else
         scatt_mat(:, :, iE) = ZERO
       end if
@@ -456,7 +447,7 @@ module sab
     ! points to work out right (the threshold scatt_mat will be zero, which is
     ! not physical), we will set the threshold scatt_mat equal to the scatt_mat
     ! for the iE just before this
-    scatt_mat(:, :, size(sig_el)) = scatt_mat(:, :, size(sig_el) - 1)
+    scatt_mat(:, :, NE) = scatt_mat(:, :, NE - 1)
 
   end subroutine combine_sab_grid
 
@@ -504,14 +495,11 @@ module sab
         allocate(Ein(num_pts))
         j = 0
         do iE = 1, i_max_ein - 1
-          !!!TD: Logarithmic or linear? Right now its linear (uncomment for ln)
-          !dE = (e_grid_tmp(iE + 1) - e_grid_tmp(iE)) / real(EXTEND_PTS + 1, 8)
           dE = (log(e_grid_tmp(iE + 1) / e_grid_tmp(iE))) / real(EXTEND_PTS + 1, 8)
           j = j + 1
           Ein(j) = e_grid_tmp(iE)
           do i = 1, EXTEND_PTS
             j = j + 1
-            !Ein(j) = Ein(j - 1) + dE
             Ein(j) = Ein(j - 1) * exp(dE)
           end do
         end do
