@@ -106,7 +106,6 @@ OPTIMIZE
 MPI
   Enables parallel runs using the Message Passing Interface. The MPI_DIR
   variable should be set to the base directory of the MPI implementation.
-  * This feature is not yet implemented*
 
 OPENMP
   Enables shared-memory parallelism using the OpenMP API. The Fortran compiler
@@ -271,7 +270,7 @@ either run the ``ndpp`` executable directly from the directory containing your
 XML input files, or you can specify as a command-line argument the directory containing
 the XML input files. For example, if the path of your NDPP executable is
 ``/home/username/ndpp/src/ndpp`` and your XML input files are in the
-directory ``/home/username/somemodel/``, one way to run the simulation would be:
+directory ``/path/to/somemodel``, one way to run the simulation would be:
 
 .. code-block:: sh
 
@@ -282,7 +281,7 @@ Alternatively, you could run from any directory:
 
 .. code-block:: sh
 
-    ndpp /path/to/somemodel
+    ndpp /path/to/someplace
 
 Note that in the latter case, any output files will be placed in the present
-working directory which may be different from ``/home/username/somemodel``.
+working directory which may be different from ``/path/to/somemodel``.

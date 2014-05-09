@@ -137,25 +137,24 @@ energies between 1 and 20 MeV.
 The ``<integrate_chi>`` element has no attributes and has an accepted value of
 "true" or "false". If set to "true", all fissionable nuclides will have their
 fission neutron spectrum (:math:`\chi\left(E\right)`) integrated over the
-provided energy group structure and writen to the output files.
+provided energy group structure and written to the output files.
 If "false", then the :math:`\chi\left(E\right)` integration will not be performed.
 
   *Default*: ``True``
-
-  *NOTE*: The fission spectrum integration methods have not yet been fully tested
-  and are to be considered experimental.
 
 ``<thinning_tol>`` Element
 --------------------------
 
 The ``<thinning_tol>`` element has no attributes and accepts a single
-floating-point number.  This element is used to set the percent tolerance for
-thinning the energy grid of the calculated data (:math:`\chi\left(E\right)` and
-the scattering distributions). The larger this value is the smaller the memory
-footprint is of the resultant data, but with decreased inaccuracy.
+floating-point number representing the percent tolerance for thinning the
+incoming energy grid of the pre-processed data. The thinning algorithm applied
+essentially discards incoming energy grid points which provide the same
+result to within the error of the provided thinning tolerance when the
+neighboring points are interpolated across. The larger the provided value is the
+smaller the memory footprint of the resultant data library, but with decreased
+accuracy.
 
-  *Default*: ``0.002`` (0.2%)
-  *NOTE*: This feature is not yet implemented in NDPP
+  *Default*: ``0.0``
 
 ``<print_tol>`` Element
 -----------------------
