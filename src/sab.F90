@@ -451,10 +451,10 @@ module sab
 
   end subroutine combine_sab_grid
 
-
 !===============================================================================
 ! SAB_EGRID Creates the thermal scattering energy grid for NDPP integration
 !===============================================================================
+
     subroutine sab_egrid(sab, energy_bins, Ein)
       type(SAlphaBeta), pointer, intent(in) :: sab            ! SAB Library
       real(8), intent(in)                   :: energy_bins(:) ! Grp bounds
