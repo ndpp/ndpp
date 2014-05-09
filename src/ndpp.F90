@@ -1153,8 +1153,6 @@ module ndpp_class
       end if
 
       ! First convert the logical value of nuscatter & Chi Present to an integer.
-      ! It seemas as if a type-cast is not in the standard, so the next
-      ! if-then  block will explicitly do the cast.
       if (this_ndpp % nuscatter .and. (.not. sab)) then
         nuscatter_int = 1
       else
