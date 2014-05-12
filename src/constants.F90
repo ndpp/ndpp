@@ -125,7 +125,7 @@ module constants
   integer, parameter :: ADAPTIVE_EOUT_ITS = 15
 
   ! Number of Eout points per bin for thermal scatter collisions
-  integer, parameter :: SAB_EPTS_PER_BIN = 20  ! 0 Implies no expansion
+  integer, parameter :: SAB_EPTS_PER_BIN = 10  ! 0 Implies no expansion
 
   ! Number of Eout points per group for adaptive integration of CM to lab
   ! conversion of inelastic collisions

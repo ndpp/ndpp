@@ -216,7 +216,7 @@ module sab
           Eout = (ONE - f) * sab % inelastic_e_out(iEout, isab) + &
             f * sab % inelastic_e_out(iEout, isab + 1)
 
-          ! Get the outgoing group
+          ! Get the outgoing group, E_bins(1) should be zero, but thats OK
           if (Eout < e_bins(1)) then
             cycle
           else if (Eout >= e_bins(size(e_bins))) then
@@ -466,7 +466,12 @@ module sab
       integer                :: num_pts       ! Final number of pts for Ein
       integer                :: i, j, iE      ! Counters for final indexing
       real(8)                :: dE
+      integer                :: g1, g2, g
+      real(8)                :: Eo1, Eo2, Ei1, Ei2
+      real(8), allocatable   :: e_grid_tmp2(:)
 
+      ! First take the incoming energy grid of inelastic and elastic, and combine
+      ! with the energy group structure, energy_bins.
       if (allocated(sab % elastic_e_in)) then
         call merge(sab % inelastic_e_in, sab % elastic_e_in, e_grid_tmp)
         call merge(e_grid_tmp, energy_bins, Ein)
@@ -478,7 +483,58 @@ module sab
         ! Now I want to cap this at the maximum value
         max_ein = sab % inelastic_e_in(sab % n_inelastic_e_in)
       end if
-      ! Now find where the threshold energy is for s(a,b)
+
+      if (allocated(e_grid_tmp)) deallocate(e_grid_tmp)
+
+      ! wW want to have an incoming point whenever an inelastic Eout
+      ! point crosses a group boundary.
+      if (sab % secondary_mode /= SAB_SECONDARY_CONT) then
+        do i = 1, sab % n_inelastic_e_in - 1
+          Ei1 = sab % inelastic_e_in(i)
+          Ei2 = sab % inelastic_e_in(i + 1)
+          do j = 1, sab % n_inelastic_e_out
+            ! This is slow, but will due until we can sort the resultant array
+            allocate(e_grid_tmp(size(energy_bins)))
+            num_pts = 0
+            Eo1 = sab % inelastic_e_out(j, i)
+            ! Ifs to check bounds!
+            g1 = binary_search(energy_bins, size(energy_bins), Eo1)
+            Eo2 = sab % inelastic_e_out(j, i + 1)
+            ! Ifs to check bounds!
+            g2 = binary_search(energy_bins, size(energy_bins), Eo2)
+            ! Switch data if *2 point is not the higher energy point
+            if (Eo2 < Eo1) then
+              g = g1
+              g2 = g1
+              g1 = g
+            end if
+            ! If g1 /= g2 then we have a critical point in the middle.
+            ! Find the Ein which makes this Eout equal to Eg using log interp
+            do g = g1 + 1, g2
+              num_pts = num_pts + 1
+              ! For linear interpolation:
+              e_grid_tmp(num_pts) = (energy_bins(g) - Eo1) / (Eo2 - Eo1) * &
+                (Ei2 - Ei1) + Ei1
+              ! Logarithmic Interpolation:
+              !e_grid_tmp(num_pts) = Ei11 * ((energy_bins(g) - Eo1) / (Eo2 - Eo1) * &
+              !  log (Ei2 / Ei1))
+            end do
+            ! Now combine the results on to the Ein grid
+            if (num_pts > 0) then
+              ! Put relevant pts of e_grid_tmp on to Ein grid, stored in e_grid_tmp2
+              call merge(e_grid_tmp(1: num_pts), Ein, e_grid_tmp2)
+              deallocate(Ein)
+              ! Now put them back in to Ein
+              allocate(Ein(size(e_grid_tmp2)))
+              Ein = e_grid_tmp2
+              deallocate(e_grid_tmp2)
+            end if
+            deallocate(e_grid_tmp)
+          end do
+        end do
+      end if
+
+      ! Now find where the threshold energy is for s(a,b) on this new grid
       i_max_ein = binary_search(Ein, size(Ein), max_ein)
 
       if (allocated(e_grid_tmp)) deallocate(e_grid_tmp)
@@ -486,6 +542,7 @@ module sab
       e_grid_tmp = Ein
       deallocate(Ein)
 
+      ! Now expand the number of points per currently existing Ein point
       if (SAB_EPTS_PER_BIN == 0) then
         allocate(Ein(i_max_ein))
         Ein = e_grid_tmp(1:i_max_ein)
