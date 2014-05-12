@@ -296,32 +296,34 @@ module scatt
       dEhi = log(ONE / alpha) / real(EXTEND_PTS, 8)
 
       num_pts = 0
-      do g = 1, size(E_bins) - 1
-        Ehi = E_bins(g + 1)
+      if (cutoff /= ZERO) then
+        do g = 1, size(E_bins) - 1
+          Ehi = E_bins(g + 1)
 
-        if (Ehi <= cutoff) then
-          dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
-          Elo = E_bins(g)
-          do i = -EXTEND_PTS, 1
-            newE = Ehi * exp(real(i, 8) * dElo)
-            if (newE >= Elo) then
-              num_pts = num_pts + 1
-              new_pts(num_pts) = newE
-            else
-              cycle
-            end if
-          end do
-        end if
-      end do
+          if (Ehi <= cutoff) then
+            dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
+            Elo = E_bins(g)
+            do i = -EXTEND_PTS, 1
+              newE = Ehi * exp(real(i, 8) * dElo)
+              if (newE >= Elo) then
+                num_pts = num_pts + 1
+                new_pts(num_pts) = newE
+              else
+                cycle
+              end if
+            end do
+          end if
+        end do
 
-      call merge(new_pts(1: num_pts), old_grid, Ein)
-      deallocate(new_pts)
-      deallocate(old_grid)
-      allocate(old_grid(size(Ein)))
-      old_grid = Ein
-      allocate(new_pts(EXTEND_PTS * size(E_bins) - 1))
-      new_pts = ZERO
-      num_pts = 0
+        call merge(new_pts(1: num_pts), old_grid, Ein)
+        deallocate(new_pts)
+        deallocate(old_grid)
+        allocate(old_grid(size(Ein)))
+        old_grid = Ein
+        allocate(new_pts(EXTEND_PTS * size(E_bins) - 1))
+        new_pts = ZERO
+        num_pts = 0
+      end if
 
       do g = 1, size(E_bins) - 1
         if (E_bins(g) == ZERO) then
