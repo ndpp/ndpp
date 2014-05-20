@@ -190,10 +190,10 @@ following components are selected:
 * MinGW Compiler Suite: Fortran Compiler
 * MSYS Basic System
 
-Once MinGW is installed, copy the OpenMC source distribution to your MinGW home
+Once MinGW is installed, copy the NDPP source distribution to your MinGW home
 directory (usually C:\\MinGW\\msys\\1.0\\home\\YourUsername). Once you have
 the source code in place, run the following commands from within the MinGW shell
-in the root directory of the OpenMC distribution:
+in the root directory of the NDPP distribution:
 
 .. code-block:: sh
 
@@ -209,40 +209,52 @@ This will build an executable named ``ndpp``.
 Cross Section Configuration
 ---------------------------
 
-In order to perform the pre-processing with NDPP, you will need cross section
-data for each nuclide to be analyzed. Since NDPP uses ACE format cross sections,
-you can use nuclear data that was processed with NJOY, such as that distributed with
-MCNP_ or Serpent_. The TALYS-based evaluated nuclear data library, TENDL_, is
+
+In order to run a simulation with NDPP, you will need cross section data for
+each nuclide in your problem. Since NDPP uses ACE format cross sections, you
+can use nuclear data that was processed with NJOY_, such as that distributed
+with MCNP_ or Serpent_. Several sources provide free processed ACE data as
+described below. The TALYS-based evaluated nuclear data library, TENDL_, is also
 openly available in ACE format.
 
-Using ACE Cross Sections Data Sets
-----------------------------------
+In the following discussion, note that the ``cross_sections.xml`` file can be
+the same as is used by OpenMC_.  Therefore, these steps can be skipped if
+OpenMC_ is currently installed on the system.
 
-ACE cross section libraries can be obtained from the NEA_ (which provides
-processed JEFF_ nuclear libraries), or from the RSICC_ distributions of MCNP_
-and Serpent_.  The JEFF and MCNP data are distributed with a file named
-``xsdir`` (or some variant thereof).  This file contains a listing of all the
-cross sections in a file usable by MCNP.  The Serpent distribution provides the
-data with a file named ``xsdata`` (or some variant thereof).  The ``xsdata``
-file is analogous to the ``xsdir`` file, but is specific to Serpent.  Both of
-these file types will need to be converted to the analogous format used by both
-OpenMC_ and NDPP, the ``cross_sections.xml`` file.  Python scripts are provided
-in the NDPP distribution to convert the ``xsdir`` and ``xsdata`` files to the
-``cross_sections.xml`` format.
 
-The usage of these script are as follows:
+Using ENDF/B-VII.1 Cross Sections from NNDC
+-------------------------------------------
 
-1. For ``xsdir`` files, enter the following from the command line:
+The NNDC_ provides ACE data from the ENDF/B-VII.1 neutron and thermal scattering
+sublibraries at four temperatures processed using NJOY_. To use this data with
+NDPP, a script is provided with NDPP that will automatically download,
+extract, and set up a configuration file:
+
+.. code-block:: sh
+
+    cd ndpp/data
+    python get_nndc_data.py
+
+At this point, you should set the :envvar:`CROSS_SECTIONS` environment variable
+to the absolute path of the file ``ndpp/data/nndc/cross_sections.xml``.
+
+Using JEFF Cross Sections from OECD/NEA
+---------------------------------------
+
+The NEA_ provides processed ACE data from the JEFF_ nuclear library upon
+request. A DVD of the data can be requested here_. To use this data with NDPP,
+the following steps must be taken:
+
+1. Copy and unzip the data on the DVD to a directory on your computer.
+2. In the root directory, a file named ``xsdir``, or some variant thereof,
+   should be present. This file contains a listing of all the cross sections and
+   is used by MCNP. This file should be converted to a ``cross_sections.xml``
+   file for use with NDPP. A Python script is provided in the NDPP
+   distribution for this purpose:
 
    .. code-block:: sh
 
-       ndpp/src/utils/convert_xsdir.py xsdir cross_sections.xml
-
-   For ``xsdata`` files, enter the following from the command line:
-
-   .. code-block:: sh
-
-       ndpp/src/utils/convert_xsdata.py xsdata cross_sections.xml
+       ndpp/src/utils/convert_xsdir.py xsdir31 cross_sections.xml
 
 3. In the converted ``cross_sections.xml`` file, change the contents of the
    <directory> element to the absolute path of the directory containing the
@@ -253,9 +265,30 @@ The usage of these script are as follows:
    :envvar:`CROSS_SECTIONS` environment variable to the absolute path of the
    ``cross_sections.xml`` file.
 
+Using Cross Sections from MCNP
+------------------------------
+
+To use cross sections distributed with MCNP, change the <directory> element in
+the ``cross_sections.xml`` file in the root directory of the NDPP distribution
+to the location of the MCNP cross sections. Then, either set the
+:ref:`cross_sections` in a settings.xml file or the :envvar:`CROSS_SECTIONS`
+environment variable to the absolute path of the ``cross_sections.xml`` file.
+
+Using Cross Sections from Serpent
+---------------------------------
+
+To use cross sections distributed with Serpent, change the <directory> element
+in the ``cross_sections_serpent.xml`` file in the root directory of the NDPP
+distribution to the location of the Serpent cross sections. Then, either set the
+:ref:`cross_sections` in a settings.xml file or the :envvar:`CROSS_SECTIONS`
+environment variable to the absolute path of the ``cross_sections_serpent.xml``
+file.
+
+.. _NJOY: http://t2.lanl.gov/nis/codes.shtml
+.. _NNDC: http://www.nndc.bnl.gov/endf/b7.1/acefiles.html
 .. _NEA: http://www.oecd-nea.org
 .. _JEFF: http://www.oecd-nea.org/dbdata/jeff/
-.. _RSICC: https://rsicc.ornl.gov/Default.aspx
+.. _here: http://www.oecd-nea.org/dbdata/pubs/jeff312-cd.html
 .. _MCNP: http://mcnp.lanl.gov
 .. _Serpent: http://montecarlo.vtt.fi
 .. _TENDL: ftp://ftp.nrg.eu/pub/www/talys/tendl2012/tendl2012.html

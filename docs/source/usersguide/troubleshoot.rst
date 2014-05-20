@@ -51,7 +51,7 @@ Segmentation Fault
 A segmentation fault occurs when the program tries to access a variable in
 memory that was outside the memory allocated for the program. The best way to
 debug a segmentation fault is to re-compile NDPP with debug options turned
-on. First go to your ``openmc/src`` directory where NDPP was compiled and type
+on. First go to your ``ndpp/src`` directory where NDPP was compiled and type
 the following commands:
 
 .. code-block:: sh
@@ -61,8 +61,7 @@ the following commands:
 
 Now when you re-run your problem, it should report exactly where the program
 failed. If after reading the debug output, you are still unsure why the program
-failed, send an email to the NDPP `developer
-<mailto:nelsonag@umich.edu>`_.
+failed, send inquiries to the NDPP Users Group_.
 
 ERROR: No cross_sections.xml file was specified in ndpp.xml or in the CROSS_SECTIONS environment variable.
 **********************************************************************************************************
@@ -72,16 +71,10 @@ information is provided by the `cross_sections.xml` file. You need to tell
 NDPP where to find the `cross_sections.xml` file either with the
 `cross_sections` element in ndpp.xml or with the :envvar:`CROSS_SECTIONS`
 environment variable. It is recommended to add a line in your ``.profile``,
-``.bash_profile``, ``.bashrc`` (or similar)
+``.bash_profile``, ``.bashrc`` (or equivalent)
 setting the :envvar:`CROSS_SECTIONS` environment variable.
 
-ERROR: Invalid usage of L(I) in ACE data; Consider using more recent data set.
-******************************************************************************
-
-The cross-sections requested in ``materials.xml`` do not conform to the current
-standard format.  This typically happens with fissionable nuclides in a ``.6*c``
-library as distributed with MCNP.  Please try a newer library such as any from
-the ``.7*c`` set.
 
 .. _gfortran: http://gcc.gnu.org/wiki/GFortran
+.. _Group: TODO
 

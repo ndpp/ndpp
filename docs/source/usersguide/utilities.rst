@@ -8,11 +8,10 @@ NDPP Utilities
 NDPP_DATA Library
 -----------------
 
-NDPP is distributed with a python interface to read binary 
-(HDF5 has not yet been implemented) output libraries.  This library provides
-functionality to: 
+NDPP is distributed with a python interface to read binary output libraries.
+This library provides functionality to:
 
-1)  Read in a binary library which was printed by NDPP 
+1)  Read in a binary library which was printed by NDPP
 
   a)  This is provided by the NDPP_lib class constructor
 

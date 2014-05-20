@@ -1,5 +1,0 @@
-<?xml version="1.0"?>
-<locatingRules xmlns="http://thaiopensource.com/ns/locating-rules/1.0">
-  <documentElement localName="ndpp" uri="src/templates/ndpp.rnc"/>
-  <documentElement localName="cross_sections" uri="src/templates/cross_sections.rnc"/>
-</locatingRules>
