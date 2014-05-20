@@ -61,7 +61,7 @@ release = "1.0.0"
 #today_fmt = '%B %d, %Y'
 
 # List of documents that shouldn't be included in the build.
-#unused_docs = []
+unused_docs = ['methods/scatter.rst']
 
 # List of directories, relative to source directory, that shouldn't be searched
 # for source files.

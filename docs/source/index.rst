@@ -11,7 +11,7 @@ outgoing energy and angular distributions of a reaction to produce a format
 user.  NDPP utilizes code written for the OpenMC Monte Carlo neutron
 transport code.
 
-NDPP is developed by the `University of Michigan`_.  For
+NDPP is developed by the Adam Nelson and contributors.  For
 more information, feel free to contact the lead developer, `Adam Nelson`_.
 
 The development of OpenMC is led by the `Computational Reactor Physics Group`_
@@ -25,8 +25,9 @@ at the `Massachusetts Institute of Technology`_.
 .. toctree::
     :maxdepth: 1
 
-    releasenotes/index
     quickinstall
     usersguide/index
+    methods/index
+    releasenotes/index
     publications
     license
