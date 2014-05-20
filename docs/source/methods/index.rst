@@ -10,6 +10,4 @@ Theory and Methodology
 
     introduction
     cross_sections
-
-..scatter
-..chi    
+    chi
