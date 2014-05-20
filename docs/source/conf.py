@@ -185,7 +185,7 @@ htmlhelp_basename = 'ndppdoc'
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
   ('index', 'ndpp.tex', u'NDPP Documentation',
-  'University of Michigan \\and Massachusetts Institute of Technology',
+  u'Adam G. Nelson and Contributors',
   'manual'),
 ]
 
