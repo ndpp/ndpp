@@ -563,6 +563,8 @@ module ndpp_class
           do g = 1, size(self % energy_bins)
             if (self % energy_bins(g) < self % Ein(1)) then
               group_index(g) = 1
+            else if (self % energy_bins(g) > self % Ein(size(self % Ein))) then
+              group_index(g) = size(self % Ein)
             else
               group_index(g) = binary_search(self % Ein, size(self % Ein), &
                                              self % energy_bins(g))
