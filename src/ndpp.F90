@@ -560,7 +560,7 @@ module ndpp_class
 
           ! Get the energy group boundary indices in self % Ein for printing
           allocate(group_index(size(self % energy_bins)))
-          do g = 1, size(self % energy_bins)
+          do g = 1, size(self % energy_bins - 1)
             if (self % energy_bins(g) < self % Ein(1)) then
               group_index(g) = 1
             else if (self % energy_bins(g) >= self % Ein(size(self % Ein))) then
@@ -570,6 +570,9 @@ module ndpp_class
                                              self % energy_bins(g))
             end if
           end do
+          ! Set final group (w/ rounding error this could not include top E_bin pt,
+          ! so do it manually (and avoid a search to boot)
+          group_index(size(self % energy_bins)) = size(self % Ein)
 
           ! Print the results to file
           call timer_start(self % time_print)
