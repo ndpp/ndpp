@@ -695,6 +695,9 @@ module ndpp_class
                                              self % energy_bins(g))
             end if
           end do
+          ! Set final group (w/ rounding error this could not include top E_bin pt,
+          ! so do it manually (and avoid a search to boot)
+          group_index(size(self % energy_bins)) = size(self % Ein)
 
           ! Print the results to file
           call timer_start(self % time_print)
