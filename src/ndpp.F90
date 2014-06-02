@@ -545,7 +545,8 @@ module ndpp_class
 
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
-            call thin_grid(self % Ein, scatt_mat, nuscatt_mat, self % thin_tol, &
+            call thin_grid(self % Ein, scatt_mat, nuscatt_mat, &
+                           self % energy_bins, self % thin_tol, &
                            thin_compr, thin_err)
             if (.not. mpi_enabled) then
               ! Report results of thinning
@@ -670,7 +671,8 @@ module ndpp_class
 
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
-            call thin_grid(self % Ein, scatt_mat, nuscatt_mat, self % thin_tol, &
+            call thin_grid(self % Ein, scatt_mat, nuscatt_mat, &
+                           self % energy_bins, self % thin_tol, &
                            thin_compr, thin_err)
             if (.not. mpi_enabled) then
               ! Report results of thinning
