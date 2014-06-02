@@ -194,8 +194,11 @@ module sab
         if (Ein < sab % inelastic_e_in(1)) then
           isab = 1
           f = ZERO
-        else if (Ein >= sab % threshold_inelastic) then
+        else if (Ein > sab % threshold_inelastic) then
           cycle
+        else if (Ein == sab % threshold_inelastic) then
+          isab = size(sab % inelastic_e_in) - 1
+          f = ONE
         else
           isab = binary_search(sab % inelastic_e_in, sab % n_inelastic_e_in, Ein)
           f = (Ein - sab % inelastic_e_in(isab)) / &
@@ -486,7 +489,7 @@ module sab
 
       if (allocated(e_grid_tmp)) deallocate(e_grid_tmp)
 
-      ! wW want to have an incoming point whenever an inelastic Eout
+      ! We want to have an incoming point whenever an inelastic Eout
       ! point crosses a group boundary.
       if (sab % secondary_mode /= SAB_SECONDARY_CONT) then
         do i = 1, sab % n_inelastic_e_in - 1
