@@ -219,7 +219,6 @@ class NDPP_lib(object):
         self.NP_chi = self._get_int(path='chi/NP_chi')[0]
 
         # Get Ein
-        print self.NE_chi
         self.Ein_chi = np.asarray(self._get_double(n=self.NE_chi,
                                                    path='chi/Ein_chi'))
 
