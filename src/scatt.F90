@@ -113,17 +113,10 @@ module scatt
           edist => rxn % edist
           ! Find the threshold of the inelastic reactions so we can tell
           ! where to begin placing additional points for interpolation.
-          if ((rxn % MT >= N_N1) .and. (rxn % MT < N_NC)) then
-            if (edist % data(1) < inel_thresh) then
-              inel_thresh = edist % data(1)
-            end if
-          else if ((rxn % MT == N_2N) .or. (rxn % MT == N_3N) .or.&
-                   (rxn % MT == N_4N) .or. (rxn % MT == N_NC)) then
-            if (mySD % E_grid(1) < inel_thresh) then
-              inel_thresh = mySD % E_grid(1)
-            end if
-          else if (rxn % MT == ELASTIC) then
+          if (rxn % MT == ELASTIC) then
             cutoff = mySD % freegas_cutoff
+          else
+            inel_thresh = nuc % energy(rxn % threshold)
           end if
         end if
         nullify(mySD)
