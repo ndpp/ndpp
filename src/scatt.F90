@@ -285,20 +285,36 @@ module scatt
       allocate(new_pts(EXTEND_PTS * size(E_bins) - 1))
       new_pts = ZERO
 
-      lo_shift = kT * (awr + ONE) / awr
-      dEhi = log(ONE / alpha) / real(EXTEND_PTS, 8)
+      ! lo_shift is just the delta-Ein below the group boundary to add points
+      ! for.
+      lo_shift = TWO * kT * (awr + ONE) / awr
 
       num_pts = 0
+      ! Add points for upscattering up until we get to freegas cutoff
+      ! (at which point there will no longer be upscatter)
       if (cutoff /= ZERO) then
         do g = 1, size(E_bins) - 1
           Ehi = E_bins(g + 1)
-
+          Elo = E_bins(g)
           if (Ehi <= cutoff) then
             dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
-            Elo = E_bins(g)
-            do i = -EXTEND_PTS, 1
+            do i = -EXTEND_PTS, -1
               newE = Ehi * exp(real(i, 8) * dElo)
               if (newE >= Elo) then
+                num_pts = num_pts + 1
+                new_pts(num_pts) = newE
+              else
+                cycle
+              end if
+            end do
+          else if (Elo < cutoff) then
+            ! Do something similar to theabove, but adding points before the
+            ! freegas cutoff instead of at the group boundary
+            Ehi = cutoff
+            dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
+            do i = -EXTEND_PTS, -1
+              newE = Ehi * exp(real(i, 8) * dElo)
+              if (newE > Elo) then
                 num_pts = num_pts + 1
                 new_pts(num_pts) = newE
               else
@@ -318,6 +334,13 @@ module scatt
         num_pts = 0
       end if
 
+      ! Now add points for the downscatter that occurs as Ein approaches
+      ! a group boundary from higher energies
+
+      ! 1/alpha is what you get by saying maximum point is Eg/alpha on log scale
+      ! multiplying dEhi by two essentially doubles the range we want to apply over.
+      dEhi = TWO * log(ONE / alpha) / real(EXTEND_PTS, 8)
+
       do g = 1, size(E_bins) - 1
         if (E_bins(g) == ZERO) then
           cycle
@@ -325,9 +348,9 @@ module scatt
 
         Ehi = E_bins(g + 1)
 
-        do i = 1, EXTEND_PTS
+        do i = 1, EXTEND_PTS - 1
           newE = E_bins(g) * exp(real(i, 8) * dEhi)
-          if (newE <= Ehi) then
+          if (newE < Ehi) then
             num_pts = num_pts + 1
             new_pts(num_pts) = newE
           else
