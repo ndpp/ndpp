@@ -282,7 +282,7 @@ module scatt
 
       alpha = ((awr - ONE) / (awr + ONE))**2
 
-      allocate(new_pts(EXTEND_PTS * size(E_bins) - 1))
+      allocate(new_pts(EXTEND_PTS * size(E_bins)))
       new_pts = ZERO
 
       ! lo_shift is just the delta-Ein below the group boundary to add points
@@ -311,7 +311,7 @@ module scatt
             ! Do something similar to theabove, but adding points before the
             ! freegas cutoff instead of at the group boundary
             Ehi = cutoff
-            dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
+            dElo = log(Ehi / (Ehi - lo_shift)) / real(EXTEND_PTS, 8)
             do i = -EXTEND_PTS, -1
               newE = Ehi * exp(real(i, 8) * dElo)
               if (newE > Elo) then
@@ -339,7 +339,7 @@ module scatt
 
       ! 1/alpha is what you get by saying maximum point is Eg/alpha on log scale
       ! multiplying dEhi by two essentially doubles the range we want to apply over.
-      dEhi = TWO * log(ONE / alpha) / real(EXTEND_PTS, 8)
+      dEhi = 7.0_8 * log(ONE / alpha) / real(EXTEND_PTS, 8)
 
       do g = 1, size(E_bins) - 1
         if (E_bins(g) == ZERO) then
