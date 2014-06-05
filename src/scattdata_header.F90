@@ -455,9 +455,10 @@ module scattdata_header
           return
         end if
 
-        ! Interpolate the distribution on a logarithmic basis
-        f = (log(Ein) - log(this % E_grid(iE))) / &
-          (log(this % E_grid(iE + 1)) - log(this % E_grid(iE)))
+        ! Interpolate the distribution linearly
+        ! f = (log(Ein) - log(this % E_grid(iE))) / &
+        !     (log(this % E_grid(iE + 1)) - log(this % E_grid(iE)))
+        f = (Ein - this % E_grid(iE)) / (this % E_grid(iE + 1) - this % E_grid(iE))
 
         ! Do on nearest neighbor, or with interpolation?
         if (INTERP_NEAREST) then
@@ -932,8 +933,8 @@ module scattdata_header
         ihi = int((whi + ONE) / dw) + 1
 
         ! Now we can skip groups we do not need to consider.
-        ! We will cycle if wlo = - 1 since that means we have not yet reached
-        ! the 'active' groups.  We will return if wlo = 1 since that means
+        ! We will cycle if whi == wlo = - 1 since that means we have not yet reached
+        ! the 'active' groups.  We will return if whi == wlo = 1 since that means
         ! we have already passed the `active` groups.
         if (wlo == whi) then
           if (wlo == -ONE) then
@@ -991,8 +992,6 @@ module scattdata_header
           ! The points are all within the same bin, can get flo and fhi directly
           ulo = tolab(R, wlo)
           uhi = tolab(R, whi)
-          ulo = (ONE + R * wlo) / sqrt(ONE + R * R + TWO * R * wlo)
-          uhi = (ONE + R * whi) / sqrt(ONE + R * R + TWO * R * whi)
           do l = 1, order
             distro(l, g) = (whi - wlo) * &
               (flo * calc_pn(l - 1, ulo) + fhi * calc_pn(l - 1, uhi))
