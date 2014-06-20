@@ -40,8 +40,10 @@ module ndpp_class
     ! Start and stop indices of files for me to parse
     integer              :: list_stt      = 0
     integer              :: list_stp      = 0
-    ! Incoming energy points
-    real(8), allocatable :: Ein(:)
+    ! Incoming energy points for elastic scattering
+    real(8), allocatable :: Ein_el(:)
+    ! Incoming energy points for inelastic scattering
+    real(8), allocatable :: Ein_inel(:)
     ! Energy group structure
     real(8), allocatable :: energy_bins(:)
     ! Number of energy groups
@@ -378,7 +380,8 @@ module ndpp_class
       self % n_listings     = 0
       self % list_stt       = 0
       self % list_stp       = 0
-      if (allocated(self % Ein)) deallocate(self % Ein)
+      if (allocated(self % Ein_el)) deallocate(self % Ein_el)
+      if (allocated(self % Ein_inel)) deallocate(self % Ein_inel)
       if (allocated(self % energy_bins)) deallocate(self % energy_bins)
       self % energy_groups  = 0
       self % lib_name       = ''
@@ -423,14 +426,18 @@ module ndpp_class
       real(8)                   :: thin_err       ! Thinning compression error
       character(MAX_LINE_LEN)   :: xmllib_line    ! XML library tag for nuclides
       character(MAX_LINE_LEN)   :: msg_prepend    ! Text to print before current working lib
-      integer, allocatable      :: group_index(:) ! Group locations in self % Ein
+      integer, allocatable      :: group_index_el(:) ! Group locations in self % Ein_el
+      integer, allocatable      :: group_index_inel(:) ! Group locations in self % Ein_inel
       ! Scattering specific data
-      real(8), allocatable :: scatt_mat(:,:,:)   ! scattering matrix moments,
-                                                 ! order x g_out x E_in
-      real(8), allocatable :: nuscatt_mat(:,:,:) ! nu-scattering matrix moments,
-                                                 ! order x g_out x E_in
+      real(8), allocatable :: el_mat(:,:,:)     ! elastic matrix moments,
+                                                ! order x g_out x E_in
+      real(8), allocatable :: inel_mat(:,:,:)   ! inelastic matrix moments,
+                                                ! order x g_out x E_in
+      real(8), allocatable :: nuinel_mat(:,:,:) ! nu-inelastic matrix moments,
+                                                ! order x g_out x E_in
+      real(8), allocatable :: normalization(:)  ! Inelastic normalization data
       ! Chi specific data
-      real(8), allocatable   :: e_grid(:)    ! List of energy points for chi
+      real(8), allocatable   :: Ein_chi(:)   ! List of energy points for chi
       real(8), allocatable   :: chi_t(:,:)   ! grp x E_in chi tot values
       real(8), allocatable   :: chi_p(:,:)   ! grp x E_in chi prompt values
       real(8), allocatable   :: chi_d(:,:,:) ! grp x E_in x precursor chi delayed
@@ -535,62 +542,94 @@ module ndpp_class
           end if
 
           ! Integrate Scattering Distributions
-          ! Calc_scatt will also update self % Ein to include data points necessary
+          ! Calc_scatt will also update self % Ein_* to include data points necessary
           ! to improve inelastic level scattering interpolation. Cannot do this
           ! a priori since calc_scatt reads in the reactions.
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-            self % scatt_order, self % mu_bins, self % nuscatter, self % Ein, &
-            scatt_mat, nuscatt_mat)
+            self % scatt_order, self % mu_bins, self % nuscatter, self % Ein_el, &
+            self % Ein_inel, el_mat, inel_mat, nuinel_mat, normalization)
 
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
-            call thin_grid(self % Ein, scatt_mat, nuscatt_mat, &
-                           self % energy_bins, self % thin_tol, &
-                           thin_compr, thin_err)
+            !For elastic
+            call thin_grid(self % Ein_el, el_mat, self % energy_bins, &
+                           self % thin_tol, thin_compr, thin_err)
             if (.not. mpi_enabled) then
               ! Report results of thinning
-              message = "....Completed Thinning, Reduced Storage By " // &
+              message = "....Completed Elastic Thinning, Reduced Storage By " // &
                         trim(to_str(100.0_8 * thin_compr)) // "%"
               call write_message(6)
-              message = "....Maximum Thinning Error Was " // &
+              message = "....Maximum Elastic Thinning Error Was " // &
+                        trim(to_str(100.0_8 * thin_err)) // "%"
+              call write_message(6)
+            end if
+            ! And for inelastic
+            call thin_grid(self % Ein_inel, inel_mat, self % energy_bins, &
+                           self % thin_tol, thin_compr, thin_err, nuinel_mat)
+            if (.not. mpi_enabled) then
+              ! Report results of thinning
+              message = "....Completed Elastic Thinning, Reduced Storage By " // &
+                        trim(to_str(100.0_8 * thin_compr)) // "%"
+              call write_message(6)
+              message = "....Maximum Elastic Thinning Error Was " // &
                         trim(to_str(100.0_8 * thin_err)) // "%"
               call write_message(6)
             end if
           end if
 
-          ! Get the energy group boundary indices in self % Ein for printing
-          allocate(group_index(size(self % energy_bins)))
+          ! Get the energy group boundary indices in self % Ein_* for printing
+          allocate(group_index_el(size(self % energy_bins)))
           do g = 1, size(self % energy_bins - 1)
-            if (self % energy_bins(g) < self % Ein(1)) then
-              group_index(g) = 1
-            else if (self % energy_bins(g) >= self % Ein(size(self % Ein))) then
-              group_index(g) = size(self % Ein)
+            if (self % energy_bins(g) < self % Ein_el(1)) then
+              group_index_el(g) = 1
+            else if (self % energy_bins(g) >= self % Ein_el(size(self % Ein_el))) then
+              group_index_el(g) = size(self % Ein_el)
             else
-              group_index(g) = binary_search(self % Ein, size(self % Ein), &
+              group_index_el(g) = binary_search(self % Ein_el, size(self % Ein_el), &
                                              self % energy_bins(g))
             end if
           end do
           ! Set final group (w/ rounding error this could not include top E_bin pt,
           ! so do it manually (and avoid a search to boot)
-          group_index(size(self % energy_bins)) = size(self % Ein)
+          group_index_el(size(self % energy_bins)) = size(self % Ein_el)
+
+          allocate(group_index_inel(size(self % energy_bins)))
+          do g = 1, size(self % energy_bins - 1)
+            if (self % energy_bins(g) < self % Ein_inel(1)) then
+              group_index_inel(g) = 1
+            else if (self % energy_bins(g) >= self % Ein_inel(size(self % Ein_inel))) then
+              group_index_inel(g) = size(self % Ein_inel)
+            else
+              group_index_inel(g) = binary_search(self % Ein_inel, size(self % Ein_inel), &
+                                             self % energy_bins(g))
+            end if
+          end do
+          ! Set final group (w/ rounding error this could not include top E_bin pt,
+          ! so do it manually (and avoid a search to boot)
+          group_index_inel(size(self % energy_bins)) = size(self % Ein_inel)
 
           ! Print the results to file
           call timer_start(self % time_print)
           if (self % nuscatter) then
-            call print_scatt(self % lib_format, group_index, self % Ein, &
-              self % print_tol, scatt_mat, nuscatt_mat)
+            call print_scatt(self % lib_format, group_index_el, group_index_inel, &
+                             self % Ein_el, self % Ein_inel, self % print_tol, &
+                             self % thin_tol, el_mat, inel_mat, nuinel_mat)
           else
-            call print_scatt(self % lib_format, group_index, self % Ein, &
-              self % print_tol, scatt_mat)
+            call print_scatt(self % lib_format, group_index_el, group_index_inel, &
+                             self % Ein_el, self % Ein_inel, self % print_tol, &
+                             self % thin_tol, el_mat, inel_mat)
           end if
           call timer_stop(self % time_print)
 
-          if (allocated(scatt_mat)) then
-            deallocate(scatt_mat)
+          if (allocated(el_mat)) then
+            deallocate(el_mat)
           end if
-          if (allocated(nuscatt_mat)) then
-            deallocate(nuscatt_mat)
+          if (allocated(inel_mat)) then
+            deallocate(inel_mat)
+          end if
+          if (allocated(nuinel_mat)) then
+            deallocate(nuinel_mat)
           end if
           call timer_stop(self % time_scatt_preproc)
 
@@ -604,16 +643,16 @@ module ndpp_class
 
             call timer_start(self % time_chi_preproc)
             if (nuc % fissionable) then
-              call calc_chi(nuc, self % energy_bins, e_grid, chi_t, chi_p, chi_d)
+              call calc_chi(nuc, self % energy_bins, Ein_chi, chi_t, chi_p, chi_d)
 
               ! Print the results to file
               call timer_start(self % time_print)
-              call print_chi(nuc % name, self % lib_format, e_grid, chi_t, &
+              call print_chi(nuc % name, self % lib_format, Ein_chi, chi_t, &
                 chi_p, chi_d)
               call timer_stop(self % time_print)
 
               ! Deallocate data created for chi
-              deallocate(e_grid, chi_t, chi_p, chi_d)
+              deallocate(Ein_chi, chi_t, chi_p, chi_d)
             end if
           end if
 
@@ -660,20 +699,19 @@ module ndpp_class
 
           ! Create energy grid to use (inelastic_e_in, elastic_e_in,
           ! energy_bins)
-          call sab_egrid(sab, self % energy_bins, self % Ein)
+          call sab_egrid(sab, self % energy_bins, self % Ein_el)
           ! Finally add in one point above energy_bins to give MC code something to
           ! interpolate to if Ein==E_bins(size(E_bins))
-          call add_one_more_point(self % Ein)
+          call add_one_more_point(self % Ein_el)
 
           call calc_scattsab(sab, self % energy_bins, self % scatt_type, &
-                             self % scatt_order, scatt_mat, self % mu_bins, &
-                             self % Ein)
+                             self % scatt_order, el_mat, self % mu_bins, &
+                             self % Ein_el)
 
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
-            call thin_grid(self % Ein, scatt_mat, nuscatt_mat, &
-                           self % energy_bins, self % thin_tol, &
-                           thin_compr, thin_err)
+            call thin_grid(self % Ein_el, el_mat, self % energy_bins, &
+                           self % thin_tol, thin_compr, thin_err)
             if (.not. mpi_enabled) then
               ! Report results of thinning
               message = "....Completed Thinning, Reduced Storage By " // &
@@ -686,29 +724,30 @@ module ndpp_class
           end if
 
           ! Get the energy group boundary indices in self % Ein for printing
-          allocate(group_index(size(self % energy_bins)))
+          allocate(group_index_el(size(self % energy_bins)))
           do g = 1, size(self % energy_bins)
-            if (self % energy_bins(g) < self % Ein(1)) then
-              group_index(g) = 1
-            else if (self % energy_bins(g) >= self % Ein(size(self % Ein))) then
-              group_index(g) = size(self % Ein)
+            if (self % energy_bins(g) < self % Ein_el(1)) then
+              group_index_el(g) = 1
+            else if (self % energy_bins(g) >= self % Ein_el(size(self % Ein_el))) then
+              group_index_el(g) = size(self % Ein_el)
             else
-              group_index(g) = binary_search(self % Ein, size(self % Ein), &
+              group_index_el(g) = binary_search(self % Ein_el, size(self % Ein_el), &
                                              self % energy_bins(g))
             end if
           end do
           ! Set final group (w/ rounding error this could not include top E_bin pt,
           ! so do it manually (and avoid a search to boot)
-          group_index(size(self % energy_bins)) = size(self % Ein)
+          group_index_el(size(self % energy_bins)) = size(self % Ein_el)
 
           ! Print the results to file
           call timer_start(self % time_print)
-          call print_scatt(self % lib_format, group_index, self % Ein, &
-            self % print_tol, scatt_mat)
+          call print_scatt(self % lib_format, group_index_el, group_index_inel, &
+                           self % Ein_el, self % Ein_inel, self % print_tol, &
+                           self % thin_tol, el_mat, inel_mat)
           call timer_stop(self % time_print)
 
-          if (allocated(scatt_mat)) then
-            deallocate(scatt_mat)
+          if (allocated(el_mat)) then
+            deallocate(el_mat)
           end if
           call timer_stop(self % time_scatt_preproc)
 
@@ -741,8 +780,10 @@ module ndpp_class
         ! Close the file or HDF5 group
         call finalize_library(self % lib_format)
 
-        deallocate(self % Ein)
-        deallocate(group_index)
+        deallocate(self % Ein_el)
+        deallocate(self % Ein_inel)
+        deallocate(group_index_el)
+        deallocate(group_index_inel)
       end do
 
 #ifdef MPI

@@ -14,17 +14,21 @@ module thin
 ! depending on the arguments.
 !===============================================================================
 
-    subroutine thin_grid(xout, yout, yout2, tokeep, tol, compression, maxerr)
+    subroutine thin_grid(xout, yout, tokeep, tol, compression, maxerr, yout2)
       real(8), allocatable, intent(inout) :: xout(:)      ! Resultant x grid
       real(8), allocatable, intent(inout) :: yout(:,:,:)  ! Resultant y values
-      real(8), allocatable, intent(inout) :: yout2(:,:,:) ! Resultant y values
       real(8), allocatable, intent(in)    :: tokeep(:)    ! x points to keep
       real(8), intent(in)                 :: tol          ! Desired fractional error to maintain
       real(8), intent(inout)              :: compression  ! Data reduction fraction)
       real(8), intent(inout)              :: maxerr       ! Maximum error due to compression
+      real(8), allocatable, optional, intent(inout) :: yout2(:,:,:) ! Resultant y values
 
-      if (allocated(yout2)) then
-        call thin_grid_two(xout, yout, yout2, tokeep, tol, compression, maxerr)
+      if (present(yout2)) then
+        if (allocated(yout2)) then
+          call thin_grid_two(xout, yout, yout2, tokeep, tol, compression, maxerr)
+        else
+          call thin_grid_one(xout, yout, tokeep, tol, compression, maxerr)
+        end if
       else
         call thin_grid_one(xout, yout, tokeep, tol, compression, maxerr)
       end if

@@ -491,11 +491,13 @@ module scattdata_header
         p_valid = ONE
       end if
 
-      ! Scale the results
-      distro = distro * sigS * p_valid
+      if (rxn % MT /= ELASTIC) then
+        ! Scale the results
+        distro = distro * sigS * p_valid
 
-      ! Add this contribution to the normalization constant
-      norm_tot = norm_tot + sigS * p_valid
+        ! Add this contribution to the normalization constant
+        norm_tot = norm_tot + sigS * p_valid
+      end if
 
     end function scatt_interp_distro
 
