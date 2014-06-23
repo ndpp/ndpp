@@ -685,7 +685,7 @@ module scatt
 
   subroutine print_scatt(lib_format, grp_index_el, grp_index_inel, Ein_el, &
                          Ein_inel, print_tol, thin_tol, el_mat, inel_mat, &
-                         nuinel_mat)
+                         norm, nuinel_mat)
     integer,              intent(in) :: lib_format   ! Library output type
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
@@ -697,42 +697,43 @@ module scatt
                                                      ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)    ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:)  ! Inelastic data to print
+    real(8), allocatable, intent(in) :: norm(:)      ! Normalization grid
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     if (present(nuinel_mat)) then
       if (lib_format == ASCII) then
         call print_scatt_ascii(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat, &
+                               Ein_inel, print_tol, el_mat, inel_mat, norm, &
                                nuinel_mat)
       else if (lib_format == BINARY) then
         call print_scatt_bin(grp_index_el, grp_index_inel, Ein_el, &
-                             Ein_inel, print_tol, el_mat, inel_mat, &
+                             Ein_inel, print_tol, el_mat, inel_mat, norm, &
                              nuinel_mat)
       else if (lib_format == HUMAN) then
         call print_scatt_human(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat, &
+                               Ein_inel, print_tol, el_mat, inel_mat, norm, &
                                nuinel_mat)
 #ifdef HDF5
       else if (lib_format == H5) then
         call print_scatt_hdf5(grp_index_el, grp_index_inel, Ein_el, &
-                              Ein_inel, print_tol, el_mat, inel_mat, &
+                              Ein_inel, print_tol, el_mat, inel_mat, norm, &
                               nuinel_mat)
 #endif
       end if
     else
       if (lib_format == ASCII) then
         call print_scatt_ascii(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat)
+                               Ein_inel, print_tol, el_mat, inel_mat, norm)
       else if (lib_format == BINARY) then
         call print_scatt_bin(grp_index_el, grp_index_inel, Ein_el, &
-                             Ein_inel, print_tol, el_mat, inel_mat)
+                             Ein_inel, print_tol, el_mat, inel_mat, norm)
       else if (lib_format == HUMAN) then
         call print_scatt_human(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat)
+                               Ein_inel, print_tol, el_mat, inel_mat, norm)
 #ifdef HDF5
       else if (lib_format == H5) then
         call print_scatt_hdf5(grp_index_el, grp_index_inel, Ein_el, &
-                              Ein_inel, print_tol, el_mat, inel_mat)
+                              Ein_inel, print_tol, el_mat, inel_mat, norm)
 #endif
       end if
     end if
@@ -746,7 +747,7 @@ module scatt
 
   subroutine print_scatt_ascii(grp_index_el, grp_index_inel, Ein_el, &
                                Ein_inel, print_tol, el_mat, inel_mat, &
-                               nuinel_mat)
+                               norm, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
@@ -755,6 +756,7 @@ module scatt
                                                      ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)    ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:)  ! Inelastic data to print
+    real(8), allocatable, intent(in) :: norm(:)      ! Normalization grid
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     integer :: gmin, gmax, iE
@@ -809,54 +811,61 @@ module scatt
 
     ! INELASTIC
     ! # energy points
-    write(UNIT_NUC,'(I20)') size(Ein_inel)
+    if (allocated(Ein_inel)) then
+        write(UNIT_NUC,'(I20)') size(Ein_inel)
 
-    ! <incoming energy array>
-    call print_ascii_array(Ein_inel, UNIT_NUC)
+      ! <incoming energy array>
+      call print_ascii_array(Ein_inel, UNIT_NUC)
 
-    ! # Group Indices
-    call print_ascii_integer_array(grp_index_inel, UNIT_NUC)
+      ! # Group Indices
+      call print_ascii_integer_array(grp_index_inel, UNIT_NUC)
 
-    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
-    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
-    do iE = 1, size(Ein_inel)
-      ! find gmin by checking the P0 moment
-      do gmin = 1, size(inel_mat, dim = 2)
-        if (inel_mat(1, gmin, iE) > print_tol) exit
-      end do
-      ! find gmax by checking the P0 moment
-      do gmax = size(inel_mat, dim = 2), 1, -1
-        if (inel_mat(1, gmax, iE) > print_tol) exit
-      end do
-      if (gmin > gmax) then ! we have effectively all zeros
-        write(UNIT_NUC, '(I20,I20)') 0,0
-      else
-        write(UNIT_NUC, '(I20,I20)') gmin,gmax
-        call print_ascii_array(reshape(inel_mat(:, gmin : gmax, iE), (/ &
-          size(inel_mat, dim=1) * (gmax - gmin + 1)/)), UNIT_NUC)
-      end if
-    end do
+      ! <normalization grid>
+      call print_ascii_array(norm, UNIT_NUC)
 
-    if (present(nuinel_mat)) then
-      ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
-      ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+      ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+      ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
       do iE = 1, size(Ein_inel)
         ! find gmin by checking the P0 moment
-        do gmin = 1, size(nuinel_mat, dim = 2)
-          if (nuinel_mat(1, gmin, iE) > print_tol) exit
+        do gmin = 1, size(inel_mat, dim = 2)
+          if (inel_mat(1, gmin, iE) > print_tol) exit
         end do
         ! find gmax by checking the P0 moment
-        do gmax = size(nuinel_mat, dim = 2), 1, -1
-          if (nuinel_mat(1, gmax, iE) > print_tol) exit
+        do gmax = size(inel_mat, dim = 2), 1, -1
+          if (inel_mat(1, gmax, iE) > print_tol) exit
         end do
         if (gmin > gmax) then ! we have effectively all zeros
           write(UNIT_NUC, '(I20,I20)') 0,0
         else
           write(UNIT_NUC, '(I20,I20)') gmin,gmax
-          call print_ascii_array(reshape(nuinel_mat(:, gmin : gmax, iE), (/ &
-            size(nuinel_mat, dim=1) * (gmax - gmin + 1)/)), UNIT_NUC)
+          call print_ascii_array(reshape(inel_mat(:, gmin : gmax, iE), (/ &
+            size(inel_mat, dim=1) * (gmax - gmin + 1)/)), UNIT_NUC)
         end if
       end do
+
+      if (present(nuinel_mat)) then
+        ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
+        ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+        do iE = 1, size(Ein_inel)
+          ! find gmin by checking the P0 moment
+          do gmin = 1, size(nuinel_mat, dim = 2)
+            if (nuinel_mat(1, gmin, iE) > print_tol) exit
+          end do
+          ! find gmax by checking the P0 moment
+          do gmax = size(nuinel_mat, dim = 2), 1, -1
+            if (nuinel_mat(1, gmax, iE) > print_tol) exit
+          end do
+          if (gmin > gmax) then ! we have effectively all zeros
+            write(UNIT_NUC, '(I20,I20)') 0,0
+          else
+            write(UNIT_NUC, '(I20,I20)') gmin,gmax
+            call print_ascii_array(reshape(nuinel_mat(:, gmin : gmax, iE), (/ &
+              size(nuinel_mat, dim=1) * (gmax - gmin + 1)/)), UNIT_NUC)
+          end if
+        end do
+      end if
+    else
+      write(UNIT_NUC,'(I20)') 0
     end if
 
   end subroutine print_scatt_ascii
@@ -868,7 +877,7 @@ module scatt
 
   subroutine print_scatt_human(grp_index_el, grp_index_inel, Ein_el, &
                                Ein_inel, print_tol, el_mat, inel_mat, &
-                               nuinel_mat)
+                               norm, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
@@ -877,6 +886,7 @@ module scatt
                                                      ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)    ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:)  ! Inelastic data to print
+    real(8), allocatable, intent(in) :: norm(:)      ! Normalization grid
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     integer :: g, gmin, gmax, iE
@@ -934,50 +944,29 @@ module scatt
     end do
 
     ! INELASTIC
-    ! # energy points
-    write(UNIT_NUC,'(I20)') size(Ein_inel)
+    if (allocated(Ein_inel)) then
+      ! # energy points
+      write(UNIT_NUC,'(I20)') size(Ein_inel)
 
-    ! <incoming energy array>
-    call print_ascii_array(Ein_inel, UNIT_NUC)
+      ! <incoming energy array>
+      call print_ascii_array(Ein_inel, UNIT_NUC)
 
-    ! # Group Indices
-    call print_ascii_integer_array(grp_index_inel, UNIT_NUC)
+      ! # Group Indices
+      call print_ascii_integer_array(grp_index_inel, UNIT_NUC)
 
-    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
-    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
-    do iE = 1, size(Ein_inel)
-      ! find gmin by checking the P0 moment
-      do gmin = 1, size(inel_mat, dim = 2)
-        if (inel_mat(1, gmin, iE) > print_tol) exit
-      end do
-      ! find gmax by checking the P0 moment
-      do gmax = size(inel_mat, dim = 2), 1, -1
-        if (inel_mat(1, gmax, iE) > print_tol) exit
-      end do
-      if (gmin > gmax) then ! we have effectively all zeros
-        write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',Ein_inel(iE), &
-          '   gmin = ', 0, '   gmax = ', 0
-      else
-        write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',Ein_inel(iE), &
-          '   gmin = ', gmin, '   gmax = ', gmax
-        do g = gmin, gmax
-          write(UNIT_NUC,'(A,I5)') 'outgoing group = ', g
-          call print_ascii_array(inel_mat(:, g, iE), UNIT_NUC)
-        end do
-      end if
-    end do
+      ! <normalization grid>
+      call print_ascii_array(norm, UNIT_NUC)
 
-    if (present(nuinel_mat)) then
-      ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
-      ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+      ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+      ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
       do iE = 1, size(Ein_inel)
         ! find gmin by checking the P0 moment
-        do gmin = 1, size(nuinel_mat, dim = 2)
-          if (nuinel_mat(1, gmin, iE) > print_tol) exit
+        do gmin = 1, size(inel_mat, dim = 2)
+          if (inel_mat(1, gmin, iE) > print_tol) exit
         end do
         ! find gmax by checking the P0 moment
-        do gmax = size(nuinel_mat, dim = 2), 1, -1
-          if (nuinel_mat(1, gmax, iE) > print_tol) exit
+        do gmax = size(inel_mat, dim = 2), 1, -1
+          if (inel_mat(1, gmax, iE) > print_tol) exit
         end do
         if (gmin > gmax) then ! we have effectively all zeros
           write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',Ein_inel(iE), &
@@ -987,10 +976,38 @@ module scatt
             '   gmin = ', gmin, '   gmax = ', gmax
           do g = gmin, gmax
             write(UNIT_NUC,'(A,I5)') 'outgoing group = ', g
-            call print_ascii_array(nuinel_mat(:, g, iE), UNIT_NUC)
+            call print_ascii_array(inel_mat(:, g, iE), UNIT_NUC)
           end do
         end if
       end do
+
+      if (present(nuinel_mat)) then
+        ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
+        ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+        do iE = 1, size(Ein_inel)
+          ! find gmin by checking the P0 moment
+          do gmin = 1, size(nuinel_mat, dim = 2)
+            if (nuinel_mat(1, gmin, iE) > print_tol) exit
+          end do
+          ! find gmax by checking the P0 moment
+          do gmax = size(nuinel_mat, dim = 2), 1, -1
+            if (nuinel_mat(1, gmax, iE) > print_tol) exit
+          end do
+          if (gmin > gmax) then ! we have effectively all zeros
+            write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',Ein_inel(iE), &
+              '   gmin = ', 0, '   gmax = ', 0
+          else
+            write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',Ein_inel(iE), &
+              '   gmin = ', gmin, '   gmax = ', gmax
+            do g = gmin, gmax
+              write(UNIT_NUC,'(A,I5)') 'outgoing group = ', g
+              call print_ascii_array(nuinel_mat(:, g, iE), UNIT_NUC)
+            end do
+          end if
+        end do
+      end if
+    else
+      write(UNIT_NUC,'(I20)') 0
     end if
 
   end subroutine print_scatt_human
@@ -1002,7 +1019,7 @@ module scatt
 
   subroutine print_scatt_bin(grp_index_el, grp_index_inel, Ein_el, &
                              Ein_inel, print_tol, el_mat, inel_mat, &
-                             nuinel_mat)
+                             norm, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
@@ -1011,6 +1028,7 @@ module scatt
                                                      ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)    ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:)  ! Inelastic data to print
+    real(8), allocatable, intent(in) :: norm(:)      ! Normalization grid
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     integer :: g, gmin, gmax, iE
@@ -1065,57 +1083,64 @@ module scatt
     end do
 
     ! INELASTIC
-    ! # energy points
-    write(UNIT_NUC) size(Ein_inel)
+    if (allocated(Ein_inel)) then
+      ! # energy points
+      write(UNIT_NUC) size(Ein_inel)
 
-    ! <incoming energy array>
-    write(UNIT_NUC) Ein_inel
+      ! <incoming energy array>
+      write(UNIT_NUC) Ein_inel
 
-    ! Group Indices
-    write(UNIT_NUC) grp_index_inel
+      ! Group Indices
+      write(UNIT_NUC) grp_index_inel
 
-    ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
-    ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
-    do iE = 1, size(Ein_inel)
-      ! find gmin by checking the P0 moment
-      do gmin = 1, size(inel_mat, dim = 2)
-        if (inel_mat(1, gmin, iE) > print_tol) exit
-      end do
-      ! find gmax by checking the P0 moment
-      do gmax = size(inel_mat, dim = 2), 1, -1
-        if (inel_mat(1, gmax, iE) > print_tol) exit
-      end do
-      if (gmin > gmax) then ! we have effectively all zeros
-        write(UNIT_NUC) 0, 0
-      else
-        write(UNIT_NUC) gmin, gmax
-        do g = gmin, gmax
-          write(UNIT_NUC) inel_mat(:, g, iE)
-        end do
-      end if
-    end do
+      ! <normalization grid>
+      write(UNIT_NUC) norm
 
-    if (present(nuinel_mat)) then
-      ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
-      ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+      ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
+      ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
       do iE = 1, size(Ein_inel)
         ! find gmin by checking the P0 moment
-        do gmin = 1, size(nuinel_mat, dim = 2)
-          if (nuinel_mat(1, gmin, iE) > print_tol) exit
+        do gmin = 1, size(inel_mat, dim = 2)
+          if (inel_mat(1, gmin, iE) > print_tol) exit
         end do
         ! find gmax by checking the P0 moment
-        do gmax = size(nuinel_mat, dim = 2), 1, -1
-          if (nuinel_mat(1, gmax, iE) > print_tol) exit
+        do gmax = size(inel_mat, dim = 2), 1, -1
+          if (inel_mat(1, gmax, iE) > print_tol) exit
         end do
         if (gmin > gmax) then ! we have effectively all zeros
           write(UNIT_NUC) 0, 0
         else
           write(UNIT_NUC) gmin, gmax
           do g = gmin, gmax
-            write(UNIT_NUC) nuinel_mat(:, g, iE)
+            write(UNIT_NUC) inel_mat(:, g, iE)
           end do
         end if
       end do
+
+      if (present(nuinel_mat)) then
+        ! < \nu-\Sigma_{s,g',l}(Ein) array as follows for each Ein:
+        ! g'_min, g'_max, for g' in g'_min to g'_max: \nu-\Sigma_{s,g',1:L}(Ein)>
+        do iE = 1, size(Ein_inel)
+          ! find gmin by checking the P0 moment
+          do gmin = 1, size(nuinel_mat, dim = 2)
+            if (nuinel_mat(1, gmin, iE) > print_tol) exit
+          end do
+          ! find gmax by checking the P0 moment
+          do gmax = size(nuinel_mat, dim = 2), 1, -1
+            if (nuinel_mat(1, gmax, iE) > print_tol) exit
+          end do
+          if (gmin > gmax) then ! we have effectively all zeros
+            write(UNIT_NUC) 0, 0
+          else
+            write(UNIT_NUC) gmin, gmax
+            do g = gmin, gmax
+              write(UNIT_NUC) nuinel_mat(:, g, iE)
+            end do
+          end if
+        end do
+      end if
+    else
+      write(UNIT_NUC) 0
     end if
 
   end subroutine print_scatt_bin
@@ -1127,7 +1152,7 @@ module scatt
 #ifdef HDF5
   subroutine print_scatt_hdf5(grp_index_el, grp_index_inel, Ein_el, &
                               Ein_inel, print_tol, el_mat, inel_mat, &
-                              nuinel_mat)
+                              norm, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
@@ -1136,6 +1161,7 @@ module scatt
                                                      ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)    ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:)  ! Inelastic data to print
+    real(8), allocatable, intent(in) :: norm(:)      ! Normalization grid
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     integer :: g, gmin, gmax, iE

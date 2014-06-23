@@ -615,11 +615,12 @@ module ndpp_class
           if (self % nuscatter) then
             call print_scatt(self % lib_format, group_index_el, group_index_inel, &
                              self % Ein_el, self % Ein_inel, self % print_tol, &
-                             self % thin_tol, el_mat, inel_mat, nuinel_mat)
+                             self % thin_tol, el_mat, inel_mat, normalization, &
+                             nuinel_mat)
           else
             call print_scatt(self % lib_format, group_index_el, group_index_inel, &
                              self % Ein_el, self % Ein_inel, self % print_tol, &
-                             self % thin_tol, el_mat, inel_mat)
+                             self % thin_tol, el_mat, inel_mat, normalization)
           end if
           call timer_stop(self % time_print)
 
@@ -744,7 +745,7 @@ module ndpp_class
           call timer_start(self % time_print)
           call print_scatt(self % lib_format, group_index_el, group_index_inel, &
                            self % Ein_el, self % Ein_inel, self % print_tol, &
-                           self % thin_tol, el_mat, inel_mat)
+                           self % thin_tol, el_mat, inel_mat, normalization)
           call timer_stop(self % time_print)
 
           if (allocated(el_mat)) then
