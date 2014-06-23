@@ -684,7 +684,7 @@ module scatt
 !===============================================================================
 
   subroutine print_scatt(lib_format, grp_index_el, grp_index_inel, Ein_el, &
-                         Ein_inel, print_tol, thin_tol, el_mat, inel_mat, &
+                         Ein_inel, print_tol, el_mat, inel_mat, &
                          norm, nuinel_mat)
     integer,              intent(in) :: lib_format   ! Library output type
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
@@ -692,8 +692,6 @@ module scatt
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
     real(8),              intent(in) :: print_tol    ! Minimum grp-to-grp prob'y
-                                                     ! to print
-    real(8),              intent(in) :: thin_tol     ! Minimum grp-to-grp prob'y
                                                      ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)    ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:)  ! Inelastic data to print
