@@ -566,7 +566,8 @@ module ndpp_class
             end if
             ! And for inelastic
             call thin_grid(self % Ein_inel, inel_mat, self % energy_bins, &
-                           self % thin_tol, thin_compr, thin_err, nuinel_mat)
+                           self % thin_tol, thin_compr, thin_err, nuinel_mat, &
+                           normalization)
             if (.not. mpi_enabled) then
               ! Report results of thinning
               message = "....Completed Elastic Thinning, Reduced Storage By " // &
