@@ -570,10 +570,10 @@ module ndpp_class
                            normalization)
             if (.not. mpi_enabled) then
               ! Report results of thinning
-              message = "....Completed Elastic Thinning, Reduced Storage By " // &
+              message = "....Completed Inelastic Thinning, Reduced Storage By " // &
                         trim(to_str(100.0_8 * thin_compr)) // "%"
               call write_message(6)
-              message = "....Maximum Elastic Thinning Error Was " // &
+              message = "....Maximum Inelastic Thinning Error Was " // &
                         trim(to_str(100.0_8 * thin_err)) // "%"
               call write_message(6)
             end if
