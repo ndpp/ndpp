@@ -781,10 +781,10 @@ module ndpp_class
         ! Close the file or HDF5 group
         call finalize_library(self % lib_format)
 
-        deallocate(self % Ein_el)
-        deallocate(self % Ein_inel)
-        deallocate(group_index_el)
-        deallocate(group_index_inel)
+        if allocated(self % Ein_el) deallocate(self % Ein_el)
+        if allocated(self % Ein_inel) deallocate(self % Ein_inel)
+        if allocated(group_index_el) deallocate(group_index_el)
+        if allocated(group_index_inel) deallocate(group_index_inel)
       end do
 
 #ifdef MPI
