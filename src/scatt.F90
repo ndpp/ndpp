@@ -192,14 +192,13 @@ module scatt
 
       ! Now set inelastic and elastic to be the same (at least for Ein >  thresh)
       iEthresh = binary_search(Ein_el, size(Ein_el), thresh)
-      allocate(Ein_inel(1 + size(Ein_el(iEthresh:))))
-      Ein_inel = Ein_el(1)
-      Ein_inel(2:) = Ein_el(iEthresh:)
+      allocate(Ein_inel(size(Ein_el(iEthresh:))))
+      Ein_inel = Ein_el(iEthresh:)
 
-      ! Add points to aid in interpolation if elastic scattering points
+      ! Add points to aid in interpolation of elastic scattering points
       call add_elastic_Eins(awr, kT, cutoff, E_bins, Ein_el)
 
-      ! Expand the Incoming energy grid (E_grid) to include points which will
+      ! Expand the Incoming energy grid to include points which will
       ! improve interpolation of inelastic level scatter results.
       ! These results are kind of like stair functions but with
       ! near-linear (depends on f(mu)) ramps inbetween each `step'.  For now
