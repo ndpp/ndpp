@@ -115,12 +115,13 @@ module scatt
           inittedSD => rxn_data(i_rxn)
           rxn => mySD % rxn
           edist => rxn % edist
-          ! Find the threshold of the inelastic reactions so we can tell
-          ! where to begin placing additional points for interpolation.
+          ! Find the threshold of the inelastic reactions
           if (rxn % MT == ELASTIC) then
             cutoff = mySD % freegas_cutoff
           else
-            inel_thresh = nuc % energy(rxn % threshold)
+            if (nuc % energy(rxn % threshold) < inel_thresh) then
+              inel_thresh = nuc % energy(rxn % threshold)
+            end if
           end if
         end if
         nullify(mySD)
@@ -201,10 +202,8 @@ module scatt
       ! Expand the Incoming energy grid to include points which will
       ! improve interpolation of inelastic level scatter results.
       ! These results are kind of like stair functions but with
-      ! near-linear (depends on f(mu)) ramps inbetween each `step'.  For now
-      ! we will combat this by putting EXTEND_PTS per current point above the
-      ! threshold for inelastic level scatter to begin
-      call add_inelastic_Eins(thresh, Ein_inel)
+      ! near-linear (depends on f(mu)) ramps inbetween each `step'.
+      call add_inelastic_Eins(rxn_data, awr, E_bins, thresh, Ein_inel)
 
       ! Finally add in one point above energy_bins to give MC code something to
       ! interpolate to if Ein==E_bins(size(E_bins))
@@ -402,38 +401,96 @@ module scatt
     end subroutine add_one_more_point
 
 !===============================================================================
-! ADD_INELASTIC_EINS increases the number of points present above a threshold (min)
-! The number of points to increase is EXTEND_PTS for every point on Ein.
+! ADD_INELASTIC_EINS adds in incoming energy points to the Ein grid so that the
+! continuous scattering distributions can be more accurately reconstructed by
+! linear interpolation. This specific routine adds in points which better
+! characterize the behavior as the inelastic level outgoing energies pass from
+! one outgoing group to another. A total of EXTEND_PTS are added for each of
+! these transitions.
 !===============================================================================
 
-    subroutine add_inelastic_Eins(min, a)
-      real(8), intent(in)                 :: min
-      real(8), allocatable, intent(inout) :: a(:)
-      real(8), allocatable :: temp(:)
-      integer :: i, j, k, l
-      real(8) :: dE
+    subroutine add_inelastic_Eins(rxn_data, awr, E_bins, thresh, Ein)
+      type(ScattData), target, intent(in) :: rxn_data(:) ! Reaction data
+      real(8), intent(in) :: awr ! Atomic Weight Ratio
+      real(8), intent(in) :: E_bins(:) ! Energy groups
+      real(8), intent(in) :: thresh    ! Inelastic threshold
+      real(8), allocatable, intent(inout) :: Ein(:) ! Incoming Energy Grid
 
-      ! First lets find where min is
-      k = binary_search(a, size(a), min)
-      allocate(temp(k + EXTEND_PTS * (size(a) - k) - 1))
-      temp(1:k-1) = a(1:k-1)
+      real(8), allocatable :: new_pts(:)
+      real(8), allocatable :: old_grid(:)
+      integer :: i, g ! INEL_EXTEND_PTS and Group loop indices
+      integer :: num_pts
+      real(8) :: Ehi, Elo
+      real(8) :: dElo, dEhi ! interval between each Ein point
+      type(ScattData), pointer :: mySD
+      integer :: i_rxn
+      real(8) :: Ef, D, Fp, Fm, Ecp, EcM, Eg, Q, dE
 
-      j = k
-      do i = k, size(a) - 1
-        dE = log(a(i + 1) / a(i)) / real(EXTEND_PTS,8)
-        do l = 0, EXTEND_PTS - 1
-          temp(j + l) = a(i) * exp(real(l,8) * dE)
-        end do
-        j = j + EXTEND_PTS
+      do i_rxn = 1, size(rxn_data)
+        mySD => rxn_data(i_rxn)
+        if (mySD % is_init) then
+          ! Perform our our analysis for all inelastic reactions
+          ! Inelastics are easily identifiable b/c Q is not zero
+          ! (For elastic, Q is forced to zero by ace.F90)
+          Q = -mySD % rxn % Q_value
+          if (Q /= ZERO) then
+            ! We do not evaluate top and bottom energies since these
+            ! should have no critical points
+            do g = 2, size(E_bins) - 1
+              ! Set up our temporary grids
+              allocate(old_grid(size(Ein)))
+              old_grid = Ein
+              allocate(new_pts(INEL_EXTEND_PTS * size(E_bins)))
+              new_pts = ZERO
+              num_pts = 0
+
+              ! Find the critical energy per Eqs (239) - (242) in
+              ! methods of processing ENDF with NJOY
+              Eg = E_bins(g)
+              Ef = (ONE + awr) / (awr) * Eg ! Eq (242)
+              D = ((awr * awr) * (ONE + Ef / Q) - ONE) * (Ef / Q) ! Eq (241)
+              Fp = (ONE + sqrt(D)) / (ONE + Ef / Q) ! Eq (240, with +)
+              Fm = (ONE - sqrt(D)) / (ONE + Ef / Q) ! Eq (240, with -)
+              Ecp = ((ONE + awr) / (awr) * Q) / (ONE - Fp * Fp / (awr * awr)) ! Eq (239, with F+)
+              Ecm = ((ONE + awr) / (awr) * Q) / (ONE - Fm * Fm / (awr * awr)) ! Eq (239, with F-)
+
+              ! Now set the low critical point, Elo, and the high critical point, Ech
+              if (Ecp > Ecm) then
+                Elo = EcM
+                Ehi = Ecp
+              else
+                Elo = Ecp
+                Ehi = Ecm
+              end if
+
+              ! Check to see if our boundaries are below our inelastic threshold
+              ! This can happen because NNDC-sourced ACE files contain inconsistent
+              ! values for the reaction threshold and the inelastic level energy (Q)
+              if (Elo < thresh) then
+                Elo = thresh
+              end if
+              if (Ehi < thresh) then
+                Ehi = thresh
+              end if
+
+              if (Elo /= Ehi) then
+                ! Now we add equi-distant (logarithmically) EXTEND_PTS # of points
+                ! between Elo and Ehi
+                dE = log(Ehi / Elo) / real(INEL_EXTEND_PTS,8)
+                do i = 1, INEL_EXTEND_PTS - 1 ! Start at one to skip group boundary value
+                  num_pts = num_pts + 1
+                  new_pts(num_pts) = Elo * exp(real(i,8) * dE)
+                end do
+              end if
+
+              call merge(new_pts(1: num_pts), old_grid, Ein)
+              deallocate(new_pts)
+              deallocate(old_grid)
+            end do
+          end if
+        end if
       end do
-      temp(size(temp)) = a(size(a))
-
-      deallocate(a)
-      allocate(a(size(temp)))
-      a = temp
-      deallocate(temp)
-
-    end subroutine add_inelastic_eins
+    end subroutine add_inelastic_Eins
 
 !===============================================================================
 ! CALC_SCATTSAB Calculates the group-to-group transfer matrices and scattering

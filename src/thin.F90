@@ -359,7 +359,7 @@ module thin
       yin3 = yout3
 
       all_ok = size(yin,dim=1) * size(yin,dim=2) + &
-        size(yin2,dim=1) * size(yin2,dim=2) + size(yin3,dim=1)
+        size(yin2,dim=1) * size(yin2,dim=2) + 1
       maxerr = 0.0_8
 
       ! This loop will step through each entry in dim==3 and check to see if

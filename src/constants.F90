@@ -131,10 +131,10 @@ module constants
   ! conversion of inelastic collisions
   integer, parameter :: NE_PER_GRP = 20
 
-  ! Number of points to extend the incoming energy grid (per ACE Ein) at
-  ! energies above the inelastic level threshold: (This is to improve interpolation)
-  ! for these inelastic level collisions
+  ! Number of points to extend the incoming energy grid (per ACE Ein) for elastic
+  ! and inelastic group boundary effects
   integer, parameter :: EXTEND_PTS = 50
+  integer, parameter :: INEL_EXTEND_PTS = 30
 
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS

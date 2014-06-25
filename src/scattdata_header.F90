@@ -1151,7 +1151,7 @@ module scattdata_header
               if (abs(mu_c) > ONE) cycle
             end if
 
-            if (mu_c == ONE) then
+            if (abs(mu_c - ONE) < 1E-10_8) then
               imu_c = size(mu) - 1
               f = ONE
             else
