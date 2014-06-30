@@ -107,7 +107,7 @@ class NDPP_lib(object):
         self.kT = 0.0
         self.NG = 0
         self.E_bins = []
-        self.nuscatter_present = False
+        self.nuinelastic_present = False
         self.chi_present = False
         self.thin_tol = 0.0
         self.print_tol = 0.0
@@ -115,13 +115,16 @@ class NDPP_lib(object):
 
         # Initialize arrays for Energies, group structures, scatter and chi
         # data.
-        self.group_index = []
-        self.NE_scatt = 0
-        self.Ein_scatt = []
-        self.gmin = []
-        self.gmax = []
-        self.scatter = []
-        self.nuscatter = []
+        self.grp_index_el = []
+        self.NE_el = 0
+        self.Ein_el = []
+        self.elastic = []
+        self.grp_index_inel = []
+        self.NE_inel = 0
+        self.Ein_inel = []
+        self.inelastic = []
+        self.nuinelastic = []
+        self.inel_norm = []
         self.NE_chi = 0
         self.Ein_chi = []
         self.chi = []
@@ -162,7 +165,7 @@ class NDPP_lib(object):
             self.scatt_order += 1
 
         # Get flag for if nuscatter is present
-        self.nuscatter_present = bool(self._get_int(path='nuscatter')[0])
+        self.nuinelastic_present = bool(self._get_int(path='nuscatter')[0])
 
         # Get flag for if chi is present
         self.chi_present = bool(self._get_int(path='chi_present')[0])
@@ -174,43 +177,74 @@ class NDPP_lib(object):
         self.thin_tol = self._get_double(path='thin_tol')[0]
 
     def _read_scatt(self):
-        # Get group_index
-        self.group_index = np.asarray(self._get_int(n=self.NG + 1,
-                                    path='scatt/Group_Index'))
-        # Get NE_scatt
-        self.NE_scatt = self._get_int(path='scatt/NE_scatt')[0]
+        # Get elastic data
+        base = 'scatt/elastic/'
+        # Get NE_el
+        self.NE_el = self._get_int(path=base + 'NE_el')[0]
 
         # Get Ein
-        self.Ein_scatt = np.asarray(self._get_double(n=self.NE_scatt,
-                                                     path='scatt/Ein_scatt'),
+        self.Ein_el = np.asarray(self._get_double(n=self.NE_el,
+                                                     path=base + 'Ein_el'),
                                     dtype = np.double)
+        # Get group_index
+        self.grp_index_el = np.asarray(self._get_int(n=self.NG + 1,
+                                    path=base + 'grp_index_el'))
 
-        # Get scattering data for each Ein
-        base = 'scatt/scatt_data/'
-
-        for iE in xrange(self.NE_scatt):
+        # Get elastic data for each Ein
+        for iE in xrange(self.NE_el):
             iE_base = base + str(iE)+ '/'
             gmin = self._get_int(path=iE_base+'gmin')[0]
             gmax = self._get_int(path=iE_base+'gmax')[0]
-            self.scatter.append(scatt_data(gmin, gmax, self.scatt_order))
+            self.elastic.append(scatt_data(gmin, gmax, self.scatt_order))
             if (gmin > 0):
                 for g in xrange(gmax - gmin + 1):
                     # this base name needs some fixing for Hdf5
                     iE_g_base = iE_base + str(g + gmin + 1)
-                    self.scatter[iE].outgoing[g][:] = np.asarray( \
+                    self.elastic[iE].outgoing[g][:] = np.asarray( \
                         self._get_double(n=self.scatt_order, path=iE_g_base))
 
-        if self.nuscatter_present:
-            for iE in xrange(self.NE_scatt):
+        # Get inelastic data
+        base = 'scatt/inelastic/'
+        # Get NE_el
+        self.NE_inel = self._get_int(path=base + 'NE_inel')[0]
+
+        # Get Ein
+        self.Ein_inel = np.asarray(self._get_double(n=self.NE_inel,
+                                                    path=base + 'Ein_inel'),
+                                    dtype = np.double)
+        # Get group_index
+        self.grp_index_inel = np.asarray(self._get_int(n=self.NG + 1,
+                                         path=base + 'grp_index_inel'))
+
+        # Get the inelastic normalization term
+        self.inel_norm = np.asarray(self._get_double(n=self.NE_inel,
+                                                    path=base + 'Ein_inel'),
+                                    dtype = np.double)
+
+        # Get inelastic data for each Ein
+        for iE in xrange(self.NE_inel):
+            iE_base = base + str(iE)+ '/'
+            gmin = self._get_int(path=iE_base+'gmin')[0]
+            gmax = self._get_int(path=iE_base+'gmax')[0]
+            self.inelastic.append(scatt_data(gmin, gmax, self.scatt_order))
+            if (gmin > 0):
+                for g in xrange(gmax - gmin + 1):
+                    # this base name needs some fixing for Hdf5
+                    iE_g_base = iE_base + str(g + gmin + 1)
+                    self.inelastic[iE].outgoing[g][:] = np.asarray( \
+                        self._get_double(n=self.scatt_order, path=iE_g_base))
+
+        if self.nuinelastic_present:
+            for iE in xrange(self.NE_inel):
                 iE_base = base + str(iE)+ '/'
                 gmin = self._get_int(path=iE_base+'nu_gmin')[0]
                 gmax = self._get_int(path=iE_base+'nu_gmax')[0]
-                self.nuscatter.append(scatt_data(gmin, gmax, self.scatt_order))
+                self.nuinelastic.append(scatt_data(gmin, gmax, self.scatt_order))
                 if (gmin > 0):
                     for g in xrange(gmax - gmin + 1):
                         # this base name needs some fixing for Hdf5
                         iE_g_base = iE_base + str(g + gmin + 1)
-                        self.nuscatter[iE].outgoing[g][:] = np.asarray( \
+                        self.nuinelastic[iE].outgoing[g][:] = np.asarray( \
                             self._get_double(n=self.scatt_order, path=iE_g_base))
 
     def _read_chi(self):
@@ -238,20 +272,27 @@ class NDPP_lib(object):
                 self.chi[chi_type] = np.asarray(self._get_double(n=self.NE_chi,
                                                                  path=base+chi_type))
 
-    def condense_outgoing_scatt(self, nu=False, groups=None):
+    def condense_outgoing_scatt(self, dtype, groups=None):
+        if (dtype == 'elastic' or dtype == 'el'):
+            scatter = self.elastic
+            NEin = self.NE_el
+        elif (dtype == 'inelastic' or dtype == 'inel'):
+            scatter = self.inelastic
+            NEin = self.NE_inel
+        elif (dtype == 'nuinelastic' or dtype == 'nuinel' or dtype == 'nu'):
+            if self.nuinelastic_present:
+                scatter = self.nuinelastic
+                NEin = self.NE_inel
+            else:
+                raise ValueError("Nu-Inelastic data requested, but none present!")
+        else:
+            raise ValueError('Value of dtype Does Not Match Possible Options: ' +
+                             '"elastic", "inelastic", or "nuinelastic"')
         if groups is None:
             groups = range(self.NG)
-        condensed = np.zeros((self.NE_scatt, self.scatt_order))
+        condensed = np.zeros((Nein, self.scatt_order))
 
-        if nu:
-            if self.nuscatter_present:
-                scatter = self.nuscatter
-            else:
-                raise ValueError("Error: Nu-Scatter data requested, but none present!")
-        else:
-            scatter = self.scatter
-
-        for iE in xrange(self.NE_scatt):
+        for iE in range(NEin):
             gmin = scatter[iE].gmin
             gmax = scatter[iE].gmax
 
@@ -259,12 +300,12 @@ class NDPP_lib(object):
                 if gmin in groups:
                     condensed[iE][:] += scatter[iE].outgoing[gmin- gmin][:]
             else:
-                for g in xrange(gmin, gmax + 1):
+                for g in range(gmin, gmax + 1):
                     if g in groups:
                         condensed[iE][:] += scatter[iE].outgoing[g-gmin][:]
         return condensed
 
-    def expand_scatt(self, outgoing, num_mu_pts = 201, order = None):
+    def expand_scatt(self, outgoing, dtype, num_mu_pts = 201, order = None):
         # Outgoing is the set of legendre moments vs incoming energies
         # It is only for one group (or an already condensed set of groups)
         # num_mu_pts is the number of pts to use on the mu variable to set up
@@ -272,7 +313,18 @@ class NDPP_lib(object):
         # (Perhaps this could be moved to a sympy function in the future instead
         # of discrete pts)
 
-        expanded = np.zeros((self.NE_scatt, num_mu_pts))
+        if (dtype == 'elastic' or dtype == 'el'):
+            scatter = self.elastic
+            NEin = self.NE_el
+        elif (dtype == 'inelastic' or dtype == 'inel'):
+            scatter = self.inelastic
+            NEin = self.NE_inel
+        elif (dtype == 'nuinelastic' or dtype == 'nuinel' or dtype == 'nu'):
+            if self.nuinelastic_present:
+                scatter = self.nuinelastic
+                NEin = self.NE_inel
+
+        expanded = np.zeros((NEin, num_mu_pts))
         mu = np.linspace(-1.0, 1.0, num_mu_pts)
 
         # Set maxL equal to whatever is smaller, order, or self.scatt_order
@@ -283,7 +335,7 @@ class NDPP_lib(object):
             maxL = self.scatt_order
 
         if self.scatt_type == SCATT_TYPE_LEGENDRE:
-            for iE in xrange(self.NE_scatt):
+            for iE in xrange(NEin):
                 for l in xrange(maxL):
                     expanded[iE][:] = expanded[iE][:] + \
                         (float(l) + 0.5) * ss.eval_legendre(l, mu[:]) * \
@@ -293,18 +345,21 @@ class NDPP_lib(object):
             pass
         return (expanded, mu)
 
-    def test_scatt_positivity(self, nu=False, num_mu_pts = 201, order = None):
+    def test_scatt_positivity(self, dtype, num_mu_pts = 201, order = None):
         # This function will pass through each Ein and outgoing group and
         # will return a flag if the data set is negative and will also return
         # a list of negative iE and groups
 
-        if nu:
-            if self.nuscatter_present:
-                scatter = self.nuscatter[iE]
-            else:
-                raise ValueError("Error: Nu-Scatter data requested, but none present!")
-        else:
-            scatter = self.scatter[iE]
+        if (dtype == 'elastic' or dtype == 'el'):
+            scatter = self.elastic
+            NEin = self.NE_el
+        elif (dtype == 'inelastic' or dtype == 'inel'):
+            scatter = self.inelastic
+            NEin = self.NE_inel
+        elif (dtype == 'nuinelastic' or dtype == 'nuinel' or dtype == 'nu'):
+            if self.nuinelastic_present:
+                scatter = self.nuinelastic
+                NEin = self.NE_inel
 
         # Initialize the return values
         positivity = True
@@ -321,7 +376,7 @@ class NDPP_lib(object):
         mu = np.linspace(-1.0, 1.0, num_mu_pts)
 
         if self.scatt_type == SCATT_TYPE_LEGENDRE:
-          for iE in xrange(self.NE_scatt):
+          for iE in xrange(NEin):
               gmin = scatter[iE].gmin
               gmax = scatter[iE].gmax
 

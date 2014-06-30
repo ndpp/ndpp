@@ -481,9 +481,9 @@ module scatt
                   num_pts = num_pts + 1
                   new_pts(num_pts) = Elo * exp(real(i,8) * dE)
                 end do
-              end if
 
-              call merge(new_pts(1: num_pts), old_grid, Ein)
+                call merge(new_pts(1: num_pts), old_grid, Ein)
+              end if
               deallocate(new_pts)
               deallocate(old_grid)
             end do
