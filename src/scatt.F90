@@ -145,9 +145,11 @@ module scatt
       call calc_elastic_grid(nuc, mu_out, rxn_data, Ein_el, inittedSD % order, &
                              energy_bins, el_mat)
 
-      call calc_inelastic_grid(nuc, mu_out, rxn_data, Ein_inel, &
-                               inittedSD % order, energy_bins, nuscatt, &
-                               inel_mat, nuinel_mat, normalization)
+      if (allocated(Ein_inel)) then
+        call calc_inelastic_grid(nuc, mu_out, rxn_data, Ein_inel, &
+                                 inittedSD % order, energy_bins, nuscatt, &
+                                 inel_mat, nuinel_mat, normalization)
+      end if
 
       ! Now clear rxn_datas members
       do i_rxn = 1, num_tot_rxn
@@ -176,6 +178,7 @@ module scatt
       real(8), allocatable, intent(inout) :: Ein_inel(:) ! Incoming Inelastic Energy Grid
 
       integer :: iEmax, iEthresh
+      logical :: only_el
 
       ! Create energy grid to use after limiting nuc_grid to
       ! the maximum energy in E_bins
@@ -189,38 +192,47 @@ module scatt
 
       ! Add in incoming energies from all reaction channel distributions to
       ! the Ein grid
-      call combine_Eins(rxn_data, Ein_el)
-
-      ! Now set inelastic and elastic to be the same (at least for Ein >  thresh)
-      iEthresh = binary_search(Ein_el, size(Ein_el), thresh)
-      allocate(Ein_inel(size(Ein_el(iEthresh:))))
-      Ein_inel = Ein_el(iEthresh:)
+      call combine_Eins(rxn_data, Ein_el, only_el)
 
       ! Add points to aid in interpolation of elastic scattering points
       call add_elastic_Eins(awr, kT, cutoff, E_bins, Ein_el)
 
-      ! Expand the Incoming energy grid to include points which will
-      ! improve interpolation of inelastic level scatter results.
-      ! These results are kind of like stair functions but with
-      ! near-linear (depends on f(mu)) ramps inbetween each `step'.
-      call add_inelastic_Eins(rxn_data, awr, E_bins, thresh, Ein_inel)
-
       ! Finally add in one point above energy_bins to give MC code something to
       ! interpolate to if Ein==E_bins(size(E_bins))
       call add_one_more_point(Ein_el)
-      call add_one_more_point(Ein_inel)
+
+      ! Move on to inelastic grid
+      if (.not. only_el) then
+        ! Set inelastic and elastic to be the same (at least for Ein >  thresh)
+        iEthresh = binary_search(Ein_el, size(Ein_el), thresh)
+        allocate(Ein_inel(size(Ein_el(iEthresh:))))
+        Ein_inel = Ein_el(iEthresh:)
+
+        ! Expand the Incoming energy grid to include points which will
+        ! improve interpolation of inelastic level scatter results.
+        ! These results are kind of like stair functions but with
+        ! near-linear (depends on f(mu)) ramps inbetween each `step'.
+        call add_inelastic_Eins(rxn_data, awr, E_bins, thresh, Ein_inel)
+
+        ! Finally add in one point above energy_bins to give MC code something to
+        ! interpolate to if Ein==E_bins(size(E_bins))
+        call add_one_more_point(Ein_inel)
+      end if
 
     end subroutine create_Ein_grid
 
 !===============================================================================
 ! COMBINE_EINS ensures that the incoming energies from all of the different
 ! reaction channels' incoming energy grids are included in our final grid so
-! as not to miss any highly varying information.
+! as not to miss any highly varying information.  This routine also finds if
+! there are only elastic reactions in this nuclide (i.e., H-1) so that we can
+! properly deal with the inelastic Ein grid.
 !===============================================================================
 
-    subroutine combine_Eins(rxn_data, Ein)
+    subroutine combine_Eins(rxn_data, Ein, only_el)
       type(ScattData), target, intent(in) :: rxn_data(:) ! Reaction data
       real(8), allocatable, intent(inout) :: Ein(:)      ! Incoming Energy Grid
+      logical, intent(inout)              :: only_el     ! Only elastic present?
 
       real(8), allocatable      :: new_grid(:)
       real(8), allocatable      :: tmp_grid(:)
@@ -228,11 +240,16 @@ module scatt
       integer :: i_rxn, iEmax
       real(8) :: max_grp, min_grp
 
+      only_el = .true.
+
       allocate(new_grid(1))
       new_grid = Ein(1)
       do i_rxn = 1, size(rxn_data)
         mySD => rxn_data(i_rxn)
         if (mySD % is_init) then
+          if (mySD % rxn % MT /= ELASTIC) then
+            only_el = .false.
+          end if
           min_grp = mySD % E_bins(1)
           max_grp = mySD % E_bins(size(mySD % E_bins))
           ! Find maximum point that is within our group boundaries before merging

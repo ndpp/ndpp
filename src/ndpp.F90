@@ -565,17 +565,19 @@ module ndpp_class
               call write_message(6)
             end if
             ! And for inelastic
-            call thin_grid(self % Ein_inel, inel_mat, self % energy_bins, &
-                           self % thin_tol, thin_compr, thin_err, nuinel_mat, &
-                           normalization)
-            if (.not. mpi_enabled) then
-              ! Report results of thinning
-              message = "....Completed Inelastic Thinning, Reduced Storage By " // &
-                        trim(to_str(100.0_8 * thin_compr)) // "%"
-              call write_message(6)
-              message = "....Maximum Inelastic Thinning Error Was " // &
-                        trim(to_str(100.0_8 * thin_err)) // "%"
-              call write_message(6)
+            if (allocated(self % Ein_inel)) then
+              call thin_grid(self % Ein_inel, inel_mat, self % energy_bins, &
+                             self % thin_tol, thin_compr, thin_err, nuinel_mat, &
+                             normalization)
+              if (.not. mpi_enabled) then
+                ! Report results of thinning
+                message = "....Completed Inelastic Thinning, Reduced Storage By " // &
+                          trim(to_str(100.0_8 * thin_compr)) // "%"
+                call write_message(6)
+                message = "....Maximum Inelastic Thinning Error Was " // &
+                          trim(to_str(100.0_8 * thin_err)) // "%"
+                call write_message(6)
+              end if
             end if
           end if
 
@@ -595,20 +597,22 @@ module ndpp_class
           ! so do it manually (and avoid a search to boot)
           group_index_el(size(self % energy_bins)) = size(self % Ein_el)
 
+          if (allocated(self % Ein_inel)) then
           allocate(group_index_inel(size(self % energy_bins)))
-          do g = 1, size(self % energy_bins - 1)
-            if (self % energy_bins(g) < self % Ein_inel(1)) then
-              group_index_inel(g) = 1
-            else if (self % energy_bins(g) >= self % Ein_inel(size(self % Ein_inel))) then
-              group_index_inel(g) = size(self % Ein_inel)
-            else
-              group_index_inel(g) = binary_search(self % Ein_inel, size(self % Ein_inel), &
-                                             self % energy_bins(g))
-            end if
-          end do
-          ! Set final group (w/ rounding error this could not include top E_bin pt,
-          ! so do it manually (and avoid a search to boot)
-          group_index_inel(size(self % energy_bins)) = size(self % Ein_inel)
+            do g = 1, size(self % energy_bins - 1)
+              if (self % energy_bins(g) < self % Ein_inel(1)) then
+                group_index_inel(g) = 1
+              else if (self % energy_bins(g) >= self % Ein_inel(size(self % Ein_inel))) then
+                group_index_inel(g) = size(self % Ein_inel)
+              else
+                group_index_inel(g) = binary_search(self % Ein_inel, size(self % Ein_inel), &
+                                               self % energy_bins(g))
+              end if
+            end do
+            ! Set final group (w/ rounding error this could not include top E_bin pt,
+            ! so do it manually (and avoid a search to boot)
+            group_index_inel(size(self % energy_bins)) = size(self % Ein_inel)
+          end if
 
           ! Print the results to file
           call timer_start(self % time_print)

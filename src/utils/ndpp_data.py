@@ -208,44 +208,47 @@ class NDPP_lib(object):
         # Get NE_el
         self.NE_inel = self._get_int(path=base + 'NE_inel')[0]
 
-        # Get Ein
-        self.Ein_inel = np.asarray(self._get_double(n=self.NE_inel,
-                                                    path=base + 'Ein_inel'),
-                                    dtype = np.double)
-        # Get group_index
-        self.grp_index_inel = np.asarray(self._get_int(n=self.NG + 1,
-                                         path=base + 'grp_index_inel'))
+        if self.NE_inel > 0:
+            # Get Ein
+            self.Ein_inel = np.asarray(self._get_double(n=self.NE_inel,
+                                                        path=base + 'Ein_inel'),
+                                        dtype = np.double)
+            # Get group_index
+            self.grp_index_inel = np.asarray(self._get_int(n=self.NG + 1,
+                                             path=base + 'grp_index_inel'))
 
-        # Get the inelastic normalization term
-        self.inel_norm = np.asarray(self._get_double(n=self.NE_inel,
-                                                    path=base + 'Ein_inel'),
-                                    dtype = np.double)
+            # Get the inelastic normalization term
+            self.inel_norm = np.asarray(self._get_double(n=self.NE_inel,
+                                                        path=base + 'Ein_inel'),
+                                        dtype = np.double)
 
-        # Get inelastic data for each Ein
-        for iE in xrange(self.NE_inel):
-            iE_base = base + str(iE)+ '/'
-            gmin = self._get_int(path=iE_base+'gmin')[0]
-            gmax = self._get_int(path=iE_base+'gmax')[0]
-            self.inelastic.append(scatt_data(gmin, gmax, self.scatt_order))
-            if (gmin > 0):
-                for g in xrange(gmax - gmin + 1):
-                    # this base name needs some fixing for Hdf5
-                    iE_g_base = iE_base + str(g + gmin + 1)
-                    self.inelastic[iE].outgoing[g][:] = np.asarray( \
-                        self._get_double(n=self.scatt_order, path=iE_g_base))
-
-        if self.nuinelastic_present:
+            # Get inelastic data for each Ein
             for iE in xrange(self.NE_inel):
                 iE_base = base + str(iE)+ '/'
-                gmin = self._get_int(path=iE_base+'nu_gmin')[0]
-                gmax = self._get_int(path=iE_base+'nu_gmax')[0]
-                self.nuinelastic.append(scatt_data(gmin, gmax, self.scatt_order))
+                gmin = self._get_int(path=iE_base+'gmin')[0]
+                gmax = self._get_int(path=iE_base+'gmax')[0]
+                self.inelastic.append(scatt_data(gmin, gmax, self.scatt_order))
                 if (gmin > 0):
                     for g in xrange(gmax - gmin + 1):
                         # this base name needs some fixing for Hdf5
                         iE_g_base = iE_base + str(g + gmin + 1)
-                        self.nuinelastic[iE].outgoing[g][:] = np.asarray( \
+                        self.inelastic[iE].outgoing[g][:] = np.asarray( \
                             self._get_double(n=self.scatt_order, path=iE_g_base))
+
+            if self.nuinelastic_present:
+                for iE in xrange(self.NE_inel):
+                    iE_base = base + str(iE)+ '/'
+                    gmin = self._get_int(path=iE_base+'nu_gmin')[0]
+                    gmax = self._get_int(path=iE_base+'nu_gmax')[0]
+                    self.nuinelastic.append(scatt_data(gmin, gmax,
+                                            self.scatt_order))
+                    if (gmin > 0):
+                        for g in xrange(gmax - gmin + 1):
+                            # this base name needs some fixing for Hdf5
+                            iE_g_base = iE_base + str(g + gmin + 1)
+                            self.nuinelastic[iE].outgoing[g][:] = np.asarray( \
+                                self._get_double(n=self.scatt_order,
+                                                 path=iE_g_base))
 
     def _read_chi(self):
         # Get NE_Chi, number of delayed groups
