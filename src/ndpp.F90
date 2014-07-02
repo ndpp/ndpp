@@ -550,6 +550,17 @@ module ndpp_class
             self % scatt_order, self % mu_bins, self % nuscatter, self % Ein_el, &
             self % Ein_inel, el_mat, inel_mat, nuinel_mat, sigma_inel)
 
+          ! Remove all outgoing values less than the user supplied tolerance
+          ! This occurs before thinning the grid to allow thinning to remove
+          ! more values since there may be more 0s.
+          call apply_tol_scatt(el_mat, self % print_tol)
+          if (allocated(self % Ein_inel)) then
+            call apply_tol_scatt(inel_mat, self % print_tol)
+            if (self % nuscatter) then
+              call apply_tol_scatt(nuinel_mat, self % print_tol)
+            end if
+          end if
+
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
             !For elastic
@@ -618,12 +629,12 @@ module ndpp_class
           call timer_start(self % time_print)
           if (self % nuscatter) then
             call print_scatt(self % lib_format, group_index_el, group_index_inel, &
-                             self % Ein_el, self % Ein_inel, self % print_tol, &
-                             el_mat, inel_mat, sigma_inel, nuinel_mat)
+                             self % Ein_el, self % Ein_inel, el_mat, inel_mat, &
+                             sigma_inel, nuinel_mat)
           else
             call print_scatt(self % lib_format, group_index_el, group_index_inel, &
-                             self % Ein_el, self % Ein_inel, self % print_tol, &
-                             el_mat, inel_mat, sigma_inel)
+                             self % Ein_el, self % Ein_inel, el_mat, inel_mat, &
+                             sigma_inel)
           end if
           call timer_stop(self % time_print)
 
@@ -713,6 +724,11 @@ module ndpp_class
                              self % scatt_order, el_mat, self % mu_bins, &
                              self % Ein_el)
 
+          ! Remove all outgoing values less than the user supplied tolerance
+          ! This occurs before thinning the grid to allow thinning to remove
+          ! more values since there may be more 0s.
+          call apply_tol_scatt(el_mat, self % print_tol)
+
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
             call thin_grid(self % Ein_el, el_mat, self % energy_bins, &
@@ -747,8 +763,8 @@ module ndpp_class
           ! Print the results to file
           call timer_start(self % time_print)
           call print_scatt(self % lib_format, group_index_el, group_index_inel, &
-                           self % Ein_el, self % Ein_inel, self % print_tol, &
-                           el_mat, inel_mat, sigma_inel)
+                           self % Ein_el, self % Ein_inel, el_mat, inel_mat, &
+                           sigma_inel)
           call timer_stop(self % time_print)
 
           if (allocated(el_mat)) then

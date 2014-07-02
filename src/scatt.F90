@@ -770,20 +770,54 @@ module scatt
     end subroutine calc_inelastic_grid
 
 !===============================================================================
+! APPLY_TOL_SCATT applies the printing tolerance to the data.  This is done by
+! setting all values which are less than the tolerance to zero.  The data is then
+! renormalized to the initial sum after this effort is complete.
+!===============================================================================
+
+  subroutine apply_tol_scatt(data, tol)
+    real(8), allocatable, intent(inout) :: data(:,:,:)  ! Scatt data to print
+                                                        ! (order x g x Ein)
+    real(8),              intent(in)    :: tol          ! Minimum grp-to-grp prob'y
+                                                        ! to keep
+
+    integer :: gout, G, iE
+    real(8) :: orig_total, norm
+
+    G = size(data, dim=2)
+
+    ! Proceed through each Ein
+    do iE = 1, size(data, dim=3)
+      ! Get the original amount to normalize to.
+      orig_total = sum(data(1,:,iE))
+      ! Go through and adjust values
+      do gout = 1, G
+        if ((data(1,gout,iE) > ZERO) .and. (data(1,gout,iE) < tol)) then
+          data(:,gout,iE) = ZERO
+        end if
+      end do
+      norm = orig_total / sum(data(1,:,iE))
+      ! Now normalize the results accordingly to maintain conservation.
+      do gout = 1, G
+        data(:,gout,iE) = data(:,gout,iE) * norm
+      end do
+    end do
+
+  end subroutine apply_tol_scatt
+
+!===============================================================================
 ! PRINT_SCATT prints the scattering data to the specified output file
 ! in the specified format.
 !===============================================================================
 
   subroutine print_scatt(lib_format, grp_index_el, grp_index_inel, Ein_el, &
-                         Ein_inel, print_tol, el_mat, inel_mat, &
+                         Ein_inel, el_mat, inel_mat, &
                          sigma_inel, nuinel_mat)
     integer,              intent(in) :: lib_format   ! Library output type
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
-    real(8),              intent(in) :: print_tol    ! Minimum grp-to-grp prob'y
-                                                     ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
     real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
@@ -792,37 +826,37 @@ module scatt
     if (present(nuinel_mat)) then
       if (lib_format == ASCII) then
         call print_scatt_ascii(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat, sigma_inel, &
+                               Ein_inel, el_mat, inel_mat, sigma_inel, &
                                nuinel_mat)
       else if (lib_format == BINARY) then
         call print_scatt_bin(grp_index_el, grp_index_inel, Ein_el, &
-                             Ein_inel, print_tol, el_mat, inel_mat, sigma_inel, &
+                             Ein_inel, el_mat, inel_mat, sigma_inel, &
                              nuinel_mat)
       else if (lib_format == HUMAN) then
         call print_scatt_human(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat, sigma_inel, &
+                               Ein_inel, el_mat, inel_mat, sigma_inel, &
                                nuinel_mat)
 #ifdef HDF5
       else if (lib_format == H5) then
         call print_scatt_hdf5(grp_index_el, grp_index_inel, Ein_el, &
-                              Ein_inel, print_tol, el_mat, inel_mat, sigma_inel, &
+                              Ein_inel, el_mat, inel_mat, sigma_inel, &
                               nuinel_mat)
 #endif
       end if
     else
       if (lib_format == ASCII) then
         call print_scatt_ascii(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat, sigma_inel)
+                               Ein_inel, el_mat, inel_mat, sigma_inel)
       else if (lib_format == BINARY) then
         call print_scatt_bin(grp_index_el, grp_index_inel, Ein_el, &
-                             Ein_inel, print_tol, el_mat, inel_mat, sigma_inel)
+                             Ein_inel, el_mat, inel_mat, sigma_inel)
       else if (lib_format == HUMAN) then
         call print_scatt_human(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat, sigma_inel)
+                               Ein_inel, el_mat, inel_mat, sigma_inel)
 #ifdef HDF5
       else if (lib_format == H5) then
         call print_scatt_hdf5(grp_index_el, grp_index_inel, Ein_el, &
-                              Ein_inel, print_tol, el_mat, inel_mat, sigma_inel)
+                              Ein_inel, el_mat, inel_mat, sigma_inel)
 #endif
       end if
     end if
@@ -835,14 +869,12 @@ module scatt
 !===============================================================================
 
   subroutine print_scatt_ascii(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat, &
+                               Ein_inel, el_mat, inel_mat, &
                                sigma_inel, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
-    real(8),              intent(in) :: print_tol    ! Minimum grp-to-grp prob'y
-                                                     ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
     real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
@@ -883,11 +915,11 @@ module scatt
     do iE = 1, size(Ein_el)
       ! find gmin by checking the P0 moment
       do gmin = 1, size(el_mat, dim = 2)
-        if (el_mat(1, gmin, iE) > print_tol) exit
+        if (el_mat(1, gmin, iE) > ZERO) exit
       end do
       ! find gmax by checking the P0 moment
       do gmax = size(el_mat, dim = 2), 1, -1
-        if (el_mat(1, gmax, iE) > print_tol) exit
+        if (el_mat(1, gmax, iE) > ZERO) exit
       end do
       if (gmin > gmax) then ! we have effectively all zeros
         write(UNIT_NUC, '(I20,I20)') 0,0
@@ -917,11 +949,11 @@ module scatt
       do iE = 1, size(Ein_inel)
         ! find gmin by checking the P0 moment
         do gmin = 1, size(inel_mat, dim = 2)
-          if (inel_mat(1, gmin, iE) > print_tol) exit
+          if (inel_mat(1, gmin, iE) > ZERO) exit
         end do
         ! find gmax by checking the P0 moment
         do gmax = size(inel_mat, dim = 2), 1, -1
-          if (inel_mat(1, gmax, iE) > print_tol) exit
+          if (inel_mat(1, gmax, iE) > ZERO) exit
         end do
         if (gmin > gmax) then ! we have effectively all zeros
           write(UNIT_NUC, '(I20,I20)') 0,0
@@ -938,11 +970,11 @@ module scatt
         do iE = 1, size(Ein_inel)
           ! find gmin by checking the P0 moment
           do gmin = 1, size(nuinel_mat, dim = 2)
-            if (nuinel_mat(1, gmin, iE) > print_tol) exit
+            if (nuinel_mat(1, gmin, iE) > ZERO) exit
           end do
           ! find gmax by checking the P0 moment
           do gmax = size(nuinel_mat, dim = 2), 1, -1
-            if (nuinel_mat(1, gmax, iE) > print_tol) exit
+            if (nuinel_mat(1, gmax, iE) > ZERO) exit
           end do
           if (gmin > gmax) then ! we have effectively all zeros
             write(UNIT_NUC, '(I20,I20)') 0,0
@@ -965,14 +997,12 @@ module scatt
 !===============================================================================
 
   subroutine print_scatt_human(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, print_tol, el_mat, inel_mat, &
+                               Ein_inel, el_mat, inel_mat, &
                                sigma_inel, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
-    real(8),              intent(in) :: print_tol    ! Minimum grp-to-grp prob'y
-                                                     ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
     real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
@@ -1013,11 +1043,11 @@ module scatt
     do iE = 1, size(Ein_el)
       ! find gmin by checking the P0 moment
       do gmin = 1, size(el_mat, dim = 2)
-        if (el_mat(1, gmin, iE) > print_tol) exit
+        if (el_mat(1, gmin, iE) > ZERO) exit
       end do
       ! find gmax by checking the P0 moment
       do gmax = size(el_mat, dim = 2), 1, -1
-        if (el_mat(1, gmax, iE) > print_tol) exit
+        if (el_mat(1, gmax, iE) > ZERO) exit
       end do
       if (gmin > gmax) then ! we have effectively all zeros
         write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',Ein_el(iE), &
@@ -1051,11 +1081,11 @@ module scatt
       do iE = 1, size(Ein_inel)
         ! find gmin by checking the P0 moment
         do gmin = 1, size(inel_mat, dim = 2)
-          if (inel_mat(1, gmin, iE) > print_tol) exit
+          if (inel_mat(1, gmin, iE) > ZERO) exit
         end do
         ! find gmax by checking the P0 moment
         do gmax = size(inel_mat, dim = 2), 1, -1
-          if (inel_mat(1, gmax, iE) > print_tol) exit
+          if (inel_mat(1, gmax, iE) > ZERO) exit
         end do
         if (gmin > gmax) then ! we have effectively all zeros
           write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',Ein_inel(iE), &
@@ -1076,11 +1106,11 @@ module scatt
         do iE = 1, size(Ein_inel)
           ! find gmin by checking the P0 moment
           do gmin = 1, size(nuinel_mat, dim = 2)
-            if (nuinel_mat(1, gmin, iE) > print_tol) exit
+            if (nuinel_mat(1, gmin, iE) > ZERO) exit
           end do
           ! find gmax by checking the P0 moment
           do gmax = size(nuinel_mat, dim = 2), 1, -1
-            if (nuinel_mat(1, gmax, iE) > print_tol) exit
+            if (nuinel_mat(1, gmax, iE) > ZERO) exit
           end do
           if (gmin > gmax) then ! we have effectively all zeros
             write(UNIT_NUC, '(A,1PE20.12,A,I5,A,I5)') 'Ein = ',Ein_inel(iE), &
@@ -1107,14 +1137,12 @@ module scatt
 !===============================================================================
 
   subroutine print_scatt_bin(grp_index_el, grp_index_inel, Ein_el, &
-                             Ein_inel, print_tol, el_mat, inel_mat, &
+                             Ein_inel, el_mat, inel_mat, &
                              sigma_inel, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
-    real(8),              intent(in) :: print_tol    ! Minimum grp-to-grp prob'y
-                                                     ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
     real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
@@ -1155,11 +1183,11 @@ module scatt
     do iE = 1, size(Ein_el)
       ! find gmin by checking the P0 moment
       do gmin = 1, size(el_mat, dim = 2)
-        if (el_mat(1, gmin, iE) > print_tol) exit
+        if (el_mat(1, gmin, iE) > ZERO) exit
       end do
       ! find gmax by checking the P0 moment
       do gmax = size(el_mat, dim = 2), 1, -1
-        if (el_mat(1, gmax, iE) > print_tol) exit
+        if (el_mat(1, gmax, iE) > ZERO) exit
       end do
       if (gmin > gmax) then ! we have effectively all zeros
         write(UNIT_NUC) 0, 0
@@ -1190,11 +1218,11 @@ module scatt
       do iE = 1, size(Ein_inel)
         ! find gmin by checking the P0 moment
         do gmin = 1, size(inel_mat, dim = 2)
-          if (inel_mat(1, gmin, iE) > print_tol) exit
+          if (inel_mat(1, gmin, iE) > ZERO) exit
         end do
         ! find gmax by checking the P0 moment
         do gmax = size(inel_mat, dim = 2), 1, -1
-          if (inel_mat(1, gmax, iE) > print_tol) exit
+          if (inel_mat(1, gmax, iE) > ZERO) exit
         end do
         if (gmin > gmax) then ! we have effectively all zeros
           write(UNIT_NUC) 0, 0
@@ -1212,11 +1240,11 @@ module scatt
         do iE = 1, size(Ein_inel)
           ! find gmin by checking the P0 moment
           do gmin = 1, size(nuinel_mat, dim = 2)
-            if (nuinel_mat(1, gmin, iE) > print_tol) exit
+            if (nuinel_mat(1, gmin, iE) > ZERO) exit
           end do
           ! find gmax by checking the P0 moment
           do gmax = size(nuinel_mat, dim = 2), 1, -1
-            if (nuinel_mat(1, gmax, iE) > print_tol) exit
+            if (nuinel_mat(1, gmax, iE) > ZERO) exit
           end do
           if (gmin > gmax) then ! we have effectively all zeros
             write(UNIT_NUC) 0, 0
@@ -1240,14 +1268,12 @@ module scatt
 !===============================================================================
 #ifdef HDF5
   subroutine print_scatt_hdf5(grp_index_el, grp_index_inel, Ein_el, &
-                              Ein_inel, print_tol, el_mat, inel_mat, &
+                              Ein_inel, el_mat, inel_mat, &
                               sigma_inel, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
-    real(8),              intent(in) :: print_tol    ! Minimum grp-to-grp prob'y
-                                                     ! to print
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
     real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
@@ -1303,7 +1329,7 @@ module scatt
       call hdf5_open_group(iE_name)
       ! find gmin by checking the P0 moment
       do gmin = 1, size(data, dim = 2)
-        if (data(1, gmin, iE) > print_tol) then
+        if (data(1, gmin, iE) > ZERO) then
           call hdf5_close_group()
           temp_group = scatt_group
           exit
@@ -1311,7 +1337,7 @@ module scatt
       end do
       ! find gmax by checking the P0 moment
       do gmax = size(data, dim = 2), 1, -1
-        if (data(1, gmax, iE) > print_tol) exit
+        if (data(1, gmax, iE) > ZERO) exit
       end do
       if (gmin > gmax) then ! we have effectively all zeros
         call hdf5_write_integer(temp_group, 'gmin', 0)
@@ -1335,7 +1361,7 @@ module scatt
         call hdf5_open_group(iE_name)
         ! find gmin by checking the P0 moment
         do gmin = 1, size(nudata, dim = 2)
-          if (nudata(1, gmin, iE) > print_tol) then
+          if (nudata(1, gmin, iE) > ZERO) then
             call hdf5_close_group()
             temp_group = scatt_group
             exit
@@ -1343,7 +1369,7 @@ module scatt
         end do
         ! find gmax by checking the P0 moment
         do gmax = size(nudata, dim = 2), 1, -1
-          if (nudata(1, gmax, iE) > print_tol) exit
+          if (nudata(1, gmax, iE) > ZERO) exit
         end do
         if (gmin > gmax) then ! we have effectively all zeros
           call hdf5_write_integer(temp_group, 'nu_gmin', 0)
