@@ -435,7 +435,7 @@ module ndpp_class
                                                 ! order x g_out x E_in
       real(8), allocatable :: nuinel_mat(:,:,:) ! nu-inelastic matrix moments,
                                                 ! order x g_out x E_in
-      real(8), allocatable :: normalization(:)  ! Inelastic normalization data
+      real(8), allocatable :: sigma_inel(:)     ! Total Inelastic X/S
       ! Chi specific data
       real(8), allocatable   :: Ein_chi(:)   ! List of energy points for chi
       real(8), allocatable   :: chi_t(:,:)   ! grp x E_in chi tot values
@@ -548,7 +548,7 @@ module ndpp_class
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
             self % scatt_order, self % mu_bins, self % nuscatter, self % Ein_el, &
-            self % Ein_inel, el_mat, inel_mat, nuinel_mat, normalization)
+            self % Ein_inel, el_mat, inel_mat, nuinel_mat, sigma_inel)
 
           ! Thin the grid, unless thin_tol is zero
           if (self % thin_tol > ZERO) then
@@ -568,7 +568,7 @@ module ndpp_class
             if (allocated(self % Ein_inel)) then
               call thin_grid(self % Ein_inel, inel_mat, self % energy_bins, &
                              self % thin_tol, thin_compr, thin_err, nuinel_mat, &
-                             normalization)
+                             sigma_inel)
               if (.not. mpi_enabled) then
                 ! Report results of thinning
                 message = "....Completed Inelastic Thinning, Reduced Storage By " // &
@@ -619,11 +619,11 @@ module ndpp_class
           if (self % nuscatter) then
             call print_scatt(self % lib_format, group_index_el, group_index_inel, &
                              self % Ein_el, self % Ein_inel, self % print_tol, &
-                             el_mat, inel_mat, normalization, nuinel_mat)
+                             el_mat, inel_mat, sigma_inel, nuinel_mat)
           else
             call print_scatt(self % lib_format, group_index_el, group_index_inel, &
                              self % Ein_el, self % Ein_inel, self % print_tol, &
-                             el_mat, inel_mat, normalization)
+                             el_mat, inel_mat, sigma_inel)
           end if
           call timer_stop(self % time_print)
 
@@ -748,7 +748,7 @@ module ndpp_class
           call timer_start(self % time_print)
           call print_scatt(self % lib_format, group_index_el, group_index_inel, &
                            self % Ein_el, self % Ein_inel, self % print_tol, &
-                           el_mat, inel_mat, normalization)
+                           el_mat, inel_mat, sigma_inel)
           call timer_stop(self % time_print)
 
           if (allocated(el_mat)) then

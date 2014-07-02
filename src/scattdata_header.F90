@@ -363,11 +363,11 @@ module scattdata_header
 ! data directly from the given index (iE)
 !===============================================================================
 
-    function scatt_interp_distro(this, mu_out, nuc, Ein, norm_tot) result(distro)
+    function scatt_interp_distro(this, mu_out, nuc, Ein, sigma_inel) result(distro)
       class(ScattData), target, intent(in) :: this ! Working ScattData object
       real(8), intent(in)                  :: mu_out(:) ! The tabular output mu grid
       type(Nuclide), intent(in), pointer   :: nuc  ! Working nuclide
-      real(8), intent(inout)               :: norm_tot ! Running total of the micro scattering x/s
+      real(8), intent(inout)               :: sigma_inel ! Running total of the micro scattering x/s
 
       real(8), intent(in)       :: Ein     ! Incoming energy to interpolate on
 
@@ -401,7 +401,8 @@ module scattdata_header
         (Ein > this % E_bins(size(this % E_bins)))) then
         ! This is a catch-all, our energy was below the threshold or above the
         ! max group value,
-        ! distro should be left as zero and we shall just exit this function
+        ! distro should be left as zero, nothing added to sigma_inel,
+        ! and we shall just exit this function
         return
       else if (Ein >= nuc % energy(nuc % n_grid)) then
         ! We are above the global energy grid, so take the highest value
@@ -495,8 +496,8 @@ module scattdata_header
         ! Scale the results
         distro = distro * sigS * p_valid
 
-        ! Add this contribution to the normalization constant
-        norm_tot = norm_tot + sigS * p_valid
+        ! Add this contribution to sigma_inel
+        sigma_inel = sigma_inel + sigS * p_valid
       end if
 
     end function scatt_interp_distro

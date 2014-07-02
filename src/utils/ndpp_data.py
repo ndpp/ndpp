@@ -124,7 +124,7 @@ class NDPP_lib(object):
         self.Ein_inel = []
         self.inelastic = []
         self.nuinelastic = []
-        self.inel_norm = []
+        self.sigma_inel = []
         self.NE_chi = 0
         self.Ein_chi = []
         self.chi = []
