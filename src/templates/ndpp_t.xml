@@ -4,16 +4,29 @@
   <options rootname="ndpp"/>
 
   <variable name="scatt_type_" tag="scatt_type" type="word" length="20" />
-  <variable name="scatt_order_" tag="scatt_order" type="integer" default="5" />
+  <variable name="scatt_order_" tag="scatt_order" type="integer" />
   <variable name="nuscatter_" tag="nuscatter" type="word" length="5" />
-  <variable name="mu_bins_" tag="mu_bins" type="integer" default="2001" />
+  <variable name="mu_bins_" tag="mu_bins" type="integer" />
   <variable name="cross_sections_" tag="cross_sections" type="word" length="255" />
   <variable name="integrate_chi_" tag="integrate_chi" type="word" length="5" />
   <variable name="energy_bins_" tag="energy_bins" type="double-array" />
   <variable name="library_name_" tag="library_name" type="word" length="255" />
   <variable name="output_format_" tag="output_format" type="word" length="6" />
-  <variable name="thinning_tol_" tag="thinning_tol" type="double" default="0.0" />
-  <variable name="print_tol_" tag="print_tol" type="double" default="1.0E-8"/>
-  <variable name="freegas_cutoff_" tag="freegas_cutoff" type="double" default="400.0" />
+  <variable name="thinning_tol_" tag="thinning_tol" type="double" />
+  <variable name="print_tol_" tag="print_tol" type="double"/>
+  <variable name="freegas_cutoff_" tag="freegas_cutoff" type="double" />
   <variable name="threads_" tag="threads" type="integer" />
+
+  <variable name="sab_threshold_" tag="sab_threshold" type="double"/>
+  <variable name="brent_mu_thresh_" tag="brent_mu_thresh" type="double"/>
+  <variable name="adaptive_mu_tol_" tag="adaptive_mu_tol" type="double"/>
+  <variable name="adaptive_eout_tol_" tag="adaptive_eout_tol" type="double"/>
+
+  <variable name="adaptive_mu_its_" tag="adaptive_mu_its" type="integer" />
+  <variable name="adaptive_eout_its_" tag="adaptive_eout_its" type="integer" />
+  <variable name="sab_epts_per_bin_" tag="sab_epts_per_bin" type="integer" />
+  <variable name="ne_per_grp_" tag="ne_per_grp" type="integer" />
+  <variable name="extend_pts_" tag="extend_pts" type="integer" />
+  <variable name="inel_extend_pts_" tag="inel_extend_pts" type="integer" />
+
 </template>

@@ -143,17 +143,27 @@ module ndpp_class
       end if
 
       ! Initialize XML scalar variables
-      cross_sections_ = ''
-      integrate_chi_  = ''
-      library_name_   = ''
-      output_format_  = ''
-      scatt_type_     = 'legendre'
-      scatt_order_    = SCATT_ORDER_DEFAULT
-      nuscatter_ = ''
-      thinning_tol_   = THIN_TOL_DEFAULT
-      mu_bins_        = MU_BINS_DEFAULT
-      freegas_cutoff_ = FREEGAS_THRESHOLD_DEFAULT
-      threads_        = THREADS_DEFAULT
+      cross_sections_    = ''
+      integrate_chi_     = ''
+      library_name_      = ''
+      output_format_     = ''
+      scatt_type_        = ''
+      scatt_order_       = SCATT_ORDER_DEFAULT
+      nuscatter_         = ''
+      thinning_tol_      = THIN_TOL_DEFAULT
+      mu_bins_           = MU_BINS_DEFAULT
+      freegas_cutoff_    = FREEGAS_THRESHOLD_DEFAULT
+      threads_           = THREADS_DEFAULT
+      sab_threshold_     = SAB_THRESH_DEFAULT
+      brent_mu_thresh_   = BRENT_MU_THRESH_DEFAULT
+      adaptive_mu_tol_   = ADAPTIVE_MU_TOL_DEFAULT
+      adaptive_mu_its_   = ADAPTIVE_MU_ITS_DEFAULT
+      adaptive_eout_tol_ = ADAPTIVE_EOUT_TOL_DEFAULT
+      adaptive_eout_its_ = ADAPTIVE_EOUT_ITS_DEFAULT
+      sab_epts_per_bin_  = SAB_EPTS_PER_BIN_DEFAULT
+      ne_per_grp_        = NE_PER_GRP_DEFAULT
+      extend_pts_        = EXTEND_PTS_DEFAULT
+      inel_extend_pts_   = INEL_EXTEND_PTS_DEFAULT
 
       ! Parse ndpp.xml file
       call read_xml_file_ndpp_t(filename)
@@ -196,9 +206,11 @@ module ndpp_class
       call lower_case(integrate_chi_)
       if (integrate_chi_ == '') then
         self % integrate_chi = INTEGRATE_CHI_DEFAULT
-      elseif (integrate_chi_ == 'false') then
+      else if (integrate_chi_ == 'false') then
         self % integrate_chi = .false.
-      elseif (integrate_chi_ /= 'true') then
+      else if (integrate_chi_ == 'true') then
+        self % integrate_chi = .true.
+      else if (integrate_chi_ /= 'true') then
         message = "Value for <integrate_chi> provided, but does not match " // &
                   "TRUE or FALSE. Using default of TRUE."
         call warning()
@@ -235,33 +247,31 @@ module ndpp_class
 
       ! Get the output type, if none is provided, the default is set by the class.
       call lower_case(output_format_)
-      if (len_trim(output_format_) > 0) then ! one is provided, make sure it is correct
-        if (output_format_ == 'ascii') then
-          self % lib_format = ASCII
-        elseif (output_format_ == 'binary') then
-          self % lib_format = BINARY
-        elseif (output_format_ == 'hdf5') then
+      if (output_format_ == 'ascii') then
+        self % lib_format = ASCII
+      else if (output_format_ == 'binary') then
+        self % lib_format = BINARY
+      else if (output_format_ == 'hdf5') then
 #ifdef HDF5
-          self % lib_format = H5
+        self % lib_format = H5
 #else
-          message = "Value of HDF5 provided for <output_format>. " // &
-                    "NDPP must be compiled with HDF5 enabled."
-          call fatal_error()
+        message = "Value of HDF5 provided for <output_format>. " // &
+                  "NDPP must be compiled with HDF5 enabled."
+        call fatal_error()
 #endif
-        elseif (output_format_ == 'none') then
-          self % lib_format = NO_OUT
-        elseif (output_format_ == 'human') then
-          self % lib_format = HUMAN
-          message = "Value of HUMAN provided for <output_format>, " // &
-                    "Beware that this output type is incompatible with Monte " // &
-                    "Carlo codes."
-          call warning()
-        else ! incorrect value, print warning, but use default.
-          message = "Value for <output_format> provided, but does not match " // &
-                    "ASCII, BINARY, HDF5, HUMAN, or NONE. Using default of ASCII."
-          call warning()
-          self % lib_format = ASCII
-        end if
+      else if (output_format_ == 'none') then
+        self % lib_format = NO_OUT
+      else if (output_format_ == 'human') then
+        self % lib_format = HUMAN
+        message = "Value of HUMAN provided for <output_format>, " // &
+                  "Beware that this output type is incompatible with Monte " // &
+                  "Carlo codes."
+        call warning()
+      else ! incorrect value, print warning, but use default.
+        message = "Value for <output_format> provided, but does not match " // &
+                  "ASCII, BINARY, HDF5, HUMAN, or NONE. Using default of BINARY."
+        call warning()
+        self % lib_format = BINARY
       end if
 
       ! Get lib_name, if none provided, and not using HDF5,
@@ -281,9 +291,9 @@ module ndpp_class
       call lower_case(scatt_type_)
       if (scatt_type_ == '') then
         self % scatt_type = SCATT_TYPE_DEFAULT
-      elseif (scatt_type_ == 'legendre') then
+      else if (scatt_type_ == 'legendre') then
         self % scatt_type = SCATT_TYPE_LEGENDRE
-      elseif (scatt_type_ == 'tabular') then
+      else if (scatt_type_ == 'tabular') then
         self % scatt_type = SCATT_TYPE_TABULAR
       end if
 
@@ -307,9 +317,9 @@ module ndpp_class
       call lower_case(nuscatter_)
       if (nuscatter_ == '') then
         self % nuscatter = NUSCATTER_DEFAULT
-      elseif (nuscatter_ == 'false') then
+      else if (nuscatter_ == 'false') then
         self % nuscatter = .false.
-      elseif (nuscatter_ == 'true') then
+      else if (nuscatter_ == 'true') then
         self % nuscatter = .true.
       else
         message = "Value for <nuscatter> provided, but does not match " // &
@@ -317,16 +327,7 @@ module ndpp_class
         call warning()
       end if
 
-      ! Get mu_bins information
-      if (mu_bins_ > 1) then
-        self % mu_bins = mu_bins_
-      else
-        message = "Invalid mu_bins value specified in " // &
-                  "ndpp.xml. Mu_bins must be two or greater."
-        call fatal_error()
-      end if
-
-      ! Now get the free-gas threshol
+      ! Now get the free-gas threshold
       ! If the user entered a negative, that means they want freegas for the
       ! entire energy range. They can also set the cutoff to a
       ! very large number. The result of this if-block will be the largest
@@ -359,6 +360,97 @@ module ndpp_class
         call warning()
       end if
 
+      ! Get the integration parameters
+      ! Get mu_bins information
+      if (mu_bins_ > 1) then
+        self % mu_bins = mu_bins_
+      else
+        message = "Invalid mu_bins value specified in " // &
+                  "ndpp.xml. Mu_bins must be two or greater."
+        call fatal_error()
+      end if
+
+      if (sab_threshold_ >= ZERO) then
+        SAB_THRESHOLD = sab_threshold_
+      else
+        message = "Invalid Free-Gas Kernel S(a,b) threshold value " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      if (brent_mu_thresh_ >= ZERO) then
+        BRENT_MU_THRESH = brent_mu_thresh_
+      else
+        message = "Invalid Brent Mu threshold value " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      if (adaptive_mu_tol_ >= ZERO) then
+        ADAPTIVE_MU_TOL = adaptive_mu_tol_
+      else
+        message = "Invalid Adaptive Mu Threshold value " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      if (adaptive_mu_its_ >= 0) then
+        ADAPTIVE_MU_ITS = adaptive_mu_its_
+      else
+        message = "Invalid Adaptive Mu Max Iterations value " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      if (adaptive_eout_tol_ >= ZERO) then
+        ADAPTIVE_EOUT_TOL = adaptive_eout_tol_
+      else
+        message = "Invalid Adaptive Eout Threshold value " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      if (adaptive_eout_its_ >= 0) then
+        ADAPTIVE_EOUT_ITS = adaptive_eout_its_
+      else
+        message = "Invalid Adaptive Eout Max Iterations value " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      if (sab_epts_per_bin_ >= 0) then
+        SAB_EPTS_PER_BIN = sab_epts_per_bin_
+      else
+        message = "Invalid S(a,b) points per bin value " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      if (ne_per_grp_ >= 0) then
+        NE_PER_GRP = ne_per_grp_
+      else
+        message = "Invalid Number of Eout pts per group for Cm to Lab conversion " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      if (extend_pts_ >= 0) then
+        EXTEND_PTS = extend_pts_
+      else
+        message = "Invalid Number of Ein per Group for Elastic " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      if (inel_extend_pts_ >= 0) then
+        INEL_EXTEND_PTS = inel_extend_pts_
+      else
+        message = "Invalid Number of Ein per Group for Inelastic " // &
+                  "specified in ndpp.xml; value must be positive."
+        call fatal_error()
+      end if
+
+      ! Now we partition the work over MPI processes
       call partition_work(self % n_listings, self % list_stt, self % list_stp)
 
       self % is_init = .true.
@@ -1118,9 +1210,9 @@ module ndpp_class
       ! determine whether binary/ascii
       if (filetype_ == 'ascii') then
          filetype = ASCII
-      elseif (filetype_ == 'binary') then
+      else if (filetype_ == 'binary') then
          filetype = BINARY
-      elseif (len_trim(filetype_) == 0) then
+      else if (len_trim(filetype_) == 0) then
          filetype = ASCII
       else
          message = "Unknown filetype in cross_sections.xml: " // trim(filetype_)
@@ -1162,7 +1254,7 @@ module ndpp_class
          ! determine type of cross section
          if (ends_with(listing % name, 'c')) then
             listing % type = ACE_NEUTRON
-         elseif (ends_with(listing % name, 't')) then
+         else if (ends_with(listing % name, 't')) then
             listing % type = ACE_THERMAL
          end if
 
