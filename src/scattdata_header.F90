@@ -363,11 +363,10 @@ module scattdata_header
 ! data directly from the given index (iE)
 !===============================================================================
 
-    function scatt_interp_distro(this, mu_out, nuc, Ein, sigma_inel) result(distro)
+    function scatt_interp_distro(this, mu_out, nuc, Ein) result(distro)
       class(ScattData), target, intent(in) :: this ! Working ScattData object
       real(8), intent(in)                  :: mu_out(:) ! The tabular output mu grid
       type(Nuclide), intent(in), pointer   :: nuc  ! Working nuclide
-      real(8), intent(inout)               :: sigma_inel ! Running total of the micro scattering x/s
 
       real(8), intent(in)       :: Ein     ! Incoming energy to interpolate on
 
@@ -401,7 +400,7 @@ module scattdata_header
         (Ein > this % E_bins(size(this % E_bins)))) then
         ! This is a catch-all, our energy was below the threshold or above the
         ! max group value,
-        ! distro should be left as zero, nothing added to sigma_inel,
+        ! distro should be left as zero
         ! and we shall just exit this function
         return
       else if (Ein >= nuc % energy(nuc % n_grid)) then
@@ -438,7 +437,7 @@ module scattdata_header
         ! One would think that we can stop processing this MT altogether, but
         ! its possible that a x/s was just set to 0 for this particular pt because
         ! its value was below the threshold (perhaps in a resonance dip?)
-        if (sigs == ZERO) then
+        if (sigS == ZERO) then
           return
         end if
         ! Search on the angular distribution's energy grid to find what energy
@@ -495,9 +494,6 @@ module scattdata_header
       if (rxn % MT /= ELASTIC) then
         ! Scale the results
         distro = distro * sigS * p_valid
-
-        ! Add this contribution to sigma_inel
-        sigma_inel = sigma_inel + sigS * p_valid
       end if
 
     end function scatt_interp_distro

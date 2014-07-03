@@ -31,8 +31,7 @@ module scatt
 !===============================================================================
 
     subroutine calc_scatt(nuc, energy_bins, scatt_type, order, mu_bins, &
-                          nuscatt, Ein_el, Ein_inel, el_mat, inel_mat, nuinel_mat, &
-                          sigma_inel)
+                          nuscatt, Ein_el, Ein_inel, el_mat, inel_mat, nuinel_mat)
       type(Nuclide), pointer, intent(in)  :: nuc            ! Nuclide
       real(8), intent(in)                 :: energy_bins(:) ! Energy groups
       integer, intent(in)                 :: scatt_type     ! Scattering output type
@@ -45,7 +44,6 @@ module scatt
       real(8), allocatable, intent(inout) :: el_mat(:,:,:)   ! Unionized Elastic Matrices
       real(8), allocatable, intent(inout) :: inel_mat(:,:,:) ! Unionized Inelastic Matrices
       real(8), allocatable, intent(inout) :: nuinel_mat(:,:,:) ! Unionized Nu-Inelastic Matrices
-      real(8), allocatable, intent(inout) :: sigma_inel(:)   ! Total Inel. x/s
 
       type(DistEnergy), pointer :: edist
       type(Reaction),   pointer :: rxn
@@ -148,7 +146,7 @@ module scatt
       if (allocated(Ein_inel)) then
         call calc_inelastic_grid(nuc, mu_out, rxn_data, Ein_inel, &
                                  inittedSD % order, energy_bins, nuscatt, &
-                                 inel_mat, nuinel_mat, sigma_inel)
+                                 inel_mat, nuinel_mat)
       end if
 
       ! Now clear rxn_datas members
@@ -604,8 +602,6 @@ module scatt
       integer :: irxn, Nrxn          ! reaction counter, # Reactions
       integer :: groups              ! # Groups
       type(ScattData), pointer, SAVE :: mySD => NULL() ! Current working ScattData object
-      real(8) :: sigs_el             ! Elastic x/s. not actually needed but kept for
-                                     ! consistency of interp_distro w/ inelastic
       integer :: iE_print            ! iE range to print status of
       integer :: iE_pct, last_iE_pct ! Current and previous pct complete
       integer :: tid                 ! Thread id
@@ -621,7 +617,7 @@ module scatt
 
       ! Step through each Ein and reactions and sum the scattering distros @ Ein
 !$omp parallel do schedule(dynamic,100) num_threads(omp_threads) &
-!$omp default(shared), private(iE,mySD,sigs_el,irxn)
+!$omp default(shared), private(iE,mySD,irxn)
       do iE = 1, NE
 #ifdef OPENMP
         tid = OMP_GET_THREAD_NUM()
@@ -644,7 +640,6 @@ module scatt
         end if
         if (Ein(iE) <= E_bins(size(E_bins))) then
           scatt_mat(:, :, iE) = ZERO
-          sigs_el = ZERO
           do irxn = 1, Nrxn
             mySD => rxn_data(irxn)
             ! If we do not have a scatter reaction, don't score it.
@@ -652,7 +647,7 @@ module scatt
             if (mySD % rxn % MT /= ELASTIC) cycle
 
             ! Add the scattering distribution to the union scattering grid
-            scatt_mat(:, :, iE) = mySD % interp_distro(mu_out, nuc, Ein(iE), sigs_el)
+            scatt_mat(:, :, iE) = mySD % interp_distro(mu_out, nuc, Ein(iE))
           end do
 
         else
@@ -674,7 +669,7 @@ module scatt
 !===============================================================================
 
     subroutine calc_inelastic_grid(nuc, mu_out, rxn_data, Ein, order, &
-                                   E_bins, nuscatt, scatt_mat, nuscatt_mat, sigma_inel)
+                                   E_bins, nuscatt, scatt_mat, nuscatt_mat)
       type(Nuclide), pointer, intent(in)   :: nuc   ! The nuclide of interest
       real(8), intent(inout)               :: mu_out(:) ! The tabular output mu grid
       type(ScattData), intent(inout), target :: rxn_data(:) ! The converted distros
@@ -684,7 +679,6 @@ module scatt
       logical, intent(in)                  :: nuscatt   ! Include nuscatter?
       real(8), allocatable, intent(out)    :: scatt_mat(:,:,:) ! Output inelastic matrix
       real(8), allocatable, intent(out)    :: nuscatt_mat(:,:,:) ! Output nu-inelastic matrix
-      real(8), allocatable, intent(out)    :: sigma_inel(:) ! Total inelastic x/s
 
       integer :: iE, NE              ! Ein counter, # Ein
       integer :: irxn, Nrxn          ! reaction counter, # Reactions
@@ -703,7 +697,6 @@ module scatt
 
       ! Allocate the scatt_mat according to the groups, order and number of E pts
       allocate(scatt_mat(order, groups, NE))
-      allocate(sigma_inel(NE))
 
       if (nuscatt) then
         allocate(nuscatt_mat(order, groups, NE))
@@ -737,7 +730,6 @@ module scatt
         end if
         if (Ein(iE) <= E_bins(size(E_bins))) then
           scatt_mat(:, :, iE) = ZERO
-          sigma_inel(iE) = ZERO
           do irxn = 1, Nrxn
             mySD => rxn_data(irxn)
             ! If we do not have a scatter reaction, don't score it.
@@ -745,7 +737,7 @@ module scatt
             if (mySD % rxn % MT == ELASTIC) cycle
 
             ! Add the scattering distribution to the union scattering grid
-            temp_scatt = mySD % interp_distro(mu_out, nuc, Ein(iE), sigma_inel(iE))
+            temp_scatt = mySD % interp_distro(mu_out, nuc, Ein(iE))
             scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + temp_scatt
             if (nuscatt) then
               nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) + &
@@ -762,7 +754,6 @@ module scatt
           if (nuscatt) then
             nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE - 1)
           end if
-          sigma_inel(iE) = sigma_inel(iE - 1)
         end if
       end do
 !$omp end parallel do
@@ -811,8 +802,7 @@ module scatt
 !===============================================================================
 
   subroutine print_scatt(lib_format, grp_index_el, grp_index_inel, Ein_el, &
-                         Ein_inel, el_mat, inel_mat, &
-                         sigma_inel, nuinel_mat)
+                         Ein_inel, el_mat, inel_mat, nuinel_mat)
     integer,              intent(in) :: lib_format   ! Library output type
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
@@ -820,43 +810,42 @@ module scatt
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
-    real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     if (present(nuinel_mat)) then
       if (lib_format == ASCII) then
         call print_scatt_ascii(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, el_mat, inel_mat, sigma_inel, &
+                               Ein_inel, el_mat, inel_mat, &
                                nuinel_mat)
       else if (lib_format == BINARY) then
         call print_scatt_bin(grp_index_el, grp_index_inel, Ein_el, &
-                             Ein_inel, el_mat, inel_mat, sigma_inel, &
+                             Ein_inel, el_mat, inel_mat, &
                              nuinel_mat)
       else if (lib_format == HUMAN) then
         call print_scatt_human(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, el_mat, inel_mat, sigma_inel, &
+                               Ein_inel, el_mat, inel_mat, &
                                nuinel_mat)
 #ifdef HDF5
       else if (lib_format == H5) then
         call print_scatt_hdf5(grp_index_el, grp_index_inel, Ein_el, &
-                              Ein_inel, el_mat, inel_mat, sigma_inel, &
+                              Ein_inel, el_mat, inel_mat, &
                               nuinel_mat)
 #endif
       end if
     else
       if (lib_format == ASCII) then
         call print_scatt_ascii(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, el_mat, inel_mat, sigma_inel)
+                               Ein_inel, el_mat, inel_mat)
       else if (lib_format == BINARY) then
         call print_scatt_bin(grp_index_el, grp_index_inel, Ein_el, &
-                             Ein_inel, el_mat, inel_mat, sigma_inel)
+                             Ein_inel, el_mat, inel_mat)
       else if (lib_format == HUMAN) then
         call print_scatt_human(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, el_mat, inel_mat, sigma_inel)
+                               Ein_inel, el_mat, inel_mat)
 #ifdef HDF5
       else if (lib_format == H5) then
         call print_scatt_hdf5(grp_index_el, grp_index_inel, Ein_el, &
-                              Ein_inel, el_mat, inel_mat, sigma_inel)
+                              Ein_inel, el_mat, inel_mat)
 #endif
       end if
     end if
@@ -869,15 +858,13 @@ module scatt
 !===============================================================================
 
   subroutine print_scatt_ascii(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, el_mat, inel_mat, &
-                               sigma_inel, nuinel_mat)
+                               Ein_inel, el_mat, inel_mat, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
-    real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     integer :: gmin, gmax, iE
@@ -941,9 +928,6 @@ module scatt
       ! # Group Indices
       call print_ascii_integer_array(grp_index_inel, UNIT_NUC)
 
-      ! <sigma_inel grid>
-      call print_ascii_array(sigma_inel, UNIT_NUC)
-
       ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
       ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
       do iE = 1, size(Ein_inel)
@@ -997,15 +981,13 @@ module scatt
 !===============================================================================
 
   subroutine print_scatt_human(grp_index_el, grp_index_inel, Ein_el, &
-                               Ein_inel, el_mat, inel_mat, &
-                               sigma_inel, nuinel_mat)
+                               Ein_inel, el_mat, inel_mat, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
-    real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     integer :: g, gmin, gmax, iE
@@ -1073,9 +1055,6 @@ module scatt
       ! # Group Indices
       call print_ascii_integer_array(grp_index_inel, UNIT_NUC)
 
-      ! <sigma_inel grid>
-      call print_ascii_array(sigma_inel, UNIT_NUC)
-
       ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
       ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
       do iE = 1, size(Ein_inel)
@@ -1137,15 +1116,13 @@ module scatt
 !===============================================================================
 
   subroutine print_scatt_bin(grp_index_el, grp_index_inel, Ein_el, &
-                             Ein_inel, el_mat, inel_mat, &
-                             sigma_inel, nuinel_mat)
+                             Ein_inel, el_mat, inel_mat, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
-    real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     integer :: g, gmin, gmax, iE
@@ -1210,9 +1187,6 @@ module scatt
       ! Group Indices
       write(UNIT_NUC) grp_index_inel
 
-      ! <sigma_inel grid>
-      write(UNIT_NUC) sigma_inel
-
       ! < \Sigma_{s,g',l}(Ein) array as follows for each Ein:
       ! g'_min, g'_max, for g' in g'_min to g'_max: \Sigma_{s,g',1:L}(Ein)>
       do iE = 1, size(Ein_inel)
@@ -1268,15 +1242,13 @@ module scatt
 !===============================================================================
 #ifdef HDF5
   subroutine print_scatt_hdf5(grp_index_el, grp_index_inel, Ein_el, &
-                              Ein_inel, el_mat, inel_mat, &
-                              sigma_inel, nuinel_mat)
+                              Ein_inel, el_mat, inel_mat, nuinel_mat)
     integer,              intent(in) :: grp_index_el(:) ! energy_group locations in Ein_el
     integer,              intent(in) :: grp_index_inel(:) ! energy_group locations in Ein_inel
     real(8), allocatable, intent(in) :: Ein_el(:)    ! Elastic Ein grid
     real(8), allocatable, intent(in) :: Ein_inel(:)  ! Inelastic Ein grid
     real(8), allocatable, intent(in) :: el_mat(:,:,:)   ! Elastic data to print
     real(8), allocatable, intent(in) :: inel_mat(:,:,:) ! Inelastic data to print
-    real(8), allocatable, intent(in) :: sigma_inel(:)   ! Total inelastic x/s
     real(8), allocatable, optional, intent(in) :: nuinel_mat(:,:,:) ! Nu-Inel data to print
 
     integer :: g, gmin, gmax, iE
