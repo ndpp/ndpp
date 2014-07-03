@@ -124,7 +124,6 @@ class NDPP_lib(object):
         self.Ein_inel = []
         self.inelastic = []
         self.nuinelastic = []
-        self.sigma_inel = []
         self.NE_chi = 0
         self.Ein_chi = []
         self.chi = []
@@ -216,11 +215,6 @@ class NDPP_lib(object):
             # Get group_index
             self.grp_index_inel = np.asarray(self._get_int(n=self.NG + 1,
                                              path=base + 'grp_index_inel'))
-
-            # Get the inelastic normalization term
-            self.inel_norm = np.asarray(self._get_double(n=self.NE_inel,
-                                                        path=base + 'Ein_inel'),
-                                        dtype = np.double)
 
             # Get inelastic data for each Ein
             for iE in xrange(self.NE_inel):
