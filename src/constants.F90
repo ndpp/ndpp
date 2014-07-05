@@ -74,12 +74,34 @@ module constants
        MU_BINS_DEFAULT     = 2001, & ! # of angles for numerical integration
        SCATT_ORDER_DEFAULT = 5,    & ! Legendre order default, if omitted
        THREADS_DEFAULT     = -1,   & ! Default number of threads (-1 means use envvar)
-       SCATT_TYPE_DEFAULT  = SCATT_TYPE_LEGENDRE ! Default scatt results type
+       SCATT_TYPE_DEFAULT  = SCATT_TYPE_LEGENDRE, & ! Default scatt results type
+       ! Adaptive Simpsons integration (of mu) maximum recursion depth/iterations
+       ADAPTIVE_MU_ITS_DEFAULT = 15, &
+       ! Adaptive Simpsons integration (of Eout) maximum recursion depth/iterations
+       ADAPTIVE_EOUT_ITS_DEFAULT = 15, &
+       ! Number of Eout points per bin for thermal scatter collisions
+       SAB_EPTS_PER_BIN_DEFAULT = 10, & ! 0 Implies no expansion, &
+       ! Number of Eout points per group for adaptive integration of CM to lab
+       ! conversion of inelastic collisions
+       NE_PER_GRP_DEFAULT = 20, &
+       ! Number of points to extend the incoming energy grid (per ACE Ein) for elastic
+       ! and inelastic group boundary effects
+       EXTEND_PTS_DEFAULT = 50, &
+       INEL_EXTEND_PTS_DEFAULT = 30
 
   real(8), parameter :: &
        PRINT_TOL_DEFAULT   = 1.0E-8_8, & ! Value at which scattering matrices
                                          ! values are not printed
-       THIN_TOL_DEFAULT    = ZERO        ! Value for grid thinning, in percent
+       THIN_TOL_DEFAULT    = ZERO, &     ! Value for grid thinning, in percent
+       ! Fraction of maximum s(a,b) value to use as cutoff for determining
+       ! the range of integration
+       SAB_THRESH_DEFAULT = 1.0E-6_8, &
+       ! Brent root finding algorithm threshold for the mu variable
+       BRENT_MU_THRESH_DEFAULT = 1.0E-6_8, &
+       ! Adaptive Simpsons integration (of mu) tolerance
+       ADAPTIVE_MU_TOL_DEFAULT = 1.0E-7_8, &
+       ! Adaptive Simpsons integration (of Eout) tolerance
+       ADAPTIVE_EOUT_TOL_DEFAULT = 1.0E-8_8
 
   logical, parameter :: &
        INTEGRATE_CHI_DEFAULT = .true., & ! Integrate Chi?
@@ -89,7 +111,6 @@ module constants
   ! Minimum incoming energy to consider for groups - to avoid division by 0
   ! in free gas kernel and likely other places.
   real(8), parameter :: MIN_EIN = 1E-14_8
-
 
   ! ============================================================================
   ! SCATTDATA OBJECT CONSTANTS
@@ -104,37 +125,6 @@ module constants
   ! linear interpolation
   logical, parameter :: INTERP_NEAREST = .false.
   ! logical, parameter :: INTERP_NEAREST = .true.
-
-  ! Fraction of maximum s(a,b) value to use as cutoff for determining
-  ! the range of integration
-  real(8), parameter :: SAB_THRESHOLD = 1.0E-6_8
-
-  ! Brent root finding algorithm threshold for the mu variable
-  real(8), parameter :: BRENT_MU_THRESH = 1.0E-6_8
-
-  ! Adaptive Simpsons integration (of mu) tolerance
-  real(8), parameter :: ADAPTIVE_MU_TOL = 1.0E-7_8
-
-  ! Adaptive Simpsons integration (of mu) maximum recursion depth/iterations
-  integer, parameter :: ADAPTIVE_MU_ITS = 15
-
-  ! Adaptive Simpsons integration (of Eout) tolerance
-  real(8), parameter :: ADAPTIVE_EOUT_TOL = 1.0E-8_8
-
-  ! Adaptive Simpsons integration (of Eout) maximum recursion depth/iterations
-  integer, parameter :: ADAPTIVE_EOUT_ITS = 15
-
-  ! Number of Eout points per bin for thermal scatter collisions
-  integer, parameter :: SAB_EPTS_PER_BIN = 10  ! 0 Implies no expansion
-
-  ! Number of Eout points per group for adaptive integration of CM to lab
-  ! conversion of inelastic collisions
-  integer, parameter :: NE_PER_GRP = 20
-
-  ! Number of points to extend the incoming energy grid (per ACE Ein) at
-  ! energies above the inelastic level threshold: (This is to improve interpolation)
-  ! for these inelastic level collisions
-  integer, parameter :: EXTEND_PTS = 50
 
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS

@@ -2,7 +2,7 @@ module freegas
 
   use constants
   use error,            only: fatal_error, warning
-  use global,           only: nuclides, message
+  use global
   use legendre
   use string,           only: to_str
 

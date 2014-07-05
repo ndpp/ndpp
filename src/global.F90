@@ -28,6 +28,40 @@ module global
   integer :: n_materials ! # of materials
 
   ! ============================================================================
+  ! INTEGRATION PARAMETERS
+
+  ! Fraction of maximum s(a,b) value to use as cutoff for determining
+  ! the range of integration
+  real(8) :: SAB_THRESHOLD
+
+  ! Brent root finding algorithm threshold for the mu variable
+  real(8) :: BRENT_MU_THRESH
+
+  ! Adaptive Simpsons integration (of mu) tolerance
+  real(8) :: ADAPTIVE_MU_TOL
+
+  ! Adaptive Simpsons integration (of mu) maximum recursion depth/iterations
+  integer :: ADAPTIVE_MU_ITS
+
+  ! Adaptive Simpsons integration (of Eout) tolerance
+  real(8) :: ADAPTIVE_EOUT_TOL
+
+  ! Adaptive Simpsons integration (of Eout) maximum recursion depth/iterations
+  integer :: ADAPTIVE_EOUT_ITS
+
+  ! Number of Eout points per bin for thermal scatter collisions
+  integer :: SAB_EPTS_PER_BIN
+
+  ! Number of Eout points per group for adaptive integration of CM to lab
+  ! conversion of inelastic collisions
+  integer :: NE_PER_GRP
+
+  ! Number of points to extend the incoming energy grid (per ACE Ein) for elastic
+  ! and inelastic group boundary effects
+  integer :: EXTEND_PTS
+  integer :: INEL_EXTEND_PTS
+
+  ! ============================================================================
   ! CROSS SECTION RELATED VARIABLES
 
   ! Cross section arrays
