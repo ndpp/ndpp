@@ -157,10 +157,10 @@ module freegas
     alpha = ((A - ONE) / (A + ONE))**2
 
     ! alpha*Ein is the minimum Eout of a TAR elastic collision.
-    ! Let's take 5% of that energy, to give room for the fact that
+    ! Let's take 0.1% of that energy, to give room for the fact that
     ! the target is not at rest and this isn't a hard boundary anymore.
     ! This... is willy nilly.
-    Eout_lo = 0.005_8 * alpha * Ein
+    Eout_lo = 0.001_8 * alpha * Ein
 
     ! The only way for upscatter to occur is with the target nuclide having
     ! a large maxwellian energy. So, add on larger than the mean to Ein.

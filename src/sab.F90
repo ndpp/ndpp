@@ -512,7 +512,7 @@ module sab
               g1 = g
             end if
             ! If g1 /= g2 then we have a critical point in the middle.
-            ! Find the Ein which makes this Eout equal to Eg using log interp
+            ! Find the Ein which makes this Eout equal to Eg using interp
             do g = g1 + 1, g2
               num_pts = num_pts + 1
               ! For linear interpolation:

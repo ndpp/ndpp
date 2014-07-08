@@ -1240,6 +1240,10 @@ module scattdata_header
         pE_xfer= -T * pE_xfer / I
 
         ! Now set the angular distributions according to pE_xfer
+        !!! This can be done separately and not for every group....
+        !!! Change this when you have some more time.
+        !!! (No big rush - this routine is not used frequently so a speed-up of
+        !!! any kind isn't worth much)
         do imu = 1, size(mu) - 1
           distro(:, g) = distro(:, g) + &
             calc_int_pn_tablelin(order, mu(imu), mu(imu + 1), &

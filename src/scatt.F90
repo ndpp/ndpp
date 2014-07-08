@@ -380,6 +380,7 @@ module scatt
 
       ! 1/alpha is what you get by saying maximum point is Eg/alpha on log scale
       ! multiplying dEhi by two essentially doubles the range we want to apply over.
+      !!! 7 should only be applied when below free gas range, right?
       dEhi = 7.0_8 * log(ONE / alpha) / real(EXTEND_PTS, 8)
 
       do g = 1, size(E_bins) - 1
