@@ -125,20 +125,21 @@ contains
 
     do iE = 1, size(E_grid)
       Ein = E_grid(iE)
+      ! All data share a beta, so lets calculate that now.
+      beta = prompt_data(1) % beta(Ein)
       ! Prompt
       do i = 1, size(prompt_data)
         chi_p = prompt_data(i) % integrate(Ein)
         prob  = prompt_data(i) % prob(Ein)
-        beta  = prompt_data(i) % beta(Ein)
         chi_total(:,iE) = chi_total(:,iE) + prob * (ONE - beta) * chi_p
         chi_prompt(:,iE) = chi_prompt(:,iE) + prob * chi_p
       end do
+      chi_total(:,iE) = chi_prompt(:,iE) + prob * chi_prompt(:, iE)
 
       ! Delayed
       do i = 1, size(delay_data)
         chi_delay(:,iE,i) = delay_data(i) % integrate(Ein)
         prob = delay_data(i) % prob(Ein)
-        beta = delay_data(i) % beta(Ein)
         chi_total(:,iE) = chi_total(:,iE) + prob * beta * chi_delay(:,iE,i)
       end do
 

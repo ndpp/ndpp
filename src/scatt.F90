@@ -788,7 +788,11 @@ module scatt
           data(:,gout,iE) = ZERO
         end if
       end do
-      norm = orig_total / sum(data(1,:,iE))
+      if (orig_total > ZERO) then
+        norm = orig_total / sum(data(1,:,iE))
+      else
+        norm = ZERO
+      end if
       ! Now normalize the results accordingly to maintain conservation.
       do gout = 1, G
         data(:,gout,iE) = data(:,gout,iE) * norm
