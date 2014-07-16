@@ -238,6 +238,7 @@ contains
     real(8) :: Eg             ! lower bound of integral
     real(8) :: Watt_a, Watt_b ! Watt spectrum values
     real(8) :: interp         ! interpolation value of the energy point
+    real(8) :: runsum         ! Running sum of chi integration for law 4
 
     allocate(chis(self % groups))
     chis = ZERO
@@ -319,6 +320,7 @@ contains
       ! Loop through energy groups
       lc = lc + 3
       lEout_min = lc
+      runsum = ZERO
       do g = 1, self % groups
         ! Find the location in edist%data corresponding to the upper
         ! bound of the energy group.
@@ -330,19 +332,21 @@ contains
         ! Since we have the CDF, the integral of chis(g) is simply:
         ! cdf_chis(E_high) - cdf_chis(E_low)
         ! Calculate cdf_chis(E_high),set equal to chis(g)
-        if (INTT == LINEAR_LINEAR) then
-          interp = (self % E_bins(g + 1) - edist % data(iE)) / &
-            (edist % data(iE + 1) - edist % data(iE))
-        elseif (INTT == HISTOGRAM) then
-          interp = ZERO
-        end if
+        ! Will do this with LINEAR_LINEAR, regardless of what INTT says
+        interp = (self % E_bins(g + 1) - edist % data(iE)) / &
+          (edist % data(iE + 1) - edist % data(iE))
+
         chis(g) = (edist % data(iE + 2 * NP) + interp * &
           (edist % data(iE + 1 + 2 * NP) - edist % data(iE + 2 * NP)))
-        ! Calculate cdf_chis(E_low), subtract from cdf_chis(E_high), which is chi
-        ! The term to subtract off is the chis(g2<g) values.
-        do g2 = 1, g - 1
-          chis(g) = chis(g) - chis(g2)
-        end do
+
+        ! The above put the upper bound of the integral in to chis(g);
+        ! still need to take off the lower bound.
+        ! We have been keeping track of this in runsum - the lower bound
+        ! is simply the sum of integrals of all lower groups
+        chis(g) = chis(g) - runsum
+        ! Update runsum
+        runsum = runsum + chis(g)
+        ! Move locator up in the world
         lEout_min = iE
       end do
 
