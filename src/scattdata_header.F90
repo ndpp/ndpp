@@ -414,7 +414,7 @@ module scattdata_header
           size(this % distro(iE) % data, dim=2)))
         distro_int = this % distro(iE) % data
 
-        distro = integrate_distro(this, Ein, iE, ONE, distro_int)
+        distro = integrate_distro(this, Ein, iE - 1)
       else
         if (Ein <= nuc % energy(1)) then
           nuc_iE = 1
@@ -456,33 +456,7 @@ module scattdata_header
           return
         end if
 
-        ! Interpolate the distribution linearly
-        ! f = (log(Ein) - log(this % E_grid(iE))) / &
-        !     (log(this % E_grid(iE + 1)) - log(this % E_grid(iE)))
-        f = (Ein - this % E_grid(iE)) / (this % E_grid(iE + 1) - this % E_grid(iE))
-
-        ! Do on nearest neighbor, or with interpolation?
-        if (INTERP_NEAREST) then
-          if (f >= 0.5_8) iE = iE + 1
-          allocate(distro_int(size(this % distro(iE) % data, dim=1), &
-            size(this % distro(iE) % data, dim=2)))
-          distro_int = this % distro(iE) % data
-
-          distro = integrate_distro(this, Ein, iE, ONE, distro_int)
-
-        else ! Linear interpolation it is
-          ! Do the lower distribution
-          allocate(distro_int(size(this % distro(iE) % data, dim=1), &
-            size(this % distro(iE) % data, dim=2)))
-          distro_int = this % distro(iE) % data
-          distro = integrate_distro(this, Ein, iE, (ONE - f), distro_int)
-          deallocate(distro_int)
-          ! Do the upper distribution
-          allocate(distro_int(size(this % distro(iE + 1) % data, dim=1), &
-            size(this % distro(iE + 1) % data, dim=2)))
-          distro_int = this % distro(iE + 1) % data
-          distro = distro + integrate_distro(this, Ein, iE + 1, f, distro_int)
-        end if
+        distro = integrate_distro(this, Ein, iE)
       end if
 
       ! Get the probability value
@@ -511,18 +485,20 @@ module scattdata_header
 ! requested at iE.
 !===============================================================================
 
-    function integrate_distro(this, Ein, iE, f, distro_int) &
-      result(result_distro)
+    function integrate_distro(this, Ein, iE) result(result_distro)
 
       class(ScattData), target, intent(in) :: this ! Working ScattData object
       real(8), intent(in) :: Ein      ! Incoming energy to interpolate on
-      real(8), intent(in) :: f        ! Interpolation factor for this distro_int
       integer, intent(in) :: iE       ! incoming energy index (searched)
-      real(8), intent(in) :: distro_int(:,:) ! the distribution at Ein before cm2lab
+
+      real(8), allocatable :: Eout(:)
+      real(8), allocatable :: pdf(:)
+      integer              :: INTT
+      real(8), allocatable :: fEmu(:,:)
       real(8), allocatable :: result_distro(:,:)  ! the output distribution
 
       ! the distribution in the lab frame
-      real(8) :: distro_lab(size(distro_int, dim=1), size(distro_int, dim=2))
+      real(8), allocatable :: distro(:,:)
 
       ! Set up the results memory
       allocate(result_distro(this % order, this % groups))
@@ -534,15 +510,14 @@ module scattdata_header
           (.not. associated(this % edist))) then
           if ((Ein < this % freegas_cutoff) .and. &
               (this % rxn % MT == ELASTIC)) then
-            distro_lab = distro_int
             call integrate_freegas_leg(Ein, this % awr, this % kT, &
-              distro_lab(:, 1), this % mu, this % E_bins, this % order, &
-              result_distro)
+              this % distro(iE) % data(:, 1), this % mu, this % E_bins, &
+              this % order, result_distro)
           else
             if (this % rxn % scatter_in_cm) then
-              call integrate_file4_cm_leg(distro_int(:,1), Ein, this % awr, &
-                                          this % rxn % Q_value, this % E_bins, &
-                                          this % mu, this % order, &
+              call integrate_file4_cm_leg(this % distro(iE) % data(:,1), Ein, &
+                                          this % awr, this % rxn % Q_value, &
+                                          this % E_bins, this % mu, this % order, &
                                           result_distro)
             else
               ! As a notification of future issues:
@@ -551,14 +526,14 @@ module scattdata_header
               call fatal_error()
             end if
           end if
+
         else if (associated(this % edist)) then
           if (this % rxn % scatter_in_cm) then
-            distro_lab = distro_int
-            call integrate_file6_cm_leg(distro_lab, this % mu, Ein, this % awr, &
-              this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
-              this % E_bins, this % order, result_distro)
+            ! Need to come up with the input distro via unit-base interpolation
+            call unitbase(this, Ein, iE, Eout, pdf, INTT, fEmu)
+            call integrate_file6_cm_leg(fEmu, this % mu, Ein, this % awr, &
+              Eout, INTT, pdf, this % E_bins, this % order, result_distro)
           else
-            distro_lab = distro_int
             if (associated(this % adist)) then
               ! Here, we have angular info in adist, but it goes to a single energy
               ! specified in edist. This is for level inelastic scattering and some
@@ -569,8 +544,9 @@ module scattdata_header
                 ! the same for each group.
                 ! The group transfer should also be normalized by the prob. of
                 ! transfer to that group.
-                call law9_scatter_lab_leg(distro_lab(:, 1), this % edist, Ein, &
-                  this % E_bins, this % mu, this % order, result_distro)
+                call law9_scatter_lab_leg(this % distro(iE) % data(:, 1), &
+                                          this % edist, Ein, this % E_bins, &
+                                          this % mu, this % order, result_distro)
 
               else
                 ! As a notification of future issues:
@@ -578,8 +554,9 @@ module scattdata_header
                   to_str(this % edist % law) //", "//to_str(this % rxn % MT)
               end if
             else
-              call integrate_file6_lab_leg(distro_lab, this % mu, &
-                this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
+              ! Need to come up with the input distro via unit-base interpolation
+              call unitbase(this, Ein, iE, Eout, pdf, INTT, fEmu)
+              call integrate_file6_lab_leg(fEmu, this % mu, Eout, INTT, pdf, &
                 this % E_bins, this % order, result_distro)
             end if
           end if
@@ -587,9 +564,6 @@ module scattdata_header
       case (SCATT_TYPE_TABULAR)
 
       end select
-
-      ! Multiply by f for interpolation.
-      result_distro = result_distro * f
 
     end function integrate_distro
 
@@ -1437,6 +1411,37 @@ module scattdata_header
     end if
 
   end function is_valid_scatter
+
+!===============================================================================
+! UNITBASE performs the whole unit base conversion.
+!===============================================================================
+
+  subroutine unitbase(this, Ein, iE, Eout, pdf, INTT, fEmu)
+    class(ScattData), target, intent(in) :: this ! Working ScattData object
+    real(8), intent(in) :: Ein      ! Incoming energy to interpolate on
+    integer, intent(in) :: iE       ! incoming energy index (searched)
+    real(8), allocatable, intent(out) :: Eout(:)
+    real(8), allocatable, intent(out) :: pdf(:)
+    integer,              intent(out) :: INTT
+    real(8), allocatable, intent(out) :: fEmu(:,:)
+
+    real(8), allocatable :: ub1(:), ub2(:)
+
+    call cast_to_unitbase(this % Eouts(iE) % data, this % pdfs(iE) % data, &
+                          this % cdfs(iE) % data, this % INTT(iE), ub1)
+    call cast_to_unitbase(this % Eouts(iE+1) % data, this % pdfs(iE+1) % data, &
+                          this % cdfs(iE+1) % data, this % INTT(iE+1), ub1)
+
+    call interp_unitbase(Ein, ub1, this % Eouts(iE) % data, &
+                         this % pdfs(iE) % data, this % INTT(iE), &
+                         this % distro(iE) % data, this % E_grid(iE), &
+                         ub2, this % Eouts(iE+1) % data, &
+                         this % pdfs(iE+1) % data, this % INTT(iE+1), &
+                         this % distro(iE+1) % data, this % E_grid(iE+1), &
+                         Eout, pdf, INTT, fEmu)
+
+  end subroutine unitbase
+
 
 !===============================================================================
 ! CAST_TO_UNITBASE converts an outgoing energy distribution to a PDF and CDF
