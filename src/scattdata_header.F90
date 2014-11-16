@@ -1,6 +1,7 @@
 module scattdata_header
 
   use ace_header
+  use array_merge
   use constants
   use dict_header
   use error,            only: fatal_error, warning
@@ -1437,5 +1438,95 @@ module scattdata_header
     end if
 
   end function is_valid_scatter
+
+!===============================================================================
+! CAST_TO_UNITBASE converts an outgoing energy distribution to a PDF and CDF
+! which ranges from 0 to 1 instead of from Eo_lo to Eo_hi
+!===============================================================================
+
+  subroutine cast_to_unitbase(Eout, pdf, cdf, INTT, ub_grid)
+    real(8), allocatable, intent(in)  :: Eout(:)
+    real(8), allocatable, intent(in)  :: pdf(:)
+    real(8), allocatable, intent(in)  :: cdf(:)
+    integer,              intent(in)  :: INTT
+    real(8), allocatable, intent(out) :: ub_grid(:)
+
+    integer :: ilo  ! Low index to start from
+    integer :: i, j ! Loop counters
+    real(8) :: inv_dE ! Difference between high and low energy points for scaling
+
+    ! Some of these Eout distributions have the first two points with 0 probability
+    ! (and the first will be an energy of zero)
+    ! Find out of this is the case so we can discard the first one
+    ilo = 1
+    !!! Skipping for now, interp_unitbase is consistent with skipping this.
+    !if (INTT == HISTOGRAM) then
+    !  if (pdf(1) == ZERO) then
+    !    ilo = 2
+    !  end if
+    !else
+    !  if (cdf(2) == ZERO) then
+    !    ilo = 2
+    !  end if
+    !end if
+
+    ! Set up our storage location
+    allocate(ub_grid(size(Eout) - ilo + 1))
+    ub_grid = ZERO
+
+    inv_dE = ONE / (Eout(size(Eout)) - Eout(ilo))
+
+    j = 1
+    do i = ilo, size(Eout)
+      ub_grid(j) = (Eout(i) - Eout(ilo)) * inv_dE
+      j = j + 1
+    end do
+
+  end subroutine cast_to_unitbase
+
+!===============================================================================
+! INTERP_UNITBASE interpolates between two unit-base grids to produce one grid
+! in energy space (vice unit-base [0,1] space)
+!===============================================================================
+
+  subroutine interp_unitbase(Ein, ub1, Eout1, pdf1, INTT1, Ei1, ub2, Eout2, pdf2, &
+                             INTT2, Ei2, Eout, pdf, INTT)
+    real(8),              intent(in)  :: Ein
+    real(8), allocatable, intent(in)  :: ub1(:)
+    real(8), allocatable, intent(in)  :: Eout1(:)
+    real(8), allocatable, intent(in)  :: pdf1(:)
+    integer,              intent(in)  :: INTT1
+    real(8),              intent(in)  :: Ei1
+    real(8), allocatable, intent(in)  :: ub2(:)
+    real(8), allocatable, intent(in)  :: Eout2(:)
+    real(8), allocatable, intent(in)  :: pdf2(:)
+    integer,              intent(in)  :: INTT2
+    real(8),              intent(in)  :: Ei2
+    real(8), allocatable, intent(out) :: Eout(:)
+    real(8), allocatable, intent(out) :: pdf(:)
+    integer,              intent(out) :: INTT
+
+    real(8), allocatable :: ub
+    real(8) :: dE1, dE2
+    real(8) :: f
+
+    ! This routine has to create a new pdf grid with an Eout grid that has been adjusted
+
+    ! First merge the two ub grids
+    merge(ub1, ub2, ub)
+
+    ! Now use this to interpolate to find the pdf values for *1 and *2 on ub.
+
+
+    ! Then interpolate between the pdf grids on *1 and *2 for each of ub
+    f = (Ein - Ei1) / (Ei1 - Ei2)
+
+
+    ! Now finally convert ub to energy space.
+
+
+
+
+  end subroutine interp_unitbase
 
 end module scattdata_header
