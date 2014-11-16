@@ -1005,7 +1005,6 @@ module scattdata_header
 
     end subroutine integrate_file4_cm_leg
 
-
 !===============================================================================
 ! INTEGRATE_FILE6_CM_LEG Integrated the Center-of-Mass combined energy/angle
 ! distribution over all outgoing groups.
@@ -1489,44 +1488,106 @@ module scattdata_header
 ! in energy space (vice unit-base [0,1] space)
 !===============================================================================
 
-  subroutine interp_unitbase(Ein, ub1, Eout1, pdf1, INTT1, Ei1, ub2, Eout2, pdf2, &
-                             INTT2, Ei2, Eout, pdf, INTT)
+  subroutine interp_unitbase(Ein, ub1, Eout1, pdf1, INTT1, fEmu1, Ei1, ub2, &
+                             Eout2, pdf2, INTT2, fEmu2, Ei2, Eout, pdf, INTT, fEmu)
     real(8),              intent(in)  :: Ein
     real(8), allocatable, intent(in)  :: ub1(:)
     real(8), allocatable, intent(in)  :: Eout1(:)
     real(8), allocatable, intent(in)  :: pdf1(:)
     integer,              intent(in)  :: INTT1
+    real(8), allocatable, intent(in)  :: fEmu1(:,:)
     real(8),              intent(in)  :: Ei1
     real(8), allocatable, intent(in)  :: ub2(:)
     real(8), allocatable, intent(in)  :: Eout2(:)
     real(8), allocatable, intent(in)  :: pdf2(:)
     integer,              intent(in)  :: INTT2
+    real(8), allocatable, intent(in)  :: fEmu2(:,:)
     real(8),              intent(in)  :: Ei2
     real(8), allocatable, intent(out) :: Eout(:)
     real(8), allocatable, intent(out) :: pdf(:)
     integer,              intent(out) :: INTT
+    real(8), allocatable, intent(out) :: fEmu(:,:)
 
-    real(8), allocatable :: ub
+    real(8), allocatable :: ub(:)
+    real(8) :: p1, p2 ! Value of pdf for 1 and 2 at ub point of interest
     real(8) :: dE1, dE2
-    real(8) :: f
+    real(8) :: f, r
+    integer :: i, j, k
 
     ! This routine has to create a new pdf grid with an Eout grid that has been adjusted
 
     ! First merge the two ub grids
-    merge(ub1, ub2, ub)
+    call merge(ub1, ub2, ub)
+    allocate(Eout(size(ub)))
+    Eout = ZERO
+    allocate(fEmu(size(ub), size(fEmu1(1,:))))
+    fEmu = ZERO
 
-    ! Now use this to interpolate to find the pdf values for *1 and *2 on ub.
-
-
-    ! Then interpolate between the pdf grids on *1 and *2 for each of ub
+    ! Find our interpolant
     f = (Ein - Ei1) / (Ei1 - Ei2)
 
+    ! Find the energy widths of the two sets
+    dE1 = (Eout1(size(Eout1)) - Eout1(1))
+    dE2 = (Eout2(size(Eout2)) - Eout2(1))
 
-    ! Now finally convert ub to energy space.
+    ! Now step through ub, and interpolate to find new pdf values
+    do i = 1, size(ub)
+      ! Find p1 (via interpolation)
+      ! Shouldn't need to check if ub(i) outside grid, since ub is merge of ub1 & ub2
+      j = binary_search(ub1, size(ub1), ub(i))
+      if (INTT1 == HISTOGRAM) then
+        r = ZERO
+      else if (INTT1 == LINEAR_LINEAR .or. INTT1 == LOG_LINEAR) then
+        r = (ub(i) - ub1(j)) / (ub1(j+1) - ub1(j))
+      else if (INTT1 == LINEAR_LOG .or. INTT1 == LOG_LOG) then
+        r = log(ub(i) / ub1(j)) / log(ub1(j+1) / ub1(j))
+      end if
+      ! Now calculate the pdf at ub(1) for data-set1
+      if (INTT1 == HISTOGRAM .or. INTT1 == LINEAR_LINEAR .or. &
+          INTT1 == LINEAR_LOG) then
+        p1 = (ONE - r) * pdf1(j) + r * pdf1(j+1)
+      else if (INTT1 == LOG_LINEAR .or. INTT1 == LOG_LOG) then
+        p1 = exp((ONE - r) * log(pdf1(j)) + r * log(pdf1(j + 1)))
+      end if
+      ! And add the portion of our interpolant for this distrib while we have r and j
+      do k = 1, size(fEmu1(1,:))
+        fEmu(i,k) = (ONE - f) * ((ONE - r) * fEmu1(j,k) + r * fEmu1(j+1,k))
+      end do
 
+      ! Repeat above for data set 2
+      j = binary_search(ub2, size(ub2), ub(i))
+      if (INTT1 == HISTOGRAM) then
+        r = ZERO
+      else if (INTT1 == LINEAR_LINEAR .or. INTT1 == LOG_LINEAR) then
+        r = (ub(i) - ub2(j)) / (ub2(j+1) - ub2(j))
+      else if (INTT1 == LINEAR_LOG .or. INTT1 == LOG_LOG) then
+        r = log(ub(i) / ub2(j)) / log(ub2(j+1) / ub2(j))
+      end if
+      ! Now calculate the pdf at ub(1) for data-set1
+      if (INTT1 == HISTOGRAM .or. INTT1 == LINEAR_LINEAR .or. &
+          INTT1 == LINEAR_LOG) then
+        p2 = (ONE - r) * pdf2(j) + r * pdf2(j+1)
+      else if (INTT1 == LOG_LINEAR .or. INTT1 == LOG_LOG) then
+        p2 = exp((ONE - r) * log(pdf2(j)) + r * log(pdf2(j + 1)))
+      end if
+      ! And add the portion of our interpolant for this distrib while we have r and j
+      do k = 1, size(fEmu2(1,:))
+        fEmu(i,k) = fEmu(i,k) + f * ((ONE - r) * fEmu2(j,k) + r * fEmu2(j+1,k))
+      end do
 
+      ! Now we have our p1 and p2, lets interpolate (with f now) to combine.
+      ! I'm not sure how else to do this besides LIN-LIN
+      pdf(i) = (ONE - f) * p1 + f * p2
 
+      ! Now lets set what the Eout value actually is for this pdf
+      Eout(i) = (ONE - f) * (Eout1(1) + dE1 * ub(i)) + &
+        f * (Eout2(1) + dE2 * ub(i))
 
+    end do
+
+    ! Since we used LIN-LIN for interpolating, lets set that here too for
+    ! consistency with future routines.
+    INTT = LINEAR_LINEAR
   end subroutine interp_unitbase
 
 end module scattdata_header
