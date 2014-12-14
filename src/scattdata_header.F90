@@ -1430,7 +1430,7 @@ module scattdata_header
     call cast_to_unitbase(this % Eouts(iE) % data, this % pdfs(iE) % data, &
                           this % cdfs(iE) % data, this % INTT(iE), ub1)
     call cast_to_unitbase(this % Eouts(iE+1) % data, this % pdfs(iE+1) % data, &
-                          this % cdfs(iE+1) % data, this % INTT(iE+1), ub1)
+                          this % cdfs(iE+1) % data, this % INTT(iE+1), ub2)
 
     call interp_unitbase(Ein, ub1, this % Eouts(iE) % data, &
                          this % pdfs(iE) % data, this % INTT(iE), &
@@ -1458,6 +1458,7 @@ module scattdata_header
     integer :: ilo  ! Low index to start from
     integer :: i, j ! Loop counters
     real(8) :: inv_dE ! Difference between high and low energy points for scaling
+    real(8), allocatable :: ub_temp(:)
 
     ! Some of these Eout distributions have the first two points with 0 probability
     ! (and the first will be an energy of zero)
@@ -1475,16 +1476,27 @@ module scattdata_header
     !end if
 
     ! Set up our storage location
-    allocate(ub_grid(size(Eout) - ilo + 1))
-    ub_grid = ZERO
+    allocate(ub_temp(size(Eout) - ilo + 1))
+    ub_temp = ZERO
 
     inv_dE = ONE / (Eout(size(Eout)) - Eout(ilo))
 
     j = 1
-    do i = ilo, size(Eout)
-      ub_grid(j) = (Eout(i) - Eout(ilo)) * inv_dE
+    do i = ilo, size(Eout) - 1
+      ub_temp(j) = (Eout(i) - Eout(ilo)) * inv_dE
       j = j + 1
     end do
+    ub_temp(j) = ONE
+
+    if (ub_temp(j - 1) == ONE) then
+      allocate(ub_grid(size(ub_temp) - 1))
+      ub_grid = ub_temp(1:size(ub_temp) - 1)
+    else
+      allocate(ub_grid(size(ub_temp)))
+      ub_grid = ub_temp
+    end if
+    deallocate(ub_temp)
+
 
   end subroutine cast_to_unitbase
 
@@ -1524,21 +1536,22 @@ module scattdata_header
     ! First merge the two ub grids
     call merge(ub1, ub2, ub)
     allocate(Eout(size(ub)))
+
     Eout = ZERO
-    allocate(fEmu(size(ub), size(fEmu1(1,:))))
+    allocate(pdf(size(ub)))
+    pdf = ZERO
+    allocate(fEmu(size(fEmu1(:,1)), size(ub)))
     fEmu = ZERO
 
     ! Find our interpolant
-    f = (Ein - Ei1) / (Ei1 - Ei2)
+    f = (Ein - Ei1) / (Ei2 - Ei1)
 
     ! Find the energy widths of the two sets
     dE1 = (Eout1(size(Eout1)) - Eout1(1))
     dE2 = (Eout2(size(Eout2)) - Eout2(1))
-
     ! Now step through ub, and interpolate to find new pdf values
     do i = 1, size(ub)
       ! Find p1 (via interpolation)
-      ! Shouldn't need to check if ub(i) outside grid, since ub is merge of ub1 & ub2
       j = binary_search(ub1, size(ub1), ub(i))
       if (INTT1 == HISTOGRAM) then
         r = ZERO
@@ -1555,8 +1568,8 @@ module scattdata_header
         p1 = exp((ONE - r) * log(pdf1(j)) + r * log(pdf1(j + 1)))
       end if
       ! And add the portion of our interpolant for this distrib while we have r and j
-      do k = 1, size(fEmu1(1,:))
-        fEmu(i,k) = (ONE - f) * ((ONE - r) * fEmu1(j,k) + r * fEmu1(j+1,k))
+      do k = 1, size(fEmu1(:,1))
+        fEmu(k,i) = (ONE - f) * ((ONE - r) * fEmu1(k,j) + r * fEmu1(k,j+1))
       end do
 
       ! Repeat above for data set 2
@@ -1576,8 +1589,8 @@ module scattdata_header
         p2 = exp((ONE - r) * log(pdf2(j)) + r * log(pdf2(j + 1)))
       end if
       ! And add the portion of our interpolant for this distrib while we have r and j
-      do k = 1, size(fEmu2(1,:))
-        fEmu(i,k) = fEmu(i,k) + f * ((ONE - r) * fEmu2(j,k) + r * fEmu2(j+1,k))
+      do k = 1, size(fEmu1(:,1))
+        fEmu(k,i) = fEmu(k,i) + f * ((ONE - r) * fEmu2(k,j) + r * fEmu2(k,j+1))
       end do
 
       ! Now we have our p1 and p2, lets interpolate (with f now) to combine.
