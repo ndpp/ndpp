@@ -272,7 +272,14 @@ module scatt
           else if (max_grp <= mySD % E_grid(1)) then
             cycle
           else
-            iEmax = binary_search(mySD % E_grid, size(mySD % E_grid), max_grp)
+            ! Getting here means that the group structure does intersect with
+            ! this reactions energy grid.  So lets find where the
+            ! maximum value sits.
+            if (max_grp >= mySD % E_grid(size(mySD % E_grid))) then
+              iEmax = size(mySD % E_grid)
+            else
+              iEmax = binary_search(mySD % E_grid, size(mySD % E_grid), max_grp)
+            end if
           end if
           ! Now combine with the rest
           call merge(mySD % E_grid(1: iEmax), new_grid, tmp_grid)
