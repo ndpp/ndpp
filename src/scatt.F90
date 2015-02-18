@@ -460,7 +460,6 @@ module scatt
       integer :: i, g ! INEL_EXTEND_PTS and Group loop indices
       integer :: num_pts
       real(8) :: Ehi, Elo
-      real(8) :: dElo, dEhi ! interval between each Ein point
       type(ScattData), pointer :: mySD
       integer :: i_rxn
       real(8) :: Ef, D, Fp, Fm, Ecp, EcM, Eg, Q, dE
@@ -638,9 +637,8 @@ module scatt
             if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
               iE_pct = 100 * iE / NE
               if (iE_pct /= last_iE_pct) then
-                message = "    Elastic Evaluation " // &
-                  trim(to_str(100 * iE / NE)) // "% Complete"
-                call write_message(7)
+                call write_message("    Elastic Evaluation " // &
+                  trim(to_str(100 * iE / NE)) // "% Complete", 7)
               end if
               last_iE_pct = iE_pct
             end if
@@ -728,9 +726,8 @@ module scatt
             if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
               iE_pct = 100 * iE / NE
               if (iE_pct /= last_iE_pct) then
-                message = "    Inelastic Evaluation " // &
-                  trim(to_str(100 * iE / NE)) // "% Complete"
-                call write_message(7)
+                call write_message("    Inelastic Evaluation " // &
+                  trim(to_str(100 * iE / NE)) // "% Complete", 7)
               end if
               last_iE_pct = iE_pct
             end if

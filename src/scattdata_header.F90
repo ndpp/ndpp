@@ -331,9 +331,8 @@ module scattdata_header
 
       if ((.not. associated(this % edist)) .and. &
         (.not. associated(this % adist))) then
-        message = "No distribution associated with this ScattData &
-          &object."
-        call fatal_error()
+        call fatal_error("No distribution associated with this ScattData &
+          &object.")
       end if
 
       ! Step through each incoming energy value to do these calculations
@@ -497,9 +496,6 @@ module scattdata_header
       real(8), allocatable :: fEmu(:,:)
       real(8), allocatable :: result_distro(:,:)  ! the output distribution
 
-      ! the distribution in the lab frame
-      real(8), allocatable :: distro(:,:)
-
       ! Set up the results memory
       allocate(result_distro(this % order, this % groups))
       result_distro = ZERO
@@ -521,9 +517,8 @@ module scattdata_header
                                           result_distro)
             else
               ! As a notification of future issues:
-              message = "File 4 Reaction Found With Lab Angle Distribution and &
-                        &No Energy Distribution!"
-              call fatal_error()
+              call fatal_error("File 4 Reaction Found With Lab Angle Distribution and &
+                        &No Energy Distribution!")
             end if
           end if
 
@@ -550,8 +545,8 @@ module scattdata_header
 
               else
                 ! As a notification of future issues:
-                message = " Associated Edist and Adist, but not law 9: " // &
-                  to_str(this % edist % law) //", "//to_str(this % rxn % MT)
+                call fatal_error(" Associated Edist and Adist, but not law 9: " // &
+                  to_str(this % edist % law) //", "//to_str(this % rxn % MT))
               end if
             else
               ! Need to come up with the input distro via unit-base interpolation
@@ -698,9 +693,8 @@ module scattdata_header
 
       NR = int(data(1))
       if (NR > 0) then
-        message = "Multiple interpolation regions not supported while &
-             &attempting to sample Kalbach-Mann distribution."
-        call fatal_error()
+        call fatal_error("Multiple interpolation regions not supported while &
+             &attempting to sample Kalbach-Mann distribution.")
       end if
       NE = int(data(2 + 2*NR))
 
@@ -842,8 +836,7 @@ module scattdata_header
               end do
             end do
           else
-            message = "Unknown interpolation type: " // trim(to_str(interp))
-            call fatal_error()
+            call fatal_error("Unknown interpolation type: " // trim(to_str(interp)))
           end if
 
         end do

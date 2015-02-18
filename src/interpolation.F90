@@ -202,8 +202,7 @@ contains
       r = (log(x) - log(x0))/(log(x1) - log(x0))
       y = exp((1-r)*log(y0) + r*log(y1))
     case default
-      message = "Unsupported interpolation scheme: " // to_str(interp)
-      call fatal_error()
+      call fatal_error("Unsupported interpolation scheme: " // to_str(interp))
     end select
 
   end function interpolate_tab1_object

@@ -5,7 +5,7 @@ module chidata_header
   use dict_header
   use error,            only: fatal_error, warning
   use fission,          only: nu_total, nu_delayed
-  use global,           only: nuclides, message
+  use global,           only: nuclides
   use interpolation,    only: interpolate_tab1
   use output,           only: write_message, header, print_ascii_array
   use search,           only: binary_search
@@ -77,8 +77,7 @@ contains
         if (present(precursor_grp)) then
           self % precursor_grp = precursor_grp
         else
-          message = "Precursor Group Must Be Provided For Delayed Chi Data!"
-          call fatal_error()
+          call fatal_error("Precursor Group Must Be Provided For Delayed Chi Data!")
         end if
         ! Store the reaction type
         self % sigma => null()
@@ -100,8 +99,7 @@ contains
       self % NR = int(edist % data(1))
       ! Error checking:
       !if (self % NR /= 0) then
-      !  message = "NR /= 0 for Law " // trim(to_str(self % law))
-      !  call fatal_error()
+      !  call fatal_error("NR /= 0 for Law " // trim(to_str(self % law)))
       !end if
       self % NE = int(edist % data(2 + 2 * self % NR))
       allocate(self % E_grid(self % NE))
@@ -233,7 +231,7 @@ contains
     real(8) :: I              ! Non-dimensional Fiss Spectra param.
     real(8) :: x, x0          ! Spectra constants
     integer :: lc             ! location in the data array
-    integer :: g, g2          ! E group indices
+    integer :: g              ! E group indices
     real(8) :: Egp1           ! upper bound of integral
     real(8) :: Eg             ! lower bound of integral
     real(8) :: Watt_a, Watt_b ! Watt spectrum values
@@ -249,15 +247,13 @@ contains
     case (1)
       ! =======================================================================
       ! TABULAR EQUIPROBABLE ENERGY BINS
-      message = "Energy Distribution Type " // trim(to_str(edist % law)) // &
-        " Not Yet Supported."
-      call warning()
+      call warning("Energy Distribution Type " // trim(to_str(edist % law)) // &
+                   " Not Yet Supported.")
     case (3)
       ! =======================================================================
       ! INELASTIC LEVEL SCATTERING
-      message = "Energy Distribution Type " // trim(to_str(edist % law)) // &
-        " Not Yet Supported."
-      call warning()
+      call warning("Energy Distribution Type " // trim(to_str(edist % law)) // &
+                   " Not Yet Supported.")
     case (4, 61)
       ! =======================================================================
       ! CONTINUOUS TABULAR DISTRIBUTION AND
@@ -267,13 +263,11 @@ contains
       NR  = int(edist % data(1))
       NE  = int(edist % data(2 + 2*NR))
       if (NR == 1) then
-        message = "Assuming linear-linear interpolation when sampling &
-             &continuous tabular distribution"
-        call warning()
+        call warning("Assuming linear-linear interpolation when sampling &
+                     &continuous tabular distribution")
       else if (NR > 1) then
-        message = "Multiple interpolation regions not supported while &
-             &attempting to sample continuous tabular distribution."
-        call fatal_error()
+        call fatal_error("Multiple interpolation regions not supported while &
+                     &attempting to sample continuous tabular distribution.")
       end if
       ! Set interpolation type (assuming lin-lin)
       INTT_in = LINEAR_LINEAR
@@ -312,9 +306,8 @@ contains
       end if
       if (ND > 0) then
         ! discrete lines present
-        message = "Discrete lines in continuous tabular distributed not &
-             &yet supported"
-        call fatal_error()
+        call fatal_error("Discrete lines in continuous tabular distributed not &
+                         &yet supported")
       end if
 
       ! Loop through energy groups
@@ -353,8 +346,7 @@ contains
     case (5)
       ! =======================================================================
       ! GENERAL EVAPORATION SPECTRUM
-      message = "Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported."
-      call warning()
+      call warning("Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported.")
     case (7)
       ! =======================================================================
       ! MAXWELL FISSION SPECTRUM
@@ -467,23 +459,19 @@ contains
     case (12)
       ! =======================================================================
       ! Madland-Nix Fission Spectrum
-      message = "Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported."
-      call warning()
+      call warning("Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported.")
     case (44)
       ! =======================================================================
       ! KALBACH-MANN CORRELATED SCATTERING
-      message = "Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported."
-      call warning()
+      call warning("Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported.")
     case (66)
       ! =======================================================================
       ! N-BODY PHASE SPACE DISTRIBUTION
-      message = "Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported."
-      call warning()
+      call warning("Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported.")
     case (67)
       ! =======================================================================
       ! LABORATORY ENERGY-ANGLE LAW
-      message = "Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported."
-      call warning()
+      call warning("Energy Distribution Type " // trim(to_str(edist % law)) // " Not Yet Supported.")
     end select
 
     ! Normalize chis(g) in case the interpolation rule causes it to be > 1.0

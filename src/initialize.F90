@@ -2,7 +2,7 @@ module initialize
 
   use constants
   use error,            only: fatal_error
-  use global,           only: message, path_input, master, mpi_enabled, &
+  use global,           only: path_input, master, mpi_enabled, &
                               n_procs, rank, mpi_err
   use string,           only: starts_with, ends_with
   use output,           only: title, header, print_usage, print_version
@@ -103,8 +103,8 @@ contains
         case ('-v', '-version', '--version')
           call print_version()
           stop
-          message = "Unknown command line option: " // argv(i)
-          call fatal_error()
+        case default
+          call fatal_error("Unknown command line option: " // argv(i))
         end select
 
         last_flag = i

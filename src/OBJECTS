@@ -4,7 +4,6 @@ array_merge.o \
 dict_header.o \
 global.o \
 main.o \
-ace.o \
 chidata_header.o \
 chi.o \
 ndpp.o \
@@ -20,6 +19,8 @@ scattdata_header.o \
 thin.o
 
 omc_objects = \
+ace.o \
+endf.o \
 endf_header.o \
 fission.o \
 interpolation.o \

@@ -1,5 +1,9 @@
 ace_header.o: constants.o
 ace_header.o: endf_header.o
+ace_header.o: list_header.o
+
+endf.o: constants.o
+endf.o: string.o
 
 fission.o: ace_header.o
 fission.o: constants.o
@@ -19,9 +23,11 @@ list_header.o: constants.o
 
 ace.o: ace_header.o
 ace.o: constants.o
+ace.o: endf.o
 ace.o: error.o
 ace.o: fission.o
 ace.o: global.o
+ace.o: list_header.o
 ace.o: material_header.o
 ace.o: output.o
 ace.o: set_header.o
@@ -44,9 +50,7 @@ chi.o: ace_header.o
 chi.o: array_merge.o
 chi.o: chidata_header.o
 chi.o: constants.o
-chi.o: error.o
 chi.o: hdf5_interface.o
-chi.o: global.o
 chi.o: output.o
 chi.o: string.o
 
@@ -72,8 +76,6 @@ initialize.o: string.o
 
 legendre.o: ace_header.o
 legendre.o: constants.o
-legendre.o: error.o
-legendre.o: global.o
 
 main.o: global.o
 main.o: ndpp.o

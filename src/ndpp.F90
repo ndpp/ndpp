@@ -10,7 +10,7 @@ module ndpp_class
   use global
   use output,      only: write_message, header, time_stamp, print_ascii_array
   use scatt
-  use string,      only: lower_case, starts_with, ends_with, to_str
+  use string,      only: to_lower, starts_with, ends_with, to_str
   use thin,        only: thin_grid
   use timer_header
 
@@ -125,8 +125,7 @@ module ndpp_class
       integer :: g
 
       ! Display output message
-      message = "Reading Nuclear Data Pre-Processor XML file..."
-      call write_message(5)
+      call write_message("Reading Nuclear Data Pre-Processor XML file...", 5)
 
       ! Start total timer and initialization timer
       call timer_start(self % time_total)
@@ -137,9 +136,8 @@ module ndpp_class
 
       inquire(FILE=filename, EXIST=file_exists)
       if (.not. file_exists) then
-        message = "Data Pre-Processing XML file '" // trim(filename) // &
-                  "' does not exist!"
-        call fatal_error()
+        call fatal_error("Data Pre-Processing XML file '" // trim(filename) // &
+                         "' does not exist!")
       end if
 
       ! Initialize XML scalar variables
@@ -177,10 +175,9 @@ module ndpp_class
         ! variable
         call get_environment_variable("CROSS_SECTIONS", env_variable)
         if (len_trim(env_variable) == 0) then
-          message = "No cross_sections.xml file was specified in " // &
-                    "ndpp.xml or in the CROSS_SECTIONS " // &
-                    "environment variable."
-          call fatal_error()
+          call fatal_error("No cross_sections.xml file was specified in " // &
+                           "ndpp.xml or in the CROSS_SECTIONS " // &
+                           "environment variable.")
         else
           self % path_cross_sections = trim(env_variable)
         end if
@@ -203,7 +200,7 @@ module ndpp_class
       call read_cross_sections_xml(self)
 
       ! Get integrate_chi flag if provided, if not, default provided by class
-      call lower_case(integrate_chi_)
+      integrate_chi_ = to_lower(integrate_chi_)
       if (integrate_chi_ == '') then
         self % integrate_chi = INTEGRATE_CHI_DEFAULT
       else if (integrate_chi_ == 'false') then
@@ -211,9 +208,8 @@ module ndpp_class
       else if (integrate_chi_ == 'true') then
         self % integrate_chi = .true.
       else if (integrate_chi_ /= 'true') then
-        message = "Value for <integrate_chi> provided, but does not match " // &
-                  "TRUE or FALSE. Using default of TRUE."
-        call warning()
+        call warning("Value for <integrate_chi> provided, but does not match " // &
+                     "TRUE or FALSE. Using default of TRUE.")
       end if
 
       ! Get energy groups and bins
@@ -221,32 +217,28 @@ module ndpp_class
         ! Lets check to see that the bins are all in increasing order, and positive
         do g = 1, size(energy_bins_) - 1
           if (energy_bins_(g) < ZERO) then
-            message = "Invalid energy group structure specified in ndpp.xml; " // &
-                      "Groups boundaries be positive."
-            call fatal_error()
+            call fatal_error("Invalid energy group structure specified in ndpp.xml; " // &
+                             "Groups boundaries be positive.")
           end if
           if (energy_bins_(g) >= energy_bins_(g + 1)) then
-            message = "Invalid energy group structure specified in ndpp.xml; " // &
-                      "Group boundaries must be in increasing order."
-            call fatal_error()
+            call fatal_error("Invalid energy group structure specified in ndpp.xml; " // &
+                             "Group boundaries must be in increasing order.")
           end if
         end do
         ! Ensure that self % energy_bins(1) is 0
         if (energy_bins_(1) /= ZERO) then
-          message = "Invalid Lower Energy Boundary: Bottom of Lowest Group " // &
-                    " Must be Zero!"
-          call fatal_error()
+          call fatal_error("Invalid Lower Energy Boundary: Bottom of Lowest Group " // &
+                           " Must be Zero!")
         end if
         self % energy_groups = size(energy_bins_) - 1
         allocate(self % energy_bins(size(energy_bins_)))
         self % energy_bins = energy_bins_
       else
-        message = "No energy group structure was specified in ndpp.xml."
-        call fatal_error()
+        call fatal_error("No energy group structure was specified in ndpp.xml.")
       end if
 
       ! Get the output type, if none is provided, the default is set by the class.
-      call lower_case(output_format_)
+      output_format_ = to_lower(output_format_)
       if (output_format_ == 'ascii') then
         self % lib_format = ASCII
       else if (output_format_ == 'binary') then
@@ -255,22 +247,19 @@ module ndpp_class
 #ifdef HDF5
         self % lib_format = H5
 #else
-        message = "Value of HDF5 provided for <output_format>. " // &
-                  "NDPP must be compiled with HDF5 enabled."
-        call fatal_error()
+        call fatal_error("Value of HDF5 provided for <output_format>. " // &
+                         "NDPP must be compiled with HDF5 enabled.")
 #endif
       else if (output_format_ == 'none') then
         self % lib_format = NO_OUT
       else if (output_format_ == 'human') then
         self % lib_format = HUMAN
-        message = "Value of HUMAN provided for <output_format>, " // &
-                  "Beware that this output type is incompatible with Monte " // &
-                  "Carlo codes."
-        call warning()
+        call warning("Value of HUMAN provided for <output_format>, " // &
+                     "Beware that this output type is incompatible with Monte " // &
+                     "Carlo codes.")
       else ! incorrect value, print warning, but use default.
-        message = "Value for <output_format> provided, but does not match " // &
-                  "ASCII, BINARY, HDF5, HUMAN, or NONE. Using default of BINARY."
-        call warning()
+        call warning("Value for <output_format> provided, but does not match " // &
+                     "ASCII, BINARY, HDF5, HUMAN, or NONE. Using default of BINARY.")
         self % lib_format = BINARY
       end if
 
@@ -288,7 +277,7 @@ module ndpp_class
       self % lib_name = library_name_
 
       ! Get scattering type information, if not provided, default provided by class
-      call lower_case(scatt_type_)
+      scatt_type_ = to_lower(scatt_type_)
       if (scatt_type_ == '') then
         self % scatt_type = SCATT_TYPE_DEFAULT
       else if (scatt_type_ == 'legendre') then
@@ -301,20 +290,18 @@ module ndpp_class
       if (scatt_order_ > 0) then
         if ((self % scatt_type == SCATT_TYPE_LEGENDRE) .and. &
           (scatt_order_ > MAX_LEGENDRE_ORDER)) then
-          message = "Invalid negative or zero scatt_order value specified in " // &
-                    "ndpp.xml."
-          call fatal_error()
+          call fatal_error("Invalid negative or zero scatt_order value specified in " // &
+                           "ndpp.xml.")
         else
           self % scatt_order = scatt_order_
         end if
       else
-        message = "Invalid negative or zero scatt_order value specified in " // &
-                  "ndpp.xml."
-        call fatal_error()
+        call fatal_error("Invalid negative or zero scatt_order value specified in " // &
+                         "ndpp.xml.")
       end if
 
       ! Get nuscatter information
-      call lower_case(nuscatter_)
+      nuscatter_ = to_lower(nuscatter_)
       if (nuscatter_ == '') then
         self % nuscatter = NUSCATTER_DEFAULT
       else if (nuscatter_ == 'false') then
@@ -322,9 +309,8 @@ module ndpp_class
       else if (nuscatter_ == 'true') then
         self % nuscatter = .true.
       else
-        message = "Value for <nuscatter> provided, but does not match " // &
-                  "TRUE or FALSE. Using default of FALSE."
-        call warning()
+        call warning("Value for <nuscatter> provided, but does not match " // &
+                     "TRUE or FALSE. Using default of FALSE.")
       end if
 
       ! Now get the free-gas threshold
@@ -337,17 +323,15 @@ module ndpp_class
       else if (freegas_cutoff_ >= ZERO) then
         self % freegas_cutoff = freegas_cutoff_
       else
-        message = "Invalid negative value of <freegas_cutoff> specified in " // &
-                "ndpp.xml. Specify -1 if no cutoff is desired; all other " // &
-                "values are invalid."
-        call fatal_error()
+        call fatal_error("Invalid negative value of <freegas_cutoff> specified in " // &
+                         "ndpp.xml. Specify -1 if no cutoff is desired; all other " // &
+                         "values are invalid.")
       end if
 
       ! Get grid thinning information
       if (thinning_tol_ < ZERO) then
-        message = "Invalid thinning tolerance provided, setting to default" // &
-                   " of no thinning."
-        call warning()
+        call warning("Invalid thinning tolerance provided, setting to default" // &
+                     " of no thinning.")
       end if
       ! Convert from percent to fraction and store
       self % thin_tol = 0.01_8 * thinning_tol_
@@ -356,8 +340,7 @@ module ndpp_class
       if (print_tol_ > ZERO) then
         self % print_tol = print_tol_
       else
-        message = "Invalid printing tolerance provided, setting to default."
-        call warning()
+        call warning("Invalid printing tolerance provided, setting to default.")
       end if
 
       ! Get the integration parameters
@@ -365,89 +348,78 @@ module ndpp_class
       if (mu_bins_ > 1) then
         self % mu_bins = mu_bins_
       else
-        message = "Invalid mu_bins value specified in " // &
-                  "ndpp.xml. Mu_bins must be two or greater."
-        call fatal_error()
+        call fatal_error("Invalid mu_bins value specified in " // &
+                         "ndpp.xml. Mu_bins must be two or greater.")
       end if
 
       if (sab_threshold_ >= ZERO) then
         SAB_THRESHOLD = sab_threshold_
       else
-        message = "Invalid Free-Gas Kernel S(a,b) threshold value " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid Free-Gas Kernel S(a,b) threshold value " // &
+                         "specified in ndpp.xml; value must be positive.")
       end if
 
       if (brent_mu_thresh_ >= ZERO) then
         BRENT_MU_THRESH = brent_mu_thresh_
       else
-        message = "Invalid Brent Mu threshold value " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid Brent Mu threshold value " // &
+                         "specified in ndpp.xml; value must be positive.")
       end if
 
       if (adaptive_mu_tol_ >= ZERO) then
         ADAPTIVE_MU_TOL = adaptive_mu_tol_
       else
-        message = "Invalid Adaptive Mu Threshold value " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid Adaptive Mu Threshold value " // &
+                         "specified in ndpp.xml; value must be positive.")
       end if
 
       if (adaptive_mu_its_ >= 0) then
         ADAPTIVE_MU_ITS = adaptive_mu_its_
       else
-        message = "Invalid Adaptive Mu Max Iterations value " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid Adaptive Mu Max Iterations value " // &
+                         "specified in ndpp.xml; value must be positive.")
       end if
 
       if (adaptive_eout_tol_ >= ZERO) then
         ADAPTIVE_EOUT_TOL = adaptive_eout_tol_
       else
-        message = "Invalid Adaptive Eout Threshold value " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid Adaptive Eout Threshold value " // &
+                         "specified in ndpp.xml; value must be positive.")
       end if
 
       if (adaptive_eout_its_ >= 0) then
         ADAPTIVE_EOUT_ITS = adaptive_eout_its_
       else
-        message = "Invalid Adaptive Eout Max Iterations value " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid Adaptive Eout Max Iterations value " // &
+                         "specified in ndpp.xml; value must be positive.")
       end if
 
       if (sab_epts_per_bin_ >= 0) then
         SAB_EPTS_PER_BIN = sab_epts_per_bin_
       else
-        message = "Invalid S(a,b) points per bin value " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid S(a,b) points per bin value " // &
+                  "specified in ndpp.xml; value must be positive.")
       end if
 
       if (ne_per_grp_ >= 0) then
         NE_PER_GRP = ne_per_grp_
       else
-        message = "Invalid Number of Eout pts per group for Cm to Lab conversion " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid Number of Eout pts per group for Cm to Lab conversion " // &
+                         "specified in ndpp.xml; value must be positive.")
       end if
 
       if (extend_pts_ >= 0) then
         EXTEND_PTS = extend_pts_
       else
-        message = "Invalid Number of Ein per Group for Elastic " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid Number of Ein per Group for Elastic " // &
+                         "specified in ndpp.xml; value must be positive.")
       end if
 
       if (inel_extend_pts_ >= 0) then
         INEL_EXTEND_PTS = inel_extend_pts_
       else
-        message = "Invalid Number of Ein per Group for Inelastic " // &
-                  "specified in ndpp.xml; value must be positive."
-        call fatal_error()
+        call fatal_error("Invalid Number of Ein per Group for Inelastic " // &
+                         "specified in ndpp.xml; value must be positive.")
       end if
 
       ! Now we partition the work over MPI processes
@@ -516,7 +488,6 @@ module ndpp_class
       integer                   :: g              ! Energy group index
       real(8)                   :: thin_compr     ! Thinning compression fraction
       real(8)                   :: thin_err       ! Thinning compression error
-      character(MAX_LINE_LEN)   :: xmllib_line    ! XML library tag for nuclides
       character(MAX_LINE_LEN)   :: msg_prepend    ! Text to print before current working lib
       integer, allocatable      :: group_index_el(:) ! Group locations in self % Ein_el
       integer, allocatable      :: group_index_inel(:) ! Group locations in self % Ein_inel
@@ -556,17 +527,14 @@ module ndpp_class
         call timer_stop(self % time_print)
 
       ! Display output message
-        message = "Beginning Pre-Processing..."
-        call write_message(5)
+        call write_message("Beginning Pre-Processing...", 5)
 
 #ifdef OPENMP
-        message = "Using " // trim(to_str(omp_threads)) // " OpenMP Threads"
-        call write_message(5)
+        call write_message("Using " // trim(to_str(omp_threads)) // " OpenMP Threads", 5)
 #endif
 
 #ifdef MPI
-        message = "Using " // trim(to_str(n_procs)) // " MPI Processes"
-        call write_message(5)
+        call write_message("Using " // trim(to_str(n_procs)) // " MPI Processes", 5)
 #endif
 
         ! Start PreProcessor Timer
@@ -583,9 +551,8 @@ module ndpp_class
         else
           msg_prepend = ""
         end if
-        message = trim(adjustl(msg_prepend)) // " Performing Pre-Processing For " // &
-          trim(adjustl(xs_listings(i_listing) % name))
-        call write_message()
+        call write_message(trim(adjustl(msg_prepend)) // " Performing Pre-Processing For " // &
+          trim(adjustl(xs_listings(i_listing) % name)))
         if (xs_listings(i_listing) % type == ACE_NEUTRON) then
           ! ===================================================================
           ! PERFORM CONTINUOUS ENERGY LIBRARY CALCULATIONS
@@ -628,8 +595,7 @@ module ndpp_class
 
           ! display message
           if (.not. mpi_enabled) then
-            message = "....Performing Scattering Integration"
-            call write_message(6)
+            call write_message("....Performing Scattering Integration", 6)
           end if
 
           ! Integrate Scattering Distributions
@@ -659,12 +625,10 @@ module ndpp_class
                            self % thin_tol, thin_compr, thin_err)
             if (.not. mpi_enabled) then
               ! Report results of thinning
-              message = "....Completed Elastic Thinning, Reduced Storage By " // &
-                        trim(to_str(100.0_8 * thin_compr)) // "%"
-              call write_message(6)
-              message = "....Maximum Elastic Thinning Error Was " // &
-                        trim(to_str(100.0_8 * thin_err)) // "%"
-              call write_message(6)
+              call write_message("....Completed Elastic Thinning, Reduced Storage By " // &
+                        trim(to_str(100.0_8 * thin_compr)) // "%", 6)
+              call write_message("....Maximum Elastic Thinning Error Was " // &
+                        trim(to_str(100.0_8 * thin_err)) // "%", 6)
             end if
             ! And for inelastic
             if (allocated(self % Ein_inel)) then
@@ -672,12 +636,10 @@ module ndpp_class
                              self % thin_tol, thin_compr, thin_err, nuinel_mat)
               if (.not. mpi_enabled) then
                 ! Report results of thinning
-                message = "....Completed Inelastic Thinning, Reduced Storage By " // &
-                          trim(to_str(100.0_8 * thin_compr)) // "%"
-                call write_message(6)
-                message = "....Maximum Inelastic Thinning Error Was " // &
-                          trim(to_str(100.0_8 * thin_err)) // "%"
-                call write_message(6)
+                call write_message("....Completed Inelastic Thinning, Reduced Storage By " // &
+                          trim(to_str(100.0_8 * thin_compr)) // "%", 6)
+                call write_message("....Maximum Inelastic Thinning Error Was " // &
+                          trim(to_str(100.0_8 * thin_err)) // "%", 6)
               end if
             end if
           end if
@@ -742,8 +704,7 @@ module ndpp_class
           if (self % integrate_chi) then
             if (.not. mpi_enabled) then
               ! display message
-              message = "....Performing Fission Neutron Energy Integration"
-              call write_message(6)
+              call write_message("....Performing Fission Neutron Energy Integration", 6)
             end if
 
             call timer_start(self % time_chi_preproc)
@@ -794,8 +755,7 @@ module ndpp_class
 
           if (.not. mpi_enabled) then
             ! display message
-            message = "....Performing Scattering Integration"
-            call write_message(6)
+            call write_message("....Performing Scattering Integration", 6)
           end if
 
 
@@ -824,12 +784,10 @@ module ndpp_class
                            self % thin_tol, thin_compr, thin_err)
             if (.not. mpi_enabled) then
               ! Report results of thinning
-              message = "....Completed Thinning, Reduced Storage By " // &
-                        trim(to_str(100.0_8 * thin_compr)) // "%"
-              call write_message(6)
-              message = "....Maximum Thinning Error Was " // &
-                        trim(to_str(100.0_8 * thin_err)) // "%"
-              call write_message(6)
+              call write_message("....Completed Thinning, Reduced Storage By " // &
+                        trim(to_str(100.0_8 * thin_compr)) // "%", 6)
+              call write_message("....Maximum Thinning Error Was " // &
+                        trim(to_str(100.0_8 * thin_err)) // "%", 6)
             end if
           end if
 
@@ -863,9 +821,8 @@ module ndpp_class
           nullify(sab)
           deallocate(sab_tables)
         else
-          message = "Invalid Entry in cross_sections listings.  " // &
-            "NDPP does not support dosimetry Tables! Entry will be ignored."
-          call warning()
+          call warning("Invalid Entry in cross_sections listings.  " // &
+            "NDPP does not support dosimetry Tables! Entry will be ignored.")
         end if
 
         ! Write this nuclide to the ndpp_lib.xml file
@@ -1176,13 +1133,12 @@ module ndpp_class
       inquire(FILE=this_ndpp % path_cross_sections, EXIST=file_exists)
       if (.not. file_exists) then
          ! Could not find cross_sections.xml file
-         message = "Cross sections XML file '" // trim(this_ndpp % path_cross_sections) // &
-              "' does not exist!"
-         call fatal_error()
+         call fatal_error("Cross sections XML file '" // &
+                          trim(this_ndpp % path_cross_sections) // &
+                          "' does not exist!")
       end if
 
-      message = "Reading cross sections XML file..."
-      call write_message(5)
+      call write_message("Reading cross sections XML file...", 5)
 
       ! Initialize variables that may go unused
       directory_ = ""
@@ -1211,8 +1167,7 @@ module ndpp_class
       else if (len_trim(filetype_) == 0) then
          filetype = ASCII
       else
-         message = "Unknown filetype in cross_sections.xml: " // trim(filetype_)
-         call fatal_error()
+         call fatal_error("Unknown filetype in cross_sections.xml: " // trim(filetype_))
       end if
 
       ! copy default record length and entries for binary files
@@ -1221,8 +1176,7 @@ module ndpp_class
 
       ! Allocate xs_listings array
       if (.not. associated(ace_tables_)) then
-         message = "No ACE table listings present in cross_sections.xml file!"
-         call fatal_error()
+         call fatal_error("No ACE table listings present in cross_sections.xml file!")
       else
          this_ndpp % n_listings = size(ace_tables_)
          allocate(xs_listings(this_ndpp % n_listings))
@@ -1241,8 +1195,7 @@ module ndpp_class
          if ((ace_tables_(i) % freegas_cutoff < ZERO) .AND. &
             ((ace_tables_(i) % freegas_cutoff /= INFINITE_FREEGAS_CUTOFF) .AND. &
             (ace_tables_(i) % freegas_cutoff /= GLOBAL_FREEGAS_CUTOFF))) then
-           message = "Invalid value of freegas_cutoff element in cross_sections.xml file!"
-           call fatal_error()
+           call fatal_error("Invalid value of freegas_cutoff element in cross_sections.xml file!")
          else
            listing % freegas_cutoff   = ace_tables_(i) % freegas_cutoff
          end if
