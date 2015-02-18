@@ -224,7 +224,7 @@ contains
     real(8), allocatable       :: chis(:) ! Resultant chi distribution
 
     type(DistEnergy), pointer :: edist
-    integer :: NR, NE, NP, iE, INTTp, INTT, ND, INTT_in
+    integer :: NR, NE, NP, iE, INTTp, INTT, ND
     integer :: lEout_min
     real(8) :: T              ! Fission Spectra Theta Value
     real(8) :: U              ! Restriction Energy
@@ -237,6 +237,7 @@ contains
     real(8) :: Watt_a, Watt_b ! Watt spectrum values
     real(8) :: interp         ! interpolation value of the energy point
     real(8) :: runsum         ! Running sum of chi integration for law 4
+    logical :: histogram_interp ! Use histogram interpolation? (law 4)
 
     allocate(chis(self % groups))
     chis = ZERO
@@ -260,17 +261,20 @@ contains
       ! CORRELATED ENERGY AND ANGLE DISTRIBUTION
 
       ! read number of interpolation regions and incoming energies
+      histogram_interp = .false.
       NR  = int(edist % data(1))
       NE  = int(edist % data(2 + 2*NR))
       if (NR == 1) then
-        call warning("Assuming linear-linear interpolation when sampling &
-                     &continuous tabular distribution")
+        if (self % law == 4) then
+          histogram_interp = (edist % data(3) == 1)
+        else
+          call warning("Assuming linear-linear interpolation when sampling &
+                       &continuous tabular distribution")
+        end if
       else if (NR > 1) then
         call fatal_error("Multiple interpolation regions not supported while &
                      &attempting to sample continuous tabular distribution.")
       end if
-      ! Set interpolation type (assuming lin-lin)
-      INTT_in = LINEAR_LINEAR
 
       ! find energy bin and calculate interpolation factor -- if the energy is
       ! outside the range of the tabulated energies, choose the first or last
@@ -287,8 +291,10 @@ contains
         x = (Ein - edist%data(lc+iE)) / (edist%data(lc+iE+1) - edist%data(lc+iE))
       end if
 
-      if (x > 0.5_8) then
-        iE = iE + 1
+      if (.not. histogram_interp) then
+        if (x > 0.5_8) then
+          iE = iE + 1
+        end if
       end if
 
       ! determine location of outgoing energies, pdf, cdf for E(l)
@@ -414,9 +420,7 @@ contains
       NE  = int(edist % data(2 + 2*NR))
 
       ! Get interpolation type
-      if (NR == 0) then
-        INTT_in = LINEAR_LINEAR
-      else
+      if (NR /= 0) then
         write(*,*) 'Error, INTT /= LINEAR_LINEAR', edist % law
       end if
 
