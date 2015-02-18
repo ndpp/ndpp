@@ -1,6 +1,7 @@
 objects = \
 ace_header.o \
 array_merge.o \
+dict_header.o \
 global.o \
 main.o \
 ace.o \
@@ -19,7 +20,6 @@ scattdata_header.o \
 thin.o
 
 omc_objects = \
-dict_header.o \
 endf_header.o \
 fission.o \
 interpolation.o \
