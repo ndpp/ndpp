@@ -694,6 +694,7 @@ module scatt
       integer :: iE_pct, last_iE_pct ! Current and previous pct complete
       real(8), allocatable :: temp_scatt(:,:) ! calculated scattering matrix
       integer :: tid                 ! Thread id
+      real(8) :: yield               ! Neutron yield
 
       groups = size(E_bins) - 1
       NE = size(Ein)
@@ -745,8 +746,13 @@ module scatt
             temp_scatt = mySD % interp_distro(mu_out, nuc, Ein(iE))
             scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + temp_scatt
             if (nuscatt) then
-              nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) + &
-                real(mySD % rxn % multiplicity, 8) * temp_scatt
+              ! change weight of particle based on yield
+              if (mySD % rxn % multiplicity_with_E) then
+                yield = interpolate_tab1(mySD % rxn % multiplicity_E, Ein(iE))
+              else
+                yield = real(mySD % rxn % multiplicity, 8)
+              end if
+              nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) + yield * temp_scatt
             end if
           end do
 
