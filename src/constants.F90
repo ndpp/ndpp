@@ -9,10 +9,6 @@ module constants
   integer, parameter :: VERSION_MINOR   = 0
   integer, parameter :: VERSION_RELEASE = 0
 
-  ! Revision numbers for binary files
-  !!! Will need something like this for my output files.
-!   integer, parameter :: REVISION_LIB     = 1
-
   ! ============================================================================
   ! ADJUSTABLE PARAMETERS
 
@@ -120,11 +116,6 @@ module constants
   integer, parameter :: NUM_EP = 32
   ! Reciprocal of NUM_EP
   real(8), parameter :: R_NUM_EP = ONE / 32.0_8
-
-  ! Flag to interpolate on angular distributions with nearest neighbor or
-  ! linear interpolation
-  logical, parameter :: INTERP_NEAREST = .false.
-  ! logical, parameter :: INTERP_NEAREST = .true.
 
   ! ============================================================================
   ! CROSS SECTION RELATED CONSTANTS
