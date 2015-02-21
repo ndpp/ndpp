@@ -497,6 +497,8 @@ module scattdata_header
       integer              :: INTT
       real(8), allocatable :: fEmu(:,:)
       real(8), allocatable :: result_distro(:,:)  ! the output distribution
+      real(8)              :: f  ! The interpolant
+      real(8), allocatable :: distro_int(:,:)
 
       ! Set up the results memory
       allocate(result_distro(this % order, this % groups))
@@ -506,23 +508,63 @@ module scattdata_header
       case (SCATT_TYPE_LEGENDRE)
         if ((associated(this % adist)) .and. &
           (.not. associated(this % edist))) then
+          ! Unit base interpolation is not available here. Instead linearly
+          ! interpolate the angular distribution
+
+          ! First find interpolant
+          ! Interpolate the distribution linearly
+          ! f = (log(Ein) - log(this % E_grid(iE))) / &
+          ! (log(this % E_grid(iE + 1)) - log(this % E_grid(iE)))
+          f = (Ein - this % E_grid(iE)) / (this % E_grid(iE + 1) - this % E_grid(iE))
+
+          ! Do the lower distribution
+          allocate(distro_int(this % order, this % groups))
+          distro_int = ZERO
+
           if ((Ein < this % freegas_cutoff) .and. &
               (this % rxn % MT == ELASTIC)) then
             call integrate_freegas_leg(Ein, this % awr, this % kT, &
               this % distro(iE) % data(:, 1), this % mu, this % E_bins, &
-              this % order, result_distro)
+              this % order, distro_int)
           else
             if (this % rxn % scatter_in_cm) then
-              call integrate_file4_cm_leg(this % distro(iE) % data(:,1), Ein, &
+              call integrate_file4_cm_leg(this % distro(iE) % data(:, 1), Ein, &
                                           this % awr, this % rxn % Q_value, &
                                           this % E_bins, this % mu, this % order, &
-                                          result_distro)
+                                          distro_int)
             else
               ! As a notification of future issues:
               call fatal_error("File 4 Reaction Found With Lab Angle Distribution and &
                         &No Energy Distribution!")
             end if
           end if
+
+          result_distro = distro_int * (ONE - f)
+
+          ! Do the upper distribution
+          distro_int = ZERO
+
+          if ((Ein < this % freegas_cutoff) .and. &
+              (this % rxn % MT == ELASTIC)) then
+            call integrate_freegas_leg(Ein, this % awr, this % kT, &
+              this % distro(iE+1) % data(:, 1), this % mu, this % E_bins, &
+              this % order, distro_int)
+          else
+            if (this % rxn % scatter_in_cm) then
+              call integrate_file4_cm_leg(this % distro(iE+1) % data(:, 1), Ein, &
+                                          this % awr, this % rxn % Q_value, &
+                                          this % E_bins, this % mu, this % order, &
+                                          distro_int)
+            else
+              ! As a notification of future issues:
+              call fatal_error("File 4 Reaction Found With Lab Angle Distribution and &
+                        &No Energy Distribution!")
+            end if
+          end if
+
+          result_distro = result_distro + distro_int * f
+
+          deallocate(distro_int)
 
         else if (associated(this % edist)) then
           if (this % rxn % scatter_in_cm) then
@@ -535,21 +577,48 @@ module scattdata_header
               ! Here, we have angular info in adist, but it goes to a single energy
               ! specified in edist. This is for level inelastic scattering and some
               ! (n,xn) reactions.
+
               if (this % law == 9) then
                 ! For these cases, we need to find out which outgoing groups
                 ! get the isotropic angular distribution data, which will be
                 ! the same for each group.
-                ! The group transfer should also be normalized by the prob. of
-                ! transfer to that group.
+
+                ! Unit base interpolation is not available here. Instead linearly
+                ! interpolate the angular distribution
+
+                ! First find interpolant
+                ! Interpolate the distribution linearly
+                ! f = (log(Ein) - log(this % E_grid(iE))) / &
+                ! (log(this % E_grid(iE + 1)) - log(this % E_grid(iE)))
+                f = (Ein - this % E_grid(iE)) / (this % E_grid(iE + 1) - this % E_grid(iE))
+
+                ! Do the lower distribution
+                allocate(distro_int(this % order, this % groups))
+                distro_int = ZERO
+
                 call law9_scatter_lab_leg(this % distro(iE) % data(:, 1), &
-                                          this % edist, Ein, this % E_bins, &
-                                          this % mu, this % order, result_distro)
+                                          this % edist, Ein, &
+                                          this % E_bins, this % mu, &
+                                          this % order, distro_int)
+
+                result_distro = (ONE - f) * distro_int
+
+                distro_int = ZERO
+                call law9_scatter_lab_leg(this % distro(iE+1) % data(:, 1), &
+                                          this % edist, Ein, &
+                                          this % E_bins, this % mu, &
+                                          this % order, distro_int)
+
+                result_distro = result_distro + f * distro_int
+
+                deallocate(distro_int)
 
               else
                 ! As a notification of future issues:
                 call fatal_error(" Associated Edist and Adist, but not law 9: " // &
                   to_str(this % edist % law) //", "//to_str(this % rxn % MT))
               end if
+
             else
               ! Need to come up with the input distro via unit-base interpolation
               call unitbase(this, Ein, iE, Eout, pdf, INTT, fEmu)
@@ -1424,6 +1493,7 @@ module scattdata_header
 
     call cast_to_unitbase(this % Eouts(iE) % data, this % pdfs(iE) % data, &
                           this % cdfs(iE) % data, this % INTT(iE), ub1)
+
     call cast_to_unitbase(this % Eouts(iE+1) % data, this % pdfs(iE+1) % data, &
                           this % cdfs(iE+1) % data, this % INTT(iE+1), ub2)
 
