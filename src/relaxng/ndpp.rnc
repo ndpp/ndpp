@@ -1,0 +1,49 @@
+element ndpp {
+
+  element scatt_type { ( "LEGENDRE" | "TABULAR" | "legendre" | "tabular" ) }? &
+
+  element scatt_order { xsd:positiveInteger }? &
+
+  element nuscatter { ( "TRUE" | "FALSE" | "true" | "false" ) }? &
+
+  element mu_bins { xsd:positiveInteger }? &
+
+  element freegas_cutoff { xsd:double }? &
+
+  element cross_sections { xsd:string { maxLength = "255" } }? &
+
+  element energy_bins { list { xsd:double+ } }? &
+
+  element integrate_chi { ( "TRUE" | "FALSE" | "true" | "false" ) }? &
+
+  element thinning_tol { xsd:double }? &
+
+  element print_tol { xsd:double }? &
+
+  element output_format {
+    ( "ASCII" | "BINARY" | "HDF5" | "NONE" |
+      "ascii" | "binary" | "hdf5" | "none" ) }? &
+
+  element threads {xsd:Integer }? &
+
+  element sab_threshold { xsd:double }? &
+
+  element brent_mu_thresh { xsd:double }? &
+
+  element adaptive_mu_tol { xsd:double }? &
+
+  element adaptive_mu_its { xsd:double }? &
+
+  element adaptive_eout_tol { xsd:double }? &
+
+  element adaptive_eout_its { xsd:double }? &
+
+  element sab_epts_per_bin { xsd:double }? &
+
+  element ne_per_grp { xsd:double }? &
+
+  element extend_pts { xsd:double }? &
+
+  element inel_extend_pts { xsd:double }?
+
+}
