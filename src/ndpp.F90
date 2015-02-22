@@ -488,6 +488,7 @@ module ndpp_class
       integer                   :: g              ! Energy group index
       real(8)                   :: thin_compr     ! Thinning compression fraction
       real(8)                   :: thin_err       ! Thinning compression error
+      character(MAX_LINE_LEN)   :: xmllib_line ! XML library tag for nuclides
       character(MAX_LINE_LEN)   :: msg_prepend    ! Text to print before current working lib
       integer, allocatable      :: group_index_el(:) ! Group locations in self % Ein_el
       integer, allocatable      :: group_index_inel(:) ! Group locations in self % Ein_inel
