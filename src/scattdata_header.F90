@@ -400,6 +400,7 @@ module scattdata_header
       if (((Ein <= nuc % energy(rxn % threshold)) .and. &
           (rxn % threshold > 1)) .or. &
         (Ein > this % E_bins(size(this % E_bins)))) then
+
         ! This is a catch-all, our energy was below the threshold or above the
         ! max group value,
         ! distro should be left as zero
@@ -439,7 +440,7 @@ module scattdata_header
         ! One would think that we can stop processing this MT altogether, but
         ! its possible that a x/s was just set to 0 for this particular pt because
         ! its value was below the threshold (perhaps in a resonance dip?)
-        if (sigS == ZERO) then
+        if (sigS <= ZERO) then
           return
         end if
         ! Search on the angular distribution's energy grid to find what energy
@@ -454,7 +455,7 @@ module scattdata_header
         ! points in a row being the same value. Check for this and just skip
         ! the first point
         if (this % E_grid(iE) >= this % E_grid(iE + 1)) then
-          return
+          iE = iE + 1
         end if
 
         distro = integrate_distro(this, Ein, iE)
