@@ -104,9 +104,13 @@ module scattdata_header
       ! before proceeding
       if (associated(edist)) then
         !!! I would like to know if there are any law 4 scatters anywhere some how.
-        if (edist % law == 4) call warning('Law 4 Scatter with MT=' // to_str(rxn % MT))
+        if (edist % law == 4) then
+          call warning('Law 4 Scatter with MT=' // to_str(rxn % MT))
+          write(*,*) rxn % has_angle_dist
+        end if
         if ((edist % law  /= 3) .and. (edist % law  /= 44) .and. &
-          (edist % law  /= 61) .and. (edist % law /= 9)) return
+          (edist % law  /= 61) .and. (edist % law /= 9) .and. &
+          (edist % law /= 4)) return
       end if
       ! We survived the above check and thus have a scattering reaction.
 
@@ -326,6 +330,7 @@ module scattdata_header
       class(ScattData), intent(inout) :: this ! The object to act on
 
       integer :: iE ! incoming energy grid index
+      integer :: iEout
 
       ! Check to see if this SD is initialized (if it is not, then it is not
       ! a scattering reaction, or is an invalid law type)
@@ -347,6 +352,15 @@ module scattdata_header
           call convert_file4(iE, this % mu, this % adist, &
             this % Eouts(iE) % data, this % INTT(iE), &
             this % distro(iE) % data(:, 1))
+        else if (this % law == 4) then
+          ! Each outgoing energy gets the same angular distribution, so
+          ! run convert_file4 on the first and copy to the rest
+          call convert_file4(iE, this % mu, this % adist, &
+            this % Eouts(iE) % data, this % INTT(iE), &
+            this % distro(iE) % data(:, 1))
+          do iEout = 2, size(this % Eouts(iE) % data)
+            this % distro(iE) % data(:, iEout) = this % distro(iE) % data(:, 1)
+          end do
         else
           ! combined energy/angle distribution.
           call convert_file6(iE, this % mu, this % edist, &
@@ -614,6 +628,10 @@ module scattdata_header
 
                 deallocate(distro_int)
 
+              else if (this % law == 4) then
+                call unitbase(this, Ein, iE, Eout, pdf, INTT, fEmu)
+                call integrate_file6_lab_leg(fEmu, this % mu, Eout, INTT, pdf, &
+                  this % E_bins, this % order, result_distro)
               else
                 ! As a notification of future issues:
                 call fatal_error(" Associated Edist and Adist, but not law 9: " // &
@@ -725,10 +743,12 @@ module scattdata_header
       end select
 
       ! Finally, set Eouts and INTT
-      allocate(Eouts(2))
-      Eouts(1) = ZERO
-      Eouts(2) = INFINITY
-      INTT = HISTOGRAM
+      if (.not. allocated(Eouts)) then
+        allocate(Eouts(2))
+        Eouts(1) = ZERO
+        Eouts(2) = INFINITY
+        INTT = HISTOGRAM
+      end if
 
     end subroutine convert_file4
 
