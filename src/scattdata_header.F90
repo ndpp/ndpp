@@ -241,6 +241,8 @@ module scattdata_header
         ! Ein grids. Will use unit base for interpolating on the edist.
         ! Will use histogram for interpolating on the adist (use lower or higher
         ! energy's data, whatever is consistent w/ OpenMC)
+        ! This means allocating E_grid, distro (and distro % data). Also pdfs, cdfs, INTT?
+        ! Usually this is done by convert_file6, but we can probably bypass this.
       else if ((associated(this % edist)) .and. (this % edist % law /= 3)) then
         NR = int(edist % data(1))
         this % NE = int(edist % data(2 + 2*NR))
