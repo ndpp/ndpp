@@ -235,6 +235,12 @@ module scattdata_header
           allocate(this % distro(i) % data(mu_bins, NP))
           this % distro(i) % data = ZERO
         end do
+      else if (associated(this % adist) .and. associated(this % edist)) then
+        ! Need to combine the twogrids as a function of both grids Eins
+        ! with the interpolation of adist and edist as needed for the different
+        ! Ein grids. Will use unit base for interpolating on the edist.
+        ! Will use histogram for interpolating on the adist (use lower or higher
+        ! energy's data, whatever is consistent w/ OpenMC)
       else if ((associated(this % edist)) .and. (this % edist % law /= 3)) then
         NR = int(edist % data(1))
         this % NE = int(edist % data(2 + 2*NR))
