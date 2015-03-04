@@ -1410,6 +1410,10 @@ module scattdata_header
         end do
       end if
 
+      ! And normalize to catch some odd ACE data (Fe-56, (N,NC) data...)
+      f_lo = ONE / sum(distro(1,:))
+      distro = distro * f_lo
+
     end subroutine integrate_file6_lab_leg
 
 !===============================================================================
