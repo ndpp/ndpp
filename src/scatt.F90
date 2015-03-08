@@ -345,7 +345,11 @@ module scatt
           Ehi = E_bins(g + 1)
           Elo = E_bins(g)
           if (Ehi <= cutoff) then
-            dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
+            if (Ehi - lo_shift > Elo) then
+              dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
+            else
+              dElo = log(Ehi / 1E-11_8) / real(EXTEND_PTS, 8)
+            end if
             do i = -EXTEND_PTS, -1
               newE = Ehi * exp(real(i, 8) * dElo)
               if (newE >= Elo) then
@@ -411,6 +415,7 @@ module scatt
       call merge(new_pts(1: num_pts), old_grid, Ein)
       deallocate(new_pts)
       deallocate(old_grid)
+
     end subroutine add_elastic_Eins
 
 !===============================================================================

@@ -104,10 +104,9 @@ module scattdata_header
       ! before proceeding
       if (associated(edist)) then
         !!! I would like to know if there are any law 4 scatters anywhere some how.
-        if (edist % law == 4) then
-          call warning('Law 4 Scatter with MT=' // to_str(rxn % MT))
-          write(*,*) rxn % has_angle_dist
-        end if
+        !if (edist % law == 4) then
+        !  call warning('Law 4 Scatter with MT=' // to_str(rxn % MT))
+        !end if
         if ((edist % law  /= 3) .and. (edist % law  /= 44) .and. &
           (edist % law  /= 61) .and. (edist % law /= 9) .and. &
           (edist % law /= 4)) return
@@ -153,14 +152,14 @@ module scattdata_header
           this % law = 0
         end if
       else if (associated(edist)) then
-        if ((edist % law == 3) .or. (edist % law == 9)) then
+        if ((edist % law == 4) .or. (edist % law == 3) .or. (edist % law == 9)) then
           ! We have either an isotropic inelastic level scatter or an evaporation
           ! spectrum
           ! If the reaction is isotropic inelastic, then we should set up an
           ! isotropic reaction, but not point this % edist to edist.
           ! Doin so allows integrate_distro to correctly enter the
           ! integrate_file4_cm_* path.
-          if (edist % law == 9) then
+          if ((edist % law == 9) .or. (edist % law == 4)) then
             this % edist => edist
           end if
           ! set up the isotropic adist
@@ -187,6 +186,7 @@ module scattdata_header
           allocate(rxn % adist % data(2))
           rxn % adist % data = ZERO
           this % adist => rxn % adist
+          rxn % has_angle_dist = .true.
         else
           this % adist => null()
           this % edist => edist ! We dont use rxn % edist because this allows
@@ -223,7 +223,7 @@ module scattdata_header
 
       ! Get the number of energy points; doing so depends on where the info
       ! exists.
-      if (associated(this % adist)) then
+      if (associated(this % adist) .and. (.not. associated(this % edist))) then
         this % NE = this % adist % n_energy
         allocate(this % E_grid(this % NE))
         this % E_grid = this % adist % energy
@@ -235,14 +235,6 @@ module scattdata_header
           allocate(this % distro(i) % data(mu_bins, NP))
           this % distro(i) % data = ZERO
         end do
-      else if (associated(this % adist) .and. associated(this % edist)) then
-        ! Need to combine the twogrids as a function of both grids Eins
-        ! with the interpolation of adist and edist as needed for the different
-        ! Ein grids. Will use unit base for interpolating on the edist.
-        ! Will use histogram for interpolating on the adist (use lower or higher
-        ! energy's data, whatever is consistent w/ OpenMC)
-        ! This means allocating E_grid, distro (and distro % data). Also pdfs, cdfs, INTT?
-        ! Usually this is done by convert_file6, but we can probably bypass this.
       else if ((associated(this % edist)) .and. (this % edist % law /= 3)) then
         NR = int(edist % data(1))
         this % NE = int(edist % data(2 + 2*NR))
@@ -338,7 +330,7 @@ module scattdata_header
       class(ScattData), intent(inout) :: this ! The object to act on
 
       integer :: iE ! incoming energy grid index
-      integer :: iEout
+      integer :: iEout, iEadist
 
       ! Check to see if this SD is initialized (if it is not, then it is not
       ! a scattering reaction, or is an invalid law type)
@@ -361,14 +353,27 @@ module scattdata_header
             this % Eouts(iE) % data, this % INTT(iE), &
             this % distro(iE) % data(:, 1))
         else if (this % law == 4) then
-          ! Each outgoing energy gets the same angular distribution, so
-          ! run convert_file4 on the first and copy to the rest
-          call convert_file4(iE, this % mu, this % adist, &
+          ! Each outgoing energy gets the same angular distribution
+          ! First have to find the adist corresponding to current Edist Ein pt
+          if (this % E_grid(iE) <= this % adist % energy(1)) then
+            iEadist = 1
+          else if (this % E_grid(iE) >= &
+                   this % adist % energy(this % adist % n_energy)) then
+            iEadist = this % adist % n_energy
+          else
+            iEadist = binary_search(this % adist % energy, &
+                                    this % adist % n_energy, this % E_grid(iE))
+          end if
+          call convert_file4(iEadist, this % mu, this % adist, &
             this % Eouts(iE) % data, this % INTT(iE), &
             this % distro(iE) % data(:, 1))
-          do iEout = 2, size(this % Eouts(iE) % data)
+          do iEout = 1, size(this % Eouts(iE) % data)
             this % distro(iE) % data(:, iEout) = this % distro(iE) % data(:, 1)
           end do
+          deallocate(this % Eouts(iE) % data)
+          call convert_file6(iE, this % mu, this % edist, &
+            this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
+            this % cdfs(iE) % data, this % distro(iE) % data)
         else
           ! combined energy/angle distribution.
           call convert_file6(iE, this % mu, this % edist, &
@@ -787,7 +792,8 @@ module scattdata_header
       real(8) :: KMR, KMA, KMconst ! Various data for Kalbach-Mann
 
       ! Exit if using an unsupported law
-      if ((edist % law /= 44) .and. (edist % law /= 61)) return
+      if ((edist % law /= 4) .and. (edist % law /= 44) .and. &
+          (edist % law /= 61)) return
 
       data => edist % data
 
@@ -814,7 +820,10 @@ module scattdata_header
       pdf = data(lc + 2 + NP + 1 : lc + 2 + 2 * NP)
       cdf = data(lc + 2 + 2 * NP + 1 : lc + 2 + 3 * NP)
 
-      if (edist % law  == 44) then
+      if (edist % law == 4) then
+        ! We don't even have to do anyting, just came here for the
+        ! Eouts, pdf, and cdf filling.
+      else if (edist % law  == 44) then
         lc = lc + 2
         do iEout = 1, NP
           ! Get the KM parameters
@@ -1577,7 +1586,12 @@ module scattdata_header
     allocate(ub_temp(size(Eout) - ilo + 1))
     ub_temp = ZERO
 
-    inv_dE = ONE / (Eout(size(Eout)) - Eout(ilo))
+    inv_dE = (Eout(size(Eout)) - Eout(ilo))
+    if ((inv_dE >= ZERO) .and. (inv_dE < INFINITY)) then
+      inv_dE = ONE / inv_dE
+    else
+      inv_dE = ZERO
+    end if
 
     j = 1
     do i = ilo, size(Eout) - 1
