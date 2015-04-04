@@ -4,8 +4,6 @@ module chi
   use array_merge,    only: merge
   use chidata_header, only: ChiData
   use constants
-  use error,          only: fatal_error, warning
-  use global,         only: message
   use output,         only: write_message, print_ascii_array
   use string,         only: to_str
 

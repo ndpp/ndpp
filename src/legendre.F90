@@ -2,8 +2,6 @@ module legendre
 
   use ace_header
   use constants
-  use error,      only: fatal_error
-  use global,     only: message
 
   implicit none
 

@@ -104,7 +104,8 @@ module scattdata_header
       ! before proceeding
       if (associated(edist)) then
         if ((edist % law  /= 3) .and. (edist % law  /= 44) .and. &
-          (edist % law  /= 61) .and. (edist % law /= 9)) return
+          (edist % law  /= 61) .and. (edist % law /= 9) .and. &
+          (edist % law /= 4)) return
       end if
       ! We survived the above check and thus have a scattering reaction.
 
@@ -147,14 +148,14 @@ module scattdata_header
           this % law = 0
         end if
       else if (associated(edist)) then
-        if ((edist % law == 3) .or. (edist % law == 9)) then
+        if ((edist % law == 4) .or. (edist % law == 3) .or. (edist % law == 9)) then
           ! We have either an isotropic inelastic level scatter or an evaporation
           ! spectrum
           ! If the reaction is isotropic inelastic, then we should set up an
           ! isotropic reaction, but not point this % edist to edist.
           ! Doin so allows integrate_distro to correctly enter the
           ! integrate_file4_cm_* path.
-          if (edist % law == 9) then
+          if ((edist % law == 9) .or. (edist % law == 4)) then
             this % edist => edist
           end if
           ! set up the isotropic adist
@@ -181,6 +182,7 @@ module scattdata_header
           allocate(rxn % adist % data(2))
           rxn % adist % data = ZERO
           this % adist => rxn % adist
+          rxn % has_angle_dist = .true.
         else
           this % adist => null()
           this % edist => edist ! We dont use rxn % edist because this allows
@@ -217,7 +219,7 @@ module scattdata_header
 
       ! Get the number of energy points; doing so depends on where the info
       ! exists.
-      if (associated(this % adist)) then
+      if (associated(this % adist) .and. (.not. associated(this % edist))) then
         this % NE = this % adist % n_energy
         allocate(this % E_grid(this % NE))
         this % E_grid = this % adist % energy
@@ -324,6 +326,7 @@ module scattdata_header
       class(ScattData), intent(inout) :: this ! The object to act on
 
       integer :: iE ! incoming energy grid index
+      integer :: iEout, iEadist
 
       ! Check to see if this SD is initialized (if it is not, then it is not
       ! a scattering reaction, or is an invalid law type)
@@ -331,9 +334,8 @@ module scattdata_header
 
       if ((.not. associated(this % edist)) .and. &
         (.not. associated(this % adist))) then
-        message = "No distribution associated with this ScattData &
-          &object."
-        call fatal_error()
+        call fatal_error("No distribution associated with this ScattData &
+          &object.")
       end if
 
       ! Step through each incoming energy value to do these calculations
@@ -346,6 +348,28 @@ module scattdata_header
           call convert_file4(iE, this % mu, this % adist, &
             this % Eouts(iE) % data, this % INTT(iE), &
             this % distro(iE) % data(:, 1))
+        else if (this % law == 4) then
+          ! Each outgoing energy gets the same angular distribution
+          ! First have to find the adist corresponding to current Edist Ein pt
+          if (this % E_grid(iE) <= this % adist % energy(1)) then
+            iEadist = 1
+          else if (this % E_grid(iE) >= &
+                   this % adist % energy(this % adist % n_energy)) then
+            iEadist = this % adist % n_energy
+          else
+            iEadist = binary_search(this % adist % energy, &
+                                    this % adist % n_energy, this % E_grid(iE))
+          end if
+          call convert_file4(iEadist, this % mu, this % adist, &
+            this % Eouts(iE) % data, this % INTT(iE), &
+            this % distro(iE) % data(:, 1))
+          do iEout = 1, size(this % Eouts(iE) % data)
+            this % distro(iE) % data(:, iEout) = this % distro(iE) % data(:, 1)
+          end do
+          deallocate(this % Eouts(iE) % data)
+          call convert_file6(iE, this % mu, this % edist, &
+            this % Eouts(iE) % data, this % INTT(iE), this % pdfs(iE) % data, &
+            this % cdfs(iE) % data, this % distro(iE) % data)
         else
           ! combined energy/angle distribution.
           call convert_file6(iE, this % mu, this % edist, &
@@ -399,6 +423,7 @@ module scattdata_header
       if (((Ein <= nuc % energy(rxn % threshold)) .and. &
           (rxn % threshold > 1)) .or. &
         (Ein > this % E_bins(size(this % E_bins)))) then
+
         ! This is a catch-all, our energy was below the threshold or above the
         ! max group value,
         ! distro should be left as zero
@@ -438,7 +463,7 @@ module scattdata_header
         ! One would think that we can stop processing this MT altogether, but
         ! its possible that a x/s was just set to 0 for this particular pt because
         ! its value was below the threshold (perhaps in a resonance dip?)
-        if (sigS == ZERO) then
+        if (sigS <= ZERO) then
           return
         end if
         ! Search on the angular distribution's energy grid to find what energy
@@ -453,7 +478,7 @@ module scattdata_header
         ! points in a row being the same value. Check for this and just skip
         ! the first point
         if (this % E_grid(iE) >= this % E_grid(iE + 1)) then
-          return
+          iE = iE + 1
         end if
 
         distro = integrate_distro(this, Ein, iE)
@@ -496,9 +521,8 @@ module scattdata_header
       integer              :: INTT
       real(8), allocatable :: fEmu(:,:)
       real(8), allocatable :: result_distro(:,:)  ! the output distribution
-
-      ! the distribution in the lab frame
-      real(8), allocatable :: distro(:,:)
+      real(8)              :: f  ! The interpolant
+      real(8), allocatable :: distro_int(:,:)
 
       ! Set up the results memory
       allocate(result_distro(this % order, this % groups))
@@ -508,24 +532,63 @@ module scattdata_header
       case (SCATT_TYPE_LEGENDRE)
         if ((associated(this % adist)) .and. &
           (.not. associated(this % edist))) then
+          ! Unit base interpolation is not available here. Instead linearly
+          ! interpolate the angular distribution
+
+          ! First find interpolant
+          ! Interpolate the distribution linearly
+          ! f = (log(Ein) - log(this % E_grid(iE))) / &
+          ! (log(this % E_grid(iE + 1)) - log(this % E_grid(iE)))
+          f = (Ein - this % E_grid(iE)) / (this % E_grid(iE + 1) - this % E_grid(iE))
+
+          ! Do the lower distribution
+          allocate(distro_int(this % order, this % groups))
+          distro_int = ZERO
+
           if ((Ein < this % freegas_cutoff) .and. &
               (this % rxn % MT == ELASTIC)) then
             call integrate_freegas_leg(Ein, this % awr, this % kT, &
               this % distro(iE) % data(:, 1), this % mu, this % E_bins, &
-              this % order, result_distro)
+              this % order, distro_int)
           else
             if (this % rxn % scatter_in_cm) then
-              call integrate_file4_cm_leg(this % distro(iE) % data(:,1), Ein, &
+              call integrate_file4_cm_leg(this % distro(iE) % data(:, 1), Ein, &
                                           this % awr, this % rxn % Q_value, &
                                           this % E_bins, this % mu, this % order, &
-                                          result_distro)
+                                          distro_int)
             else
               ! As a notification of future issues:
-              message = "File 4 Reaction Found With Lab Angle Distribution and &
-                        &No Energy Distribution!"
-              call fatal_error()
+              call fatal_error("File 4 Reaction Found With Lab Angle Distribution and &
+                        &No Energy Distribution!")
             end if
           end if
+
+          result_distro = distro_int * (ONE - f)
+
+          ! Do the upper distribution
+          distro_int = ZERO
+
+          if ((Ein < this % freegas_cutoff) .and. &
+              (this % rxn % MT == ELASTIC)) then
+            call integrate_freegas_leg(Ein, this % awr, this % kT, &
+              this % distro(iE+1) % data(:, 1), this % mu, this % E_bins, &
+              this % order, distro_int)
+          else
+            if (this % rxn % scatter_in_cm) then
+              call integrate_file4_cm_leg(this % distro(iE+1) % data(:, 1), Ein, &
+                                          this % awr, this % rxn % Q_value, &
+                                          this % E_bins, this % mu, this % order, &
+                                          distro_int)
+            else
+              ! As a notification of future issues:
+              call fatal_error("File 4 Reaction Found With Lab Angle Distribution and &
+                        &No Energy Distribution!")
+            end if
+          end if
+
+          result_distro = result_distro + distro_int * f
+
+          deallocate(distro_int)
 
         else if (associated(this % edist)) then
           if (this % rxn % scatter_in_cm) then
@@ -538,21 +601,52 @@ module scattdata_header
               ! Here, we have angular info in adist, but it goes to a single energy
               ! specified in edist. This is for level inelastic scattering and some
               ! (n,xn) reactions.
+
               if (this % law == 9) then
                 ! For these cases, we need to find out which outgoing groups
                 ! get the isotropic angular distribution data, which will be
                 ! the same for each group.
-                ! The group transfer should also be normalized by the prob. of
-                ! transfer to that group.
-                call law9_scatter_lab_leg(this % distro(iE) % data(:, 1), &
-                                          this % edist, Ein, this % E_bins, &
-                                          this % mu, this % order, result_distro)
 
+                ! Unit base interpolation is not available here. Instead linearly
+                ! interpolate the angular distribution
+
+                ! First find interpolant
+                ! Interpolate the distribution linearly
+                ! f = (log(Ein) - log(this % E_grid(iE))) / &
+                ! (log(this % E_grid(iE + 1)) - log(this % E_grid(iE)))
+                f = (Ein - this % E_grid(iE)) / (this % E_grid(iE + 1) - this % E_grid(iE))
+
+                ! Do the lower distribution
+                allocate(distro_int(this % order, this % groups))
+                distro_int = ZERO
+
+                call law9_scatter_lab_leg(this % distro(iE) % data(:, 1), &
+                                          this % edist, Ein, &
+                                          this % E_bins, this % mu, &
+                                          this % order, distro_int)
+
+                result_distro = (ONE - f) * distro_int
+
+                distro_int = ZERO
+                call law9_scatter_lab_leg(this % distro(iE+1) % data(:, 1), &
+                                          this % edist, Ein, &
+                                          this % E_bins, this % mu, &
+                                          this % order, distro_int)
+
+                result_distro = result_distro + f * distro_int
+
+                deallocate(distro_int)
+
+              else if (this % law == 4) then
+                call unitbase(this, Ein, iE, Eout, pdf, INTT, fEmu)
+                call integrate_file6_lab_leg(fEmu, this % mu, Eout, INTT, pdf, &
+                  this % E_bins, this % order, result_distro)
               else
                 ! As a notification of future issues:
-                message = " Associated Edist and Adist, but not law 9: " // &
-                  to_str(this % edist % law) //", "//to_str(this % rxn % MT)
+                call fatal_error(" Associated Edist and Adist, but not law 9: " // &
+                  to_str(this % edist % law) //", "//to_str(this % rxn % MT))
               end if
+
             else
               ! Need to come up with the input distro via unit-base interpolation
               call unitbase(this, Ein, iE, Eout, pdf, INTT, fEmu)
@@ -658,10 +752,12 @@ module scattdata_header
       end select
 
       ! Finally, set Eouts and INTT
-      allocate(Eouts(2))
-      Eouts(1) = ZERO
-      Eouts(2) = INFINITY
-      INTT = HISTOGRAM
+      if (.not. allocated(Eouts)) then
+        allocate(Eouts(2))
+        Eouts(1) = ZERO
+        Eouts(2) = INFINITY
+        INTT = HISTOGRAM
+      end if
 
     end subroutine convert_file4
 
@@ -692,15 +788,15 @@ module scattdata_header
       real(8) :: KMR, KMA, KMconst ! Various data for Kalbach-Mann
 
       ! Exit if using an unsupported law
-      if ((edist % law /= 44) .and. (edist % law /= 61)) return
+      if ((edist % law /= 4) .and. (edist % law /= 44) .and. &
+          (edist % law /= 61)) return
 
       data => edist % data
 
       NR = int(data(1))
       if (NR > 0) then
-        message = "Multiple interpolation regions not supported while &
-             &attempting to sample Kalbach-Mann distribution."
-        call fatal_error()
+        call fatal_error("Multiple interpolation regions not supported while &
+             &attempting to sample Kalbach-Mann distribution.")
       end if
       NE = int(data(2 + 2*NR))
 
@@ -720,7 +816,10 @@ module scattdata_header
       pdf = data(lc + 2 + NP + 1 : lc + 2 + 2 * NP)
       cdf = data(lc + 2 + 2 * NP + 1 : lc + 2 + 3 * NP)
 
-      if (edist % law  == 44) then
+      if (edist % law == 4) then
+        ! We don't even have to do anyting, just came here for the
+        ! Eouts, pdf, and cdf filling.
+      else if (edist % law  == 44) then
         lc = lc + 2
         do iEout = 1, NP
           ! Get the KM parameters
@@ -842,8 +941,7 @@ module scattdata_header
               end do
             end do
           else
-            message = "Unknown interpolation type: " // trim(to_str(interp))
-            call fatal_error()
+            call fatal_error("Unknown interpolation type: " // trim(to_str(interp)))
           end if
 
         end do
@@ -1345,6 +1443,10 @@ module scattdata_header
         end do
       end if
 
+      ! And normalize to catch some odd ACE data (Fe-56, (N,NC) data...)
+      f_lo = ONE / sum(distro(1,:))
+      distro = distro * f_lo
+
     end subroutine integrate_file6_lab_leg
 
 !===============================================================================
@@ -1429,6 +1531,7 @@ module scattdata_header
 
     call cast_to_unitbase(this % Eouts(iE) % data, this % pdfs(iE) % data, &
                           this % cdfs(iE) % data, this % INTT(iE), ub1)
+
     call cast_to_unitbase(this % Eouts(iE+1) % data, this % pdfs(iE+1) % data, &
                           this % cdfs(iE+1) % data, this % INTT(iE+1), ub2)
 
@@ -1479,7 +1582,12 @@ module scattdata_header
     allocate(ub_temp(size(Eout) - ilo + 1))
     ub_temp = ZERO
 
-    inv_dE = ONE / (Eout(size(Eout)) - Eout(ilo))
+    inv_dE = (Eout(size(Eout)) - Eout(ilo))
+    if ((inv_dE >= ZERO) .and. (inv_dE < INFINITY)) then
+      inv_dE = ONE / inv_dE
+    else
+      inv_dE = ZERO
+    end if
 
     j = 1
     do i = ilo, size(Eout) - 1

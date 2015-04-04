@@ -1,11 +1,8 @@
 module global
-!!! Most of these exist here because of dependencies in ace.F90. If I decide to
-!!! rewrite ace.F90 in the future (likely b/c I can read the ace files much faster
-!!! if I skip info I know I will not need), then I can revisit this file and
-!!! remove lots of dependencies as well.
-  use ace_header,       only: Nuclide, SAlphaBeta, xsListing, NuclideMicroXS
+  use ace_header,       only: Nuclide, SAlphaBeta, xsListing, NuclideMicroXS, &
+                              MaterialMacroXS, Nuclide0K
   use constants
-  use dict_header,      only: DictCharInt
+  use dict_header,      only: DictCharInt, DictIntInt
   use material_header,  only: Material
 
 #ifdef MPI
@@ -101,8 +98,8 @@ module global
   ! HDF5 VARIABLES
 
 #ifdef HDF5
-  integer(HID_T) :: h5_file         ! identifier for output file
-  integer(HID_T) :: hdf5_integer8_t ! type for integer(8)
+  integer(HID_T) :: hdf5_output_file   ! identifier for output file
+  integer(HID_T) :: hdf5_integer8_t    ! type for integer(8)
 #endif
 
   ! ============================================================================
@@ -110,15 +107,19 @@ module global
 
   character(MAX_FILE_LEN) :: path_input          ! Path to input file
 
-  ! Message used in message/warning/fatal_error
-  character(MAX_LINE_LEN) :: message
-
   ! The verbosity controls how much information will be printed to the
   ! screen and in logs
   integer :: verbosity = 7
 
   ! Number of OpenMP threads to USE
   integer :: omp_threads
+
+  ! ============================================================================
+  ! RESONANCE SCATTERING VARIABLES
+
+  logical :: treat_res_scat = .false. ! is resonance scattering treated?
+  integer :: n_res_scatterers_total = 0 ! total number of resonant scatterers
+  type(Nuclide0K), allocatable, target :: nuclides_0K(:) ! 0K nuclides info
 
 contains
 
@@ -141,6 +142,11 @@ contains
       end do
       deallocate(nuclides)
     end if
+
+    if (allocated(nuclides_0K)) then
+      deallocate(nuclides_0K)
+    end if
+
     if (allocated(sab_tables)) deallocate(sab_tables)
     if (allocated(xs_listings)) deallocate(xs_listings)
     if (allocated(micro_xs)) deallocate(micro_xs)

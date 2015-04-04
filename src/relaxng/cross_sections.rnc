@@ -5,12 +5,15 @@ element cross_sections {
     (element alias { xsd:string { maxLength = "15" } } |
       attribute alias { xsd:string { maxLength = "15" } })? &
     (element zaid { xsd:int } | attribute zaid { xsd:int }) &
+    (element freegas_cutoff { xsd:double } | attribute zaid { xsd:double }) &
     (element metastable { xsd:int } | attribute metastable { xsd:int })? &
     (element awr { xsd:double } | attribute awr { xsd:double }) &
     (element temperature { xsd:double } | attribute temperature { xsd:double }) &
     (element path { xsd:string { maxLength = "255" } } |
       attribute path { xsd:string { maxLength = "255" } }) &
-    (element location { xsd:int } | attribute location { xsd:int })?
+    (element location { xsd:int } | attribute location { xsd:int })? &
+    (element filetype { ( "ascii" | "binary" ) } |
+      attribute filetype { ( "ascii" | "binary" ) })?
   }* &
 
   element directory { xsd:string { maxLength = "255" } }? &

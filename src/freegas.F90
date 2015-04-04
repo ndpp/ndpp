@@ -132,8 +132,15 @@ module freegas
 
       ! Tally the normalization constant.
       p0_1g_norm = p0_1g_norm + distro(1, g)
+
+      do l = 1, order
+        if (abs(distro(l,g)) < 1E-18_8) then
+          distro(l,g) = ZERO
+        end if
+      end do
     end do
 
+    ! Check that no values are so small we can't normalize
     ! And normalize
     distro = distro / p0_1g_norm
   end subroutine integrate_freegas_leg

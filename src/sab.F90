@@ -180,9 +180,8 @@ module sab
           wgt = wgt / (sum(wgt) * real(sab % n_inelastic_mu, 8))
         else
           ! Leave this in until I know what to do (this should be the continuous)
-          message = "Number of Inelastic Outgoing Energies Less Than 4,&
-                    & but Skewed Weighting Requested by Data!"
-          call fatal_error()
+          call fatal_error("Number of Inelastic Outgoing Energies Less Than 4,&
+                    & but Skewed Weighting Requested by Data!")
         end if
       end if
 

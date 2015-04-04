@@ -345,7 +345,11 @@ module scatt
           Ehi = E_bins(g + 1)
           Elo = E_bins(g)
           if (Ehi <= cutoff) then
-            dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
+            if (Ehi - lo_shift > Elo) then
+              dElo = log(Ehi / (Ehi - lo_shift)  ) / real(EXTEND_PTS, 8)
+            else
+              dElo = log(Ehi / 1E-11_8) / real(EXTEND_PTS, 8)
+            end if
             do i = -EXTEND_PTS, -1
               newE = Ehi * exp(real(i, 8) * dElo)
               if (newE >= Elo) then
@@ -411,6 +415,7 @@ module scatt
       call merge(new_pts(1: num_pts), old_grid, Ein)
       deallocate(new_pts)
       deallocate(old_grid)
+
     end subroutine add_elastic_Eins
 
 !===============================================================================
@@ -460,7 +465,6 @@ module scatt
       integer :: i, g ! INEL_EXTEND_PTS and Group loop indices
       integer :: num_pts
       real(8) :: Ehi, Elo
-      real(8) :: dElo, dEhi ! interval between each Ein point
       type(ScattData), pointer :: mySD
       integer :: i_rxn
       real(8) :: Ef, D, Fp, Fm, Ecp, EcM, Eg, Q, dE
@@ -638,9 +642,8 @@ module scatt
             if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
               iE_pct = 100 * iE / NE
               if (iE_pct /= last_iE_pct) then
-                message = "    Elastic Evaluation " // &
-                  trim(to_str(100 * iE / NE)) // "% Complete"
-                call write_message(7)
+                call write_message("    Elastic Evaluation " // &
+                  trim(to_str(100 * iE / NE)) // "% Complete", 7)
               end if
               last_iE_pct = iE_pct
             end if
@@ -696,6 +699,7 @@ module scatt
       integer :: iE_pct, last_iE_pct ! Current and previous pct complete
       real(8), allocatable :: temp_scatt(:,:) ! calculated scattering matrix
       integer :: tid                 ! Thread id
+      real(8) :: yield               ! Neutron yield
 
       groups = size(E_bins) - 1
       NE = size(Ein)
@@ -728,9 +732,8 @@ module scatt
             if ((mod(iE, iE_print) == 1) .or. (iE == NE)) then
               iE_pct = 100 * iE / NE
               if (iE_pct /= last_iE_pct) then
-                message = "    Inelastic Evaluation " // &
-                  trim(to_str(100 * iE / NE)) // "% Complete"
-                call write_message(7)
+                call write_message("    Inelastic Evaluation " // &
+                  trim(to_str(100 * iE / NE)) // "% Complete", 7)
               end if
               last_iE_pct = iE_pct
             end if
@@ -748,8 +751,13 @@ module scatt
             temp_scatt = mySD % interp_distro(mu_out, nuc, Ein(iE))
             scatt_mat(:, :, iE) = scatt_mat(:, :, iE) + temp_scatt
             if (nuscatt) then
-              nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) + &
-                real(mySD % rxn % multiplicity, 8) * temp_scatt
+              ! change weight of particle based on yield
+              if (mySD % rxn % multiplicity_with_E) then
+                yield = interpolate_tab1(mySD % rxn % multiplicity_E, Ein(iE))
+              else
+                yield = real(mySD % rxn % multiplicity, 8)
+              end if
+              nuscatt_mat(:, :, iE) = nuscatt_mat(:, :, iE) + yield * temp_scatt
             end if
           end do
 
