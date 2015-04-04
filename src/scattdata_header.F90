@@ -103,10 +103,6 @@ module scattdata_header
       ! Now, check edist, if passed, and ensure it is of the right law type
       ! before proceeding
       if (associated(edist)) then
-        !!! I would like to know if there are any law 4 scatters anywhere some how.
-        !if (edist % law == 4) then
-        !  call warning('Law 4 Scatter with MT=' // to_str(rxn % MT))
-        !end if
         if ((edist % law  /= 3) .and. (edist % law  /= 44) .and. &
           (edist % law  /= 61) .and. (edist % law /= 9) .and. &
           (edist % law /= 4)) return
