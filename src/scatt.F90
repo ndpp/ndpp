@@ -709,6 +709,7 @@ module scatt
 
       ! Allocate the scatt_mat according to the groups, order and number of E pts
       allocate(scatt_mat(order, groups, NE))
+      scatt_mat = ZERO
 
       if (nuscatt) then
         allocate(nuscatt_mat(order, groups, NE))

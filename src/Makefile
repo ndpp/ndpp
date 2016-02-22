@@ -69,7 +69,7 @@ ifeq ($(COMPILER),gnu)
 
   # Native machine compilarion
   ifeq ($(NATIVE), yes)
-  	F90FLAGS += -march=native -mtune=native
+  	F90FLAGS += -march=native -mtune=native -flto
   endif
 endif
 
