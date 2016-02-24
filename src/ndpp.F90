@@ -56,9 +56,6 @@ module ndpp_class
     integer              :: scatt_type    = SCATT_TYPE_LEGENDRE
     ! Scattering data output size (Number of Legendre Orders or Number of Bins)
     integer              :: scatt_order   = SCATT_ORDER_DEFAULT
-    ! Whether or not to include neutron multiplication in the distributions
-    ! (i.e., whether or not nu-scatter or simply scatter is desired)
-    logical              :: nuscatter     = NUSCATTER_DEFAULT
     ! Number of angular bins to use during f_{n,MT} conversion
     integer              :: mu_bins       = MU_BINS_DEFAULT
     ! Flag to integrate chi or not
@@ -147,7 +144,6 @@ module ndpp_class
       output_format_     = ''
       scatt_type_        = ''
       scatt_order_       = SCATT_ORDER_DEFAULT
-      nuscatter_         = ''
       thinning_tol_      = THIN_TOL_DEFAULT
       mu_bins_           = MU_BINS_DEFAULT
       freegas_cutoff_    = FREEGAS_THRESHOLD_DEFAULT
@@ -300,19 +296,6 @@ module ndpp_class
                          "ndpp.xml.")
       end if
 
-      ! Get nuscatter information
-      nuscatter_ = to_lower(nuscatter_)
-      if (nuscatter_ == '') then
-        self % nuscatter = NUSCATTER_DEFAULT
-      else if (nuscatter_ == 'false') then
-        self % nuscatter = .false.
-      else if (nuscatter_ == 'true') then
-        self % nuscatter = .true.
-      else
-        call warning("Value for <nuscatter> provided, but does not match " // &
-                     "TRUE or FALSE. Using default of FALSE.")
-      end if
-
       ! Now get the free-gas threshold
       ! If the user entered a negative, that means they want freegas for the
       ! entire energy range. They can also set the cutoff to a
@@ -452,7 +435,6 @@ module ndpp_class
       self % lib_format     = ASCII
       self % scatt_type     = SCATT_TYPE_LEGENDRE
       self % scatt_order    = SCATT_ORDER_DEFAULT
-      self % nuscatter      = NUSCATTER_DEFAULT
       self % mu_bins        = MU_BINS_DEFAULT
       self % integrate_chi  = INTEGRATE_CHI_DEFAULT
       self % use_freegas    = USE_FREEGAS_DEFAULT
@@ -497,8 +479,6 @@ module ndpp_class
                                                 ! order x g_out x E_in
       real(8), allocatable :: inel_mat(:,:,:)   ! inelastic matrix moments,
                                                 ! order x g_out x E_in
-      real(8), allocatable :: nuinel_mat(:,:,:) ! nu-inelastic matrix moments,
-                                                ! order x g_out x E_in
       ! Chi specific data
       real(8), allocatable   :: Ein_chi(:)   ! List of energy points for chi
       real(8), allocatable   :: chi_t(:,:)   ! grp x E_in chi tot values
@@ -523,7 +503,7 @@ module ndpp_class
         call timer_start(self % time_print)
         call print_ndpp_lib_xml_header(self % n_listings, self % energy_bins, &
           self % lib_format, self % scatt_type, self % scatt_order, &
-          self % mu_bins, self % nuscatter, self % integrate_chi, &
+          self % mu_bins, self % integrate_chi, &
           self % print_tol, self % thin_tol)
         call timer_stop(self % time_print)
 
@@ -605,8 +585,8 @@ module ndpp_class
           ! a priori since calc_scatt reads in the reactions.
           call timer_start(self % time_scatt_preproc)
           call calc_scatt(nuc, self % energy_bins, self % scatt_type, &
-            self % scatt_order, self % mu_bins, self % nuscatter, self % Ein_el, &
-            self % Ein_inel, el_mat, inel_mat, nuinel_mat)
+            self % scatt_order, self % mu_bins, self % Ein_el, &
+            self % Ein_inel, el_mat, inel_mat)
 
           ! Remove all outgoing values less than the user supplied tolerance
           ! This occurs before thinning the grid to allow thinning to remove
@@ -614,9 +594,6 @@ module ndpp_class
           call apply_tol_scatt(el_mat, self % print_tol)
           if (allocated(self % Ein_inel)) then
             call apply_tol_scatt(inel_mat, self % print_tol)
-            if (self % nuscatter) then
-              call apply_tol_scatt(nuinel_mat, self % print_tol)
-            end if
           end if
 
           ! Thin the grid, unless thin_tol is zero
@@ -634,7 +611,7 @@ module ndpp_class
             ! And for inelastic
             if (allocated(self % Ein_inel)) then
               call thin_grid(self % Ein_inel, inel_mat, self % energy_bins, &
-                             self % thin_tol, thin_compr, thin_err, nuinel_mat)
+                             self % thin_tol, thin_compr, thin_err, inel_mat)
               if (.not. mpi_enabled) then
                 ! Report results of thinning
                 call write_message("....Completed Inelastic Thinning, Reduced Storage By " // &
@@ -680,14 +657,8 @@ module ndpp_class
 
           ! Print the results to file
           call timer_start(self % time_print)
-          if (self % nuscatter) then
-            call print_scatt(self % lib_format, group_index_el, group_index_inel, &
-                             self % Ein_el, self % Ein_inel, el_mat, inel_mat, &
-                             nuinel_mat)
-          else
-            call print_scatt(self % lib_format, group_index_el, group_index_inel, &
-                             self % Ein_el, self % Ein_inel, el_mat, inel_mat)
-          end if
+          call print_scatt(self % lib_format, group_index_el, group_index_inel, &
+                           self % Ein_el, self % Ein_inel, el_mat, inel_mat)
           call timer_stop(self % time_print)
 
           if (allocated(el_mat)) then
@@ -695,9 +666,6 @@ module ndpp_class
           end if
           if (allocated(inel_mat)) then
             deallocate(inel_mat)
-          end if
-          if (allocated(nuinel_mat)) then
-            deallocate(nuinel_mat)
           end if
           call timer_stop(self % time_scatt_preproc)
 
@@ -956,7 +924,7 @@ module ndpp_class
 !===============================================================================
 
     subroutine print_ndpp_lib_xml_header(n_listings, energy_bins, lib_format, &
-      scatt_type, scatt_order, mu_bins, nuscatter, integrate_chi, print_tol, &
+      scatt_type, scatt_order, mu_bins, integrate_chi, print_tol, &
       thin_tol)
 
       integer, intent(in)              :: n_listings     ! Number of entries
@@ -965,7 +933,6 @@ module ndpp_class
       integer, intent(in)              :: scatt_type     ! Representation of scattering data
       integer, intent(in)              :: scatt_order    ! Order of scattering data
       integer, intent(in)              :: mu_bins        ! Number of angular bins to use
-      logical, intent(in)              :: nuscatter      ! Flag on if nuscatter data is included
       logical, intent(in)              :: integrate_chi  ! Flag on if chi data is included
       real(8), intent(in)              :: print_tol      ! Minimum g'->g transfer to bother printing
       real(8), intent(in)              :: thin_tol       ! Tolerance on the union energy grid thinning
@@ -997,11 +964,6 @@ module ndpp_class
       write(UNIT_NDPP, '(A)') indent // '<entries> ' // trim(to_str(n_listings))// &
         '  </entries>'
       !!! Skipping over record length for now, not sure I need it.
-      if (nuscatter) then
-        write(UNIT_NDPP, '(A)') indent // '<nuscatter> true </nuscatter>'
-      else
-        write(UNIT_NDPP, '(A)') indent // '<nuscatter> false </nuscatter>'
-      end if
       if (integrate_chi) then
         write(UNIT_NDPP, '(A)') indent // '<chi_present> true </chi_present>'
       else
@@ -1252,7 +1214,7 @@ module ndpp_class
       logical, optional, intent(in)         :: sab       ! Is it an S(a,b) table?
 
       character(MAX_LINE_LEN) :: line
-      integer                 :: chi_present_int, nuscatter_int
+      integer                 :: chi_present_int
       logical                 :: fissionable
 #ifdef HDF5
       character(MAX_FILE_LEN) :: h_filename
@@ -1266,12 +1228,7 @@ module ndpp_class
         fissionable = fiss
       end if
 
-      ! First convert the logical value of nuscatter & Chi Present to an integer.
-      if (this_ndpp % nuscatter .and. (.not. sab)) then
-        nuscatter_int = 1
-      else
-        nuscatter_int = 0
-      end if
+      ! First convert the logical value of chi Present to an integer.
       if(this_ndpp % integrate_chi .AND. fissionable) then
         chi_present_int = 1
       else
@@ -1295,7 +1252,7 @@ module ndpp_class
         ! Chi Present
         line= ''
         write(line,'(I20,I20,I20,I20)') this_ndpp % scatt_type, &
-          this_ndpp % scatt_order, nuscatter_int, chi_present_int
+          this_ndpp % scatt_order, chi_present_int
         write(UNIT_NUC,'(A)') trim(line)
         ! Do the same, and on a new line, for this_ndpp % mu_bins & thin_tol
         line= ''
@@ -1321,7 +1278,6 @@ module ndpp_class
         ! Chi Present
         write(UNIT_NUC) this_ndpp % scatt_type
         write(UNIT_NUC) this_ndpp % scatt_order
-        write(UNIT_NUC) nuscatter_int
         write(UNIT_NUC) chi_present_int
 
         ! Write mu_bins, thin_tol
@@ -1339,7 +1295,7 @@ module ndpp_class
         call hdf5_open_group(h5_file, 'metadata', temp_group)
 
         ! Write name, kt, energy_groups, energy_bins,
-        ! scatt_type, scatt_order, nuscatter, integrate_chi, thin_tol, mu_bins
+        ! scatt_type, scatt_order, integrate_chi, thin_tol, mu_bins
         ! Now we can print (these should be attributes, but for we need
         ! to first incorporate more routines for this in hdf5_interface)
         call hdf5_write_string(temp_group, 'name', trim(adjustl(name)), &
@@ -1353,7 +1309,6 @@ module ndpp_class
                                 this_ndpp % scatt_type)
         call hdf5_write_integer(temp_group, 'scatt_order', &
                                 this_ndpp % scatt_order)
-        call hdf5_write_integer(temp_group, 'nuscatter', nuscatter_int)
         call hdf5_write_integer(temp_group, 'integrate_chi', chi_present_int)
         call hdf5_write_double(temp_group, 'thin_tol', this_ndpp % thin_tol)
         call hdf5_write_integer(temp_group, 'mu_bins', this_ndpp % mu_bins)

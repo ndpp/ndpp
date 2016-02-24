@@ -4,8 +4,6 @@ element ndpp {
 
   element scatt_order { xsd:positiveInteger }? &
 
-  element nuscatter { ( "TRUE" | "FALSE" | "true" | "false" ) }? &
-
   element mu_bins { xsd:positiveInteger }? &
 
   element freegas_cutoff { xsd:double }? &

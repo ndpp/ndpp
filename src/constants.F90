@@ -101,8 +101,7 @@ module constants
 
   logical, parameter :: &
        INTEGRATE_CHI_DEFAULT = .true., & ! Integrate Chi?
-       USE_FREEGAS_DEFAULT   = .true., &  ! Use free-gas treatment?
-       NUSCATTER_DEFAULT     = .false.    ! Include neutron multiplication
+       USE_FREEGAS_DEFAULT   = .true.    ! Use free-gas treatment?
 
   ! Minimum incoming energy to consider for groups - to avoid division by 0
   ! in free gas kernel and likely other places.
